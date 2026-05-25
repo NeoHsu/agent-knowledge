@@ -1598,7 +1598,7 @@ fn search_index(app: &App, query: &str, fuzzy: bool, limit: usize) -> Result<Vec
         );
         Box::new(parser.parse_query(query)?)
     };
-    let docs = searcher.search(&boxed_query, &TopDocs::with_limit(limit))?;
+    let docs = searcher.search(&boxed_query, &TopDocs::with_limit(limit).order_by_score())?;
     let mut ids = Vec::new();
     for (_score, address) in docs {
         let retrieved = searcher.doc::<TantivyDocument>(address)?;
