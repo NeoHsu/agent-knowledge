@@ -12,7 +12,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tantivy::collector::TopDocs;
-use tantivy::query::{AllQuery, FuzzyTermQuery, QueryParser};
+use tantivy::query::{AllQuery, BooleanQuery, FuzzyTermQuery, Occur, QueryParser};
 use tantivy::schema::{
     Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, Value as TantivyValue,
     STORED, STRING,
@@ -97,6 +97,8 @@ struct QueryArgs {
     sort: SortMode,
     #[arg(long)]
     fuzzy: bool,
+    #[arg(long)]
+    semantic: bool,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -117,6 +119,8 @@ struct UpdateArgs {
     add_tags: Option<String>,
     #[arg(long, default_value = "agent")]
     source: String,
+    #[arg(long)]
+    expected_version: Option<i64>,
 }
 
 #[derive(Args)]
@@ -129,6 +133,8 @@ struct SupersedeArgs {
     description: Option<String>,
     #[arg(long, default_value = "agent")]
     source: String,
+    #[arg(long)]
+    expected_version: Option<i64>,
 }
 
 #[derive(Args)]
@@ -140,6 +146,8 @@ struct DeleteArgs {
     force: bool,
     #[arg(long, default_value = "agent")]
     source: String,
+    #[arg(long)]
+    expected_version: Option<i64>,
 }
 
 #[derive(Args)]
@@ -197,6 +205,8 @@ struct ImportArgs {
 #[derive(Args)]
 struct MergeArgs {
     db: PathBuf,
+    #[arg(long)]
+    prefer_trusted: bool,
 }
 
 #[derive(Subcommand)]
@@ -514,6 +524,17 @@ fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
 
 fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
     app.init()?;
+    if args.semantic {
+        println!(
+            "{}",
+            json!({
+                "status": "unsupported",
+                "feature": "semantic_query",
+                "message": "semantic query interface is reserved; no embedding backend is configured"
+            })
+        );
+        return Ok(());
+    }
     let conn = app.conn()?;
     let scope_filter = match args.scope.as_deref() {
         Some("auto") => Some(detect_scope_set()?),
@@ -588,6 +609,12 @@ fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
     let conn = app.conn()?;
     let old = memory_by_name(&conn, &args.name)?
         .ok_or_else(|| anyhow!("memory not found: {}", args.name))?;
+    if let Some(expected) = args.expected_version {
+        if let Some(conflict) = version_conflict(&old, expected) {
+            println!("{}", conflict);
+            return Ok(());
+        }
+    }
     if source_priority(&args.source) < source_priority(&old.source) {
         println!(
             "{}",
@@ -641,6 +668,25 @@ fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
     let conn = app.conn()?;
     let old = memory_by_name(&conn, &args.old_name)?
         .ok_or_else(|| anyhow!("memory not found: {}", args.old_name))?;
+    if let Some(expected) = args.expected_version {
+        if let Some(conflict) = version_conflict(&old, expected) {
+            println!("{}", conflict);
+            return Ok(());
+        }
+    }
+    if source_priority(&args.source) < source_priority(&old.source) {
+        println!(
+            "{}",
+            json!({
+                "status": "rejected",
+                "reason": "lower_trust_source_cannot_supersede",
+                "existing_source": old.source,
+                "new_source": args.source,
+                "id": old.id
+            })
+        );
+        return Ok(());
+    }
     let new_id = slugify(&args.new_name);
     let now = now();
     let content = strip_secrets(&args.content)?;
@@ -692,6 +738,12 @@ fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
     let conn = app.conn()?;
     let old = memory_by_name(&conn, &args.name)?
         .ok_or_else(|| anyhow!("memory not found: {}", args.name))?;
+    if let Some(expected) = args.expected_version {
+        if let Some(conflict) = version_conflict(&old, expected) {
+            println!("{}", conflict);
+            return Ok(());
+        }
+    }
     if old.protected && !args.force {
         println!(
             "{}",
@@ -838,6 +890,21 @@ fn cmd_audit(app: &App, args: AuditArgs) -> Result<()> {
         "SELECT name, created_at, access_count FROM memories
          WHERE access_count = 0 AND datetime(created_at) < datetime('now', '-30 day') AND valid_until IS NULL",
     )?;
+    let low_confidence_high_access = query_json_rows(
+        &conn,
+        "SELECT name, confidence, access_count, last_accessed_at FROM memories
+         WHERE confidence = 'low' AND access_count >= 3 AND valid_until IS NULL
+         ORDER BY access_count DESC",
+    )?;
+    let cleanup_candidates = query_json_rows(
+        &conn,
+        "SELECT name, confidence, created_at, access_count FROM memories
+         WHERE access_count = 0
+         AND confidence IN ('low', 'medium')
+         AND datetime(created_at) < datetime('now', '-60 day')
+         AND valid_until IS NULL
+         ORDER BY created_at ASC",
+    )?;
 
     let mut fixed_expired = 0;
     let mut fixed_broken_links = 0;
@@ -875,6 +942,8 @@ fn cmd_audit(app: &App, args: AuditArgs) -> Result<()> {
             "broken_superseded_links": broken,
             "expired_active_memories": expired,
             "stale_low_access": stale_low_access,
+            "low_confidence_high_access": low_confidence_high_access,
+            "cleanup_candidates": cleanup_candidates,
             "fixed": args.fix,
             "fixed_expired": fixed_expired,
             "fixed_broken_links": fixed_broken_links
@@ -1019,6 +1088,8 @@ fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
     let mut imported = 0;
     let mut identical = 0;
     let mut conflicts = 0;
+    let mut trusted_updates = 0;
+    let mut rejected_lower_trust = 0;
     let mut regenerated_ids = 0;
 
     for mut memory in incoming {
@@ -1030,13 +1101,25 @@ fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
                 continue;
             }
 
+            let incoming_priority = source_priority(&memory.source);
+            let existing_priority = source_priority(&existing.source);
+            if incoming_priority < existing_priority {
+                rejected_lower_trust += 1;
+                continue;
+            }
+            if args.prefer_trusted && incoming_priority > existing_priority {
+                update_memory_from_merge(&conn, app, &existing, &memory)?;
+                trusted_updates += 1;
+                continue;
+            }
+
             let context = format!(
                 "merge conflict from {}: local source={} priority={}, incoming source={} priority={}",
                 args.db.display(),
                 existing.source,
-                source_priority(&existing.source),
+                existing_priority,
                 memory.source,
-                source_priority(&memory.source)
+                incoming_priority
             );
             add_ambiguity_record(
                 &conn,
@@ -1073,6 +1156,8 @@ fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
             "imported": imported,
             "identical": identical,
             "conflicts": conflicts,
+            "trusted_updates": trusted_updates,
+            "rejected_lower_trust": rejected_lower_trust,
             "regenerated_ids": regenerated_ids
         }))?
     );
@@ -1130,6 +1215,18 @@ fn source_priority(source: &str) -> u8 {
         "weekly_retro" => 1,
         _ => 2,
     }
+}
+
+fn version_conflict(memory: &Memory, expected_version: i64) -> Option<Value> {
+    (memory.version != expected_version).then(|| {
+        json!({
+            "status": "version_conflict",
+            "id": memory.id,
+            "name": memory.name,
+            "expected_version": expected_version,
+            "actual_version": memory.version
+        })
+    })
 }
 
 fn now() -> String {
@@ -1301,6 +1398,48 @@ fn insert_memory_record(conn: &Connection, memory: &Memory) -> Result<()> {
             memory.last_accessed_at,
         ],
     )?;
+    Ok(())
+}
+
+fn update_memory_from_merge(
+    conn: &Connection,
+    app: &App,
+    existing: &Memory,
+    incoming: &Memory,
+) -> Result<()> {
+    let now = now();
+    conn.execute(
+        "UPDATE memories
+         SET type = ?1, description = ?2, content = ?3, tags = ?4, scope = ?5,
+             source = ?6, confidence = ?7, protected = ?8, updated_at = ?9,
+             expires_at = ?10, valid_until = ?11, superseded_by = ?12,
+             version = version + 1
+         WHERE id = ?13",
+        params![
+            &incoming.r#type,
+            &incoming.description,
+            &incoming.content,
+            &incoming.tags,
+            &incoming.scope,
+            &incoming.source,
+            &incoming.confidence,
+            incoming.protected,
+            now,
+            &incoming.expires_at,
+            &incoming.valid_until,
+            &incoming.superseded_by,
+            &existing.id,
+        ],
+    )?;
+    log_change(
+        conn,
+        &existing.id,
+        "merge",
+        existing.content.as_deref(),
+        incoming.content.as_deref(),
+        "merge",
+    )?;
+    upsert_index(app, conn, &existing.id)?;
     Ok(())
 }
 
@@ -1586,11 +1725,20 @@ fn search_index(app: &App, query: &str, fuzzy: bool, limit: usize) -> Result<Vec
     let boxed_query: Box<dyn tantivy::query::Query> = if query.trim().is_empty() {
         Box::new(AllQuery)
     } else if fuzzy {
-        Box::new(FuzzyTermQuery::new(
-            Term::from_field_text(fields.content, query),
-            1,
-            true,
-        ))
+        let terms = [fields.name, fields.description, fields.content, fields.tags]
+            .into_iter()
+            .map(|field| {
+                (
+                    Occur::Should,
+                    Box::new(FuzzyTermQuery::new(
+                        Term::from_field_text(field, query),
+                        1,
+                        true,
+                    )) as Box<dyn tantivy::query::Query>,
+                )
+            })
+            .collect();
+        Box::new(BooleanQuery::new(terms))
     } else {
         let parser = QueryParser::for_index(
             &index,
@@ -1639,5 +1787,81 @@ fn remote_to_scope(remote: &str) -> String {
         format!("project:{cleaned}")
     } else {
         "global".to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn memory_with_version(version: i64) -> Memory {
+        Memory {
+            id: "id".to_string(),
+            r#type: "feedback".to_string(),
+            name: "name".to_string(),
+            description: None,
+            content: Some("content".to_string()),
+            tags: "[]".to_string(),
+            scope: "global".to_string(),
+            source: "manual".to_string(),
+            confidence: "high".to_string(),
+            protected: true,
+            created_at: now(),
+            updated_at: now(),
+            expires_at: None,
+            valid_until: None,
+            superseded_by: None,
+            version,
+            access_count: 0,
+            last_accessed_at: None,
+        }
+    }
+
+    #[test]
+    fn source_priority_orders_trust() {
+        assert!(source_priority("manual") > source_priority("agent"));
+        assert!(source_priority("agent") > source_priority("daily_retro"));
+        assert!(source_priority("daily_retro") > source_priority("weekly_retro"));
+    }
+
+    #[test]
+    fn version_conflict_reports_mismatch() {
+        let memory = memory_with_version(3);
+        assert!(version_conflict(&memory, 3).is_none());
+        let conflict = version_conflict(&memory, 2).expect("conflict");
+        assert_eq!(conflict["status"], "version_conflict");
+        assert_eq!(conflict["actual_version"], 3);
+    }
+
+    #[test]
+    fn strips_common_secret_patterns() {
+        let stripped = strip_secrets("token=Bearer abcdefghijklmnop password=hunter2").unwrap();
+        assert!(stripped.contains("[REDACTED]"));
+        assert!(!stripped.contains("hunter2"));
+    }
+
+    #[test]
+    fn parses_string_arrays_only() {
+        assert_eq!(parse_string_array(r#"["a","b"]"#).unwrap(), vec!["a", "b"]);
+        assert!(parse_string_array(r#"["a",1]"#).is_err());
+        assert!(parse_string_array(r#"{"a":1}"#).is_err());
+    }
+
+    #[test]
+    fn content_similarity_handles_cjk_overlap() {
+        let score = content_similarity("不要使用 emoji", "不要在回覆中使用 emoji");
+        assert!(score > 0.8);
+    }
+
+    #[test]
+    fn remote_scope_supports_ssh_and_https() {
+        assert_eq!(
+            remote_to_scope("git@github.com:NeoHsu/agent-knowledge.git"),
+            "project:NeoHsu/agent-knowledge"
+        );
+        assert_eq!(
+            remote_to_scope("https://github.com/NeoHsu/agent-knowledge.git"),
+            "project:NeoHsu/agent-knowledge"
+        );
     }
 }
