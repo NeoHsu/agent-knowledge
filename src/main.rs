@@ -7,6 +7,10 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use fs2::FileExt;
+use lindera::dictionary::load_dictionary;
+use lindera::mode::Mode;
+use lindera::segmenter::Segmenter;
+use lindera_tantivy::tokenizer::LinderaTokenizer;
 use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -17,7 +21,6 @@ use tantivy::schema::{
     Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, Value as TantivyValue,
     STORED, STRING,
 };
-use tantivy::tokenizer::{LowerCaser, NgramTokenizer, TextAnalyzer};
 use tantivy::{doc, Index, IndexWriter, TantivyDocument, Term};
 
 const DEFAULT_LIMIT: usize = 20;
@@ -478,7 +481,7 @@ fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
                 "{}",
                 serde_json::to_string_pretty(&json!({
                     "status": "similar_found",
-                    "match_type": "bm25_ngram",
+                    "match_type": "bm25_lindera",
                     "candidates": candidates,
                     "new_content": content
                 }))?
@@ -1644,9 +1647,9 @@ fn ensure_index(path: &Path) -> Result<Index> {
 }
 
 fn register_tokenizers(index: &Index) -> Result<()> {
-    let tokenizer = TextAnalyzer::builder(NgramTokenizer::all_ngrams(1, 3)?)
-        .filter(LowerCaser)
-        .build();
+    let dictionary = load_dictionary("embedded://cc-cedict").context("load embedded CC-CEDICT")?;
+    let segmenter = Segmenter::new(Mode::Normal, dictionary, None);
+    let tokenizer = LinderaTokenizer::from_segmenter(segmenter);
     index.tokenizers().register("multilingual", tokenizer);
     Ok(())
 }
@@ -1746,7 +1749,7 @@ fn search_index(app: &App, query: &str, fuzzy: bool, limit: usize) -> Result<Vec
         );
         Box::new(parser.parse_query(query)?)
     };
-    let docs = searcher.search(&boxed_query, &TopDocs::with_limit(limit).order_by_score())?;
+    let docs = searcher.search(&boxed_query, &TopDocs::with_limit(limit))?;
     let mut ids = Vec::new();
     for (_score, address) in docs {
         let retrieved = searcher.doc::<TantivyDocument>(address)?;

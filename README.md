@@ -15,4 +15,4 @@ bin/mem export --format markdown
 
 `memory.db` is the source of truth and should be committed. `index/` is ignored and can be rebuilt with `bin/mem reindex`.
 
-The current multilingual tokenizer is Tantivy n-gram. `lindera-tantivy` is not enabled because its latest release depends on Tantivy 0.25 while this project uses Tantivy 0.26 to keep the transitive `lru` advisory fixed.
+The multilingual tokenizer uses `lindera-tantivy` with embedded CC-CEDICT for Chinese tokenization. This pins Tantivy to 0.25 because `lindera-tantivy 2.0.0` is not yet compatible with Tantivy 0.26.
