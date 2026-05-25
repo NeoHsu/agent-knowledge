@@ -1,0 +1,27 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/build-release.sh
+      - run: |
+          mkdir -p dist
+          cp target/release/mem dist/mem-linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mem-linux-x86_64
+          path: dist/mem-linux-x86_64
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/mem-linux-x86_64

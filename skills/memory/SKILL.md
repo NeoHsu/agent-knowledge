@@ -24,6 +24,8 @@ bin/mem delete old_name
 bin/mem history --recent
 bin/mem stats
 bin/mem audit
+bin/mem retro daily
+bin/mem retro weekly
 bin/mem reindex
 ```
 
@@ -70,13 +72,12 @@ Load only relevant memories into the answer context.
 
 Use `references/daily-retro.md` when the user asks for daily review. The short flow is:
 
-1. Detect platform from `config.yaml`.
-2. Run the configured reader for today's logs.
-3. Export current memory as JSON.
-4. Compare logs against existing memory.
-5. Save new durable knowledge, update stale knowledge, and record ambiguities.
-6. Report counts and pending questions.
-7. Commit and push.
+1. Use platform-provided conversation context or logs; repo readers are optional adapters.
+2. Run `bin/mem retro daily` for current memory, changelog, ambiguity, and audit context.
+3. Compare available platform context against existing memory.
+4. Save new durable knowledge, update stale knowledge, and record ambiguities.
+5. Report counts and pending questions.
+6. Commit and push.
 
 ## Weekly Retrospective
 

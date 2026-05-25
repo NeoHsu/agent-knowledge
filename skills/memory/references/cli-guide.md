@@ -53,8 +53,11 @@ Soft delete sets `valid_until`. Hard delete removes the row; protected memories 
 ```bash
 bin/mem ambiguity add --query "PR 策略" --memory-ids '["pr_small","pr_bundled"]' --context "scope unclear"
 bin/mem ambiguity list --pending
-bin/mem ambiguity resolve 1
+bin/mem ambiguity resolve 1 --note "project-specific preference"
+bin/mem ambiguity resolve 1 --keep pr_small --soft-delete-others
 ```
+
+`resolve --keep ... --soft-delete-others` soft-deletes non-protected alternatives referenced by the ambiguity and records skipped protected memories.
 
 ## History and Maintenance
 
@@ -66,7 +69,11 @@ bin/mem audit
 bin/mem audit --fix
 bin/mem gc --days 90
 bin/mem reindex
+bin/mem retro daily
+bin/mem retro weekly --limit 200
 ```
+
+`retro` emits an orchestration bundle for the LLM. It does not read platform logs itself; the active platform or harness should provide conversation history.
 
 ## Import and Export
 

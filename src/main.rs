@@ -49,6 +49,10 @@ enum Command {
     Export(ExportArgs),
     Import(ImportArgs),
     Merge(MergeArgs),
+    Retro {
+        #[command(subcommand)]
+        command: RetroCommand,
+    },
     Ambiguity {
         #[command(subcommand)]
         command: AmbiguityCommand,
@@ -213,6 +217,18 @@ struct MergeArgs {
 }
 
 #[derive(Subcommand)]
+enum RetroCommand {
+    Daily(RetroArgs),
+    Weekly(RetroArgs),
+}
+
+#[derive(Args)]
+struct RetroArgs {
+    #[arg(long, default_value_t = 50)]
+    limit: usize,
+}
+
+#[derive(Subcommand)]
 enum AmbiguityCommand {
     Add(AmbiguityAddArgs),
     List(AmbiguityListArgs),
@@ -238,6 +254,12 @@ struct AmbiguityListArgs {
 #[derive(Args)]
 struct AmbiguityResolveArgs {
     id: i64,
+    #[arg(long)]
+    note: Option<String>,
+    #[arg(long)]
+    keep: Option<String>,
+    #[arg(long)]
+    soft_delete_others: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -309,6 +331,7 @@ fn main() -> Result<()> {
         Command::Export(args) => cmd_export(&app, args)?,
         Command::Import(args) => with_lock(&app, || cmd_import(&app, args))?,
         Command::Merge(args) => with_lock(&app, || cmd_merge(&app, args))?,
+        Command::Retro { command } => cmd_retro(&app, command)?,
         Command::Ambiguity { command } => with_lock(&app, || cmd_ambiguity(&app, command))?,
     }
 
@@ -849,58 +872,65 @@ fn cmd_history(app: &App, args: HistoryArgs) -> Result<()> {
 fn cmd_stats(app: &App) -> Result<()> {
     app.init()?;
     let conn = app.conn()?;
-    let total: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM memories WHERE valid_until IS NULL",
-        [],
-        |r| r.get(0),
-    )?;
-    let by_type = grouped_count(&conn, "type")?;
-    let by_scope = grouped_count(&conn, "scope")?;
-    let by_confidence = grouped_count(&conn, "confidence")?;
-    let top_accessed = query_json_rows(
-        &conn,
-        "SELECT name, access_count, last_accessed_at FROM memories WHERE valid_until IS NULL ORDER BY access_count DESC LIMIT 10",
-    )?;
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&json!({
-            "total_active": total,
-            "by_type": by_type,
-            "by_scope": by_scope,
-            "by_confidence": by_confidence,
-            "top_accessed": top_accessed
-        }))?
-    );
+    println!("{}", serde_json::to_string_pretty(&stats_report(&conn)?)?);
     Ok(())
 }
 
 fn cmd_audit(app: &App, args: AuditArgs) -> Result<()> {
     app.init()?;
     let conn = app.conn()?;
+    let report = audit_report(&conn, app, args.fix)?;
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(())
+}
+
+fn stats_report(conn: &Connection) -> Result<Value> {
+    let total: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM memories WHERE valid_until IS NULL",
+        [],
+        |r| r.get(0),
+    )?;
+    let by_type = grouped_count(conn, "type")?;
+    let by_scope = grouped_count(conn, "scope")?;
+    let by_confidence = grouped_count(conn, "confidence")?;
+    let top_accessed = query_json_rows(
+        conn,
+        "SELECT name, access_count, last_accessed_at FROM memories WHERE valid_until IS NULL ORDER BY access_count DESC LIMIT 10",
+    )?;
+    Ok(json!({
+        "total_active": total,
+        "by_type": by_type,
+        "by_scope": by_scope,
+        "by_confidence": by_confidence,
+        "top_accessed": top_accessed
+    }))
+}
+
+fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Value> {
     let broken = query_json_rows(
-        &conn,
+        conn,
         "SELECT name, superseded_by FROM memories
          WHERE superseded_by IS NOT NULL
          AND superseded_by NOT IN (SELECT id FROM memories)",
     )?;
     let expired = query_json_rows(
-        &conn,
+        conn,
         "SELECT name, expires_at FROM memories
          WHERE expires_at IS NOT NULL AND datetime(expires_at) < datetime('now') AND valid_until IS NULL",
     )?;
     let stale_low_access = query_json_rows(
-        &conn,
+        conn,
         "SELECT name, created_at, access_count FROM memories
          WHERE access_count = 0 AND datetime(created_at) < datetime('now', '-30 day') AND valid_until IS NULL",
     )?;
     let low_confidence_high_access = query_json_rows(
-        &conn,
+        conn,
         "SELECT name, confidence, access_count, last_accessed_at FROM memories
          WHERE confidence = 'low' AND access_count >= 3 AND valid_until IS NULL
          ORDER BY access_count DESC",
     )?;
     let cleanup_candidates = query_json_rows(
-        &conn,
+        conn,
         "SELECT name, confidence, created_at, access_count FROM memories
          WHERE access_count = 0
          AND confidence IN ('low', 'medium')
@@ -911,9 +941,9 @@ fn cmd_audit(app: &App, args: AuditArgs) -> Result<()> {
 
     let mut fixed_expired = 0;
     let mut fixed_broken_links = 0;
-    if args.fix {
+    if fix {
         let now = now();
-        let expired_memories = active_expired_memories(&conn)?;
+        let expired_memories = active_expired_memories(conn)?;
         for memory in &expired_memories {
             conn.execute(
                 "UPDATE memories SET valid_until = ?1, updated_at = ?1 WHERE id = ?2",
@@ -939,20 +969,16 @@ fn cmd_audit(app: &App, args: AuditArgs) -> Result<()> {
         reindex(app)?;
     }
 
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&json!({
-            "broken_superseded_links": broken,
-            "expired_active_memories": expired,
-            "stale_low_access": stale_low_access,
-            "low_confidence_high_access": low_confidence_high_access,
-            "cleanup_candidates": cleanup_candidates,
-            "fixed": args.fix,
-            "fixed_expired": fixed_expired,
-            "fixed_broken_links": fixed_broken_links
-        }))?
-    );
-    Ok(())
+    Ok(json!({
+        "broken_superseded_links": broken,
+        "expired_active_memories": expired,
+        "stale_low_access": stale_low_access,
+        "low_confidence_high_access": low_confidence_high_access,
+        "cleanup_candidates": cleanup_candidates,
+        "fixed": fix,
+        "fixed_expired": fixed_expired,
+        "fixed_broken_links": fixed_broken_links
+    }))
 }
 
 fn cmd_gc(app: &App, args: GcArgs) -> Result<()> {
@@ -1167,6 +1193,73 @@ fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
     Ok(())
 }
 
+fn cmd_retro(app: &App, command: RetroCommand) -> Result<()> {
+    app.init()?;
+    let conn = app.conn()?;
+    let (kind, limit) = match command {
+        RetroCommand::Daily(args) => ("daily", args.limit),
+        RetroCommand::Weekly(args) => ("weekly", args.limit),
+    };
+    let limit = limit.max(1).min(500);
+    let recent_history = query_json_rows(
+        &conn,
+        &format!(
+            "SELECT id, memory_id, action, old_content, new_content, source, created_at
+             FROM changelog
+             ORDER BY created_at DESC
+             LIMIT {limit}"
+        ),
+    )?;
+    let pending_ambiguities = query_json_rows(
+        &conn,
+        "SELECT id, query, memory_ids, context, resolution, created_at, resolved_at
+         FROM ambiguities
+         WHERE resolution = 'pending'
+         ORDER BY created_at DESC",
+    )?;
+    let active_memories = query_json_rows(
+        &conn,
+        &format!(
+            "SELECT id, type, name, tags, scope, source, confidence, version, access_count, updated_at
+             FROM memories
+             WHERE valid_until IS NULL
+             ORDER BY updated_at DESC
+             LIMIT {limit}"
+        ),
+    )?;
+    let instructions = match kind {
+        "daily" => vec![
+            "Use platform-provided conversation context; repo readers are optional adapters.",
+            "Compare today's conversation facts against active_memories.",
+            "Persist durable new facts with source=daily_retro.",
+            "Use update/supersede/delete with --expected-version when changing existing memory.",
+            "Record unresolved conflicts with mem ambiguity add.",
+        ],
+        _ => vec![
+            "Review memory quality from changelog, audit, and pending ambiguities.",
+            "Merge duplicates, resolve ambiguities, and identify skill/profile candidates.",
+            "Calibrate low-confidence high-access memories after review.",
+            "Use audit --fix only for deterministic repairs.",
+        ],
+    };
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({
+            "status": "retro_bundle",
+            "kind": kind,
+            "generated_at": now(),
+            "instructions": instructions,
+            "stats": stats_report(&conn)?,
+            "audit": audit_report(&conn, app, false)?,
+            "pending_ambiguities": pending_ambiguities,
+            "recent_history": recent_history,
+            "active_memories": active_memories
+        }))?
+    );
+    Ok(())
+}
+
 fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> {
     app.init()?;
     let conn = app.conn()?;
@@ -1191,11 +1284,69 @@ fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> {
         }
         AmbiguityCommand::Resolve(args) => {
             let now = now();
+            let ambiguity = ambiguity_by_id(&conn, args.id)?
+                .ok_or_else(|| anyhow!("ambiguity not found: {}", args.id))?;
+            let raw_memory_ids = ambiguity
+                .get("memory_ids")
+                .and_then(Value::as_str)
+                .unwrap_or("[]");
+            let memory_ids = parse_string_array(raw_memory_ids)?;
+            let mut soft_deleted = Vec::new();
+            let mut skipped_protected = Vec::new();
+            let keep_id = match args.keep.as_deref() {
+                Some(reference) => Some(resolve_memory_ref(&conn, reference)?),
+                None => None,
+            };
+            if args.soft_delete_others {
+                let keep_id = keep_id
+                    .as_deref()
+                    .ok_or_else(|| anyhow!("--soft-delete-others requires --keep"))?;
+                for memory_id in memory_ids.iter().filter(|id| id.as_str() != Some(keep_id)) {
+                    let Some(memory) = memory_by_id(&conn, memory_id)? else {
+                        continue;
+                    };
+                    if memory.protected {
+                        skipped_protected.push(memory.id);
+                        continue;
+                    }
+                    conn.execute(
+                        "UPDATE memories SET valid_until = ?1, updated_at = ?1 WHERE id = ?2",
+                        params![now, memory.id],
+                    )?;
+                    log_change(
+                        &conn,
+                        &memory.id,
+                        "delete",
+                        memory.content.as_deref(),
+                        None,
+                        "ambiguity_resolve",
+                    )?;
+                    soft_deleted.push(memory.id);
+                }
+                if !soft_deleted.is_empty() {
+                    reindex(app)?;
+                }
+            }
+            let resolution = json!({
+                "status": "resolved",
+                "note": args.note,
+                "keep": keep_id,
+                "soft_deleted": soft_deleted,
+                "skipped_protected": skipped_protected
+            })
+            .to_string();
             conn.execute(
-                "UPDATE ambiguities SET resolution = 'resolved', resolved_at = ?1 WHERE id = ?2",
-                params![now, args.id],
+                "UPDATE ambiguities SET resolution = ?1, resolved_at = ?2 WHERE id = ?3",
+                params![resolution, now, args.id],
             )?;
-            println!("{}", json!({"status": "resolved", "id": args.id}));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "status": "resolved",
+                    "id": args.id,
+                    "resolution": serde_json::from_str::<Value>(&resolution)?
+                }))?
+            );
         }
     }
     Ok(())
@@ -1330,6 +1481,16 @@ fn memory_by_id(conn: &Connection, id: &str) -> Result<Option<Memory>> {
     stmt.query_row(params![id], row_to_memory)
         .optional()
         .map_err(Into::into)
+}
+
+fn resolve_memory_ref(conn: &Connection, reference: &str) -> Result<String> {
+    if let Some(memory) = memory_by_id(conn, reference)? {
+        return Ok(memory.id);
+    }
+    if let Some(memory) = memory_by_name(conn, reference)? {
+        return Ok(memory.id);
+    }
+    bail!("memory not found: {reference}")
 }
 
 fn all_memories(conn: &Connection) -> Result<Vec<Memory>> {
@@ -1594,6 +1755,28 @@ fn query_json_rows(conn: &Connection, sql: &str) -> Result<Vec<Value>> {
     })?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
         .map_err(Into::into)
+}
+
+fn ambiguity_by_id(conn: &Connection, id: i64) -> Result<Option<Value>> {
+    conn.query_row(
+        "SELECT id, query, memory_ids, context, resolution, created_at, resolved_at
+         FROM ambiguities
+         WHERE id = ?1",
+        params![id],
+        |row| {
+            Ok(json!({
+                "id": row.get::<_, i64>(0)?,
+                "query": row.get::<_, String>(1)?,
+                "memory_ids": row.get::<_, String>(2)?,
+                "context": row.get::<_, Option<String>>(3)?,
+                "resolution": row.get::<_, Option<String>>(4)?,
+                "created_at": row.get::<_, String>(5)?,
+                "resolved_at": row.get::<_, Option<String>>(6)?,
+            }))
+        },
+    )
+    .optional()
+    .map_err(Into::into)
 }
 
 fn sqlite_value_to_json(value: rusqlite::types::Value) -> Value {

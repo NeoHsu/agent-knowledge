@@ -3,6 +3,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PATH="/home/node/bin:$PATH"
+if [[ -n "${CARGO:-}" ]]; then
+  CARGO_BIN="$CARGO"
+elif [[ -x /home/node/.cargo/bin/cargo ]]; then
+  CARGO_BIN=/home/node/.cargo/bin/cargo
+else
+  CARGO_BIN=cargo
+fi
 
-/home/node/.cargo/bin/cargo build --release --manifest-path "$ROOT/Cargo.toml"
+"$CARGO_BIN" build --release --manifest-path "$ROOT/Cargo.toml"
 "$ROOT/target/release/mem" --version
