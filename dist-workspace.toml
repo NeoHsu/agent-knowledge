@@ -16,5 +16,5 @@ packages = ["agent-knowledge"]
 hosting = "github"
 pr-run-mode = "plan"
 install-path = "CARGO_HOME"
-github-attestations = true
+github-attestations = false
 allow-dirty = ["ci"]

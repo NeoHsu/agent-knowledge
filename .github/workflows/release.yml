@@ -65,9 +65,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
     permissions:
-      attestations: write
       contents: read
-      id-token: write
     steps:
       - name: Enable Windows long paths
         run: git config --global core.longpaths true
@@ -104,11 +102,6 @@ jobs:
         shell: bash
         run: |
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
-
-      - name: Attest
-        uses: actions/attest-build-provenance@v3
-        with:
-          subject-path: "target/distrib/*${{ join(matrix.targets, ', ') }}*"
 
       - id: cargo-dist
         name: Post-build
