@@ -8,6 +8,7 @@ Portable agent memory system. The repository owns profile files, a SQLite memory
 bin/mem init
 bin/mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
 bin/mem query "emoji"
+bin/mem merge /path/to/theirs.db
 bin/mem export --format markdown
 ```
 

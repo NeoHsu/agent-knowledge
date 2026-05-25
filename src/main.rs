@@ -45,6 +45,7 @@ enum Command {
     Gc(GcArgs),
     Export(ExportArgs),
     Import(ImportArgs),
+    Merge(MergeArgs),
     Ambiguity {
         #[command(subcommand)]
         command: AmbiguityCommand,
@@ -193,6 +194,11 @@ struct ImportArgs {
     source: String,
 }
 
+#[derive(Args)]
+struct MergeArgs {
+    db: PathBuf,
+}
+
 #[derive(Subcommand)]
 enum AmbiguityCommand {
     Add(AmbiguityAddArgs),
@@ -289,6 +295,7 @@ fn main() -> Result<()> {
         Command::Gc(args) => with_lock(&app, || cmd_gc(&app, args))?,
         Command::Export(args) => cmd_export(&app, args)?,
         Command::Import(args) => with_lock(&app, || cmd_import(&app, args))?,
+        Command::Merge(args) => with_lock(&app, || cmd_merge(&app, args))?,
         Command::Ambiguity { command } => with_lock(&app, || cmd_ambiguity(&app, command))?,
     }
 
@@ -378,15 +385,93 @@ fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
 
     let conn = app.conn()?;
     if let Some(existing) = memory_by_name(&conn, &args.name)? {
-        if !args.force {
+        let content = strip_secrets(&args.content)?;
+        if args.force {
+            if source_priority(&args.source) < source_priority(&existing.source) {
+                println!(
+                    "{}",
+                    json!({
+                        "status": "rejected",
+                        "reason": "lower_trust_source_cannot_overwrite",
+                        "existing": existing,
+                        "new_source": args.source
+                    })
+                );
+                return Ok(());
+            }
+            let now = now();
+            let description = args
+                .description
+                .or(args.why)
+                .or(existing.description.clone());
+            let confidence = args
+                .confidence
+                .unwrap_or_else(|| confidence_for_source(&args.source).to_string());
+            conn.execute(
+                "UPDATE memories
+                 SET type = ?1, description = ?2, content = ?3, tags = ?4, scope = ?5,
+                     source = ?6, confidence = ?7, protected = ?8, updated_at = ?9,
+                     expires_at = ?10, version = version + 1
+                 WHERE id = ?11",
+                params![
+                    args.r#type,
+                    description,
+                    content,
+                    args.tags,
+                    args.scope,
+                    args.source,
+                    confidence,
+                    args.source == "manual",
+                    now,
+                    args.expires_at,
+                    existing.id
+                ],
+            )?;
+            log_change(
+                &conn,
+                &existing.id,
+                "update",
+                existing.content.as_deref(),
+                Some(&content),
+                &args.source,
+            )?;
+            upsert_index(app, &conn, &existing.id)?;
+            let updated = memory_by_id(&conn, &existing.id)?.expect("updated memory exists");
             println!(
                 "{}",
                 json!({
-                    "status": "duplicate_found",
-                    "match_type": "exact_name",
-                    "existing": existing,
-                    "new_content": strip_secrets(&args.content)?
+                    "status": "updated",
+                    "match_type": "exact_name_force",
+                    "id": updated.id,
+                    "version": updated.version
                 })
+            );
+            return Ok(());
+        }
+        println!(
+            "{}",
+            json!({
+                "status": "duplicate_found",
+                "match_type": "exact_name",
+                "existing": existing,
+                "new_content": content
+            })
+        );
+        return Ok(());
+    }
+
+    let content = strip_secrets(&args.content)?;
+    if !args.force {
+        let candidates = similar_candidates(app, &conn, &content, 5)?;
+        if !candidates.is_empty() {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "status": "similar_found",
+                    "match_type": "bm25_ngram",
+                    "candidates": candidates,
+                    "new_content": content
+                }))?
             );
             return Ok(());
         }
@@ -394,7 +479,6 @@ fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
 
     let id = slugify(&args.name);
     let now = now();
-    let content = strip_secrets(&args.content)?;
     let confidence = args
         .confidence
         .unwrap_or_else(|| confidence_for_source(&args.source).to_string());
@@ -504,6 +588,19 @@ fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
     let conn = app.conn()?;
     let old = memory_by_name(&conn, &args.name)?
         .ok_or_else(|| anyhow!("memory not found: {}", args.name))?;
+    if source_priority(&args.source) < source_priority(&old.source) {
+        println!(
+            "{}",
+            json!({
+                "status": "rejected",
+                "reason": "lower_trust_source_cannot_update",
+                "existing_source": old.source,
+                "new_source": args.source,
+                "id": old.id
+            })
+        );
+        return Ok(());
+    }
     let new_content = match args.content {
         Some(content) => Some(strip_secrets(&content)?),
         None => old.content.clone(),
@@ -742,7 +839,33 @@ fn cmd_audit(app: &App, args: AuditArgs) -> Result<()> {
          WHERE access_count = 0 AND datetime(created_at) < datetime('now', '-30 day') AND valid_until IS NULL",
     )?;
 
+    let mut fixed_expired = 0;
+    let mut fixed_broken_links = 0;
     if args.fix {
+        let now = now();
+        let expired_memories = active_expired_memories(&conn)?;
+        for memory in &expired_memories {
+            conn.execute(
+                "UPDATE memories SET valid_until = ?1, updated_at = ?1 WHERE id = ?2",
+                params![now, memory.id],
+            )?;
+            log_change(
+                &conn,
+                &memory.id,
+                "delete",
+                memory.content.as_deref(),
+                None,
+                "audit",
+            )?;
+        }
+        fixed_expired = expired_memories.len();
+        fixed_broken_links = conn.execute(
+            "UPDATE memories
+             SET superseded_by = NULL
+             WHERE superseded_by IS NOT NULL
+             AND superseded_by NOT IN (SELECT id FROM memories)",
+            [],
+        )?;
         reindex(app)?;
     }
 
@@ -752,7 +875,9 @@ fn cmd_audit(app: &App, args: AuditArgs) -> Result<()> {
             "broken_superseded_links": broken,
             "expired_active_memories": expired,
             "stale_low_access": stale_low_access,
-            "fixed": args.fix
+            "fixed": args.fix,
+            "fixed_expired": fixed_expired,
+            "fixed_broken_links": fixed_broken_links
         }))?
     );
     Ok(())
@@ -881,16 +1006,87 @@ fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
     Ok(())
 }
 
+fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
+    app.init()?;
+    if !args.db.exists() {
+        bail!("merge database not found: {}", args.db.display());
+    }
+
+    let conn = app.conn()?;
+    let theirs = Connection::open(&args.db)
+        .with_context(|| format!("open merge database {}", args.db.display()))?;
+    let incoming = all_memories(&theirs)?;
+    let mut imported = 0;
+    let mut identical = 0;
+    let mut conflicts = 0;
+    let mut regenerated_ids = 0;
+
+    for mut memory in incoming {
+        if let Some(existing) = memory_by_name(&conn, &memory.name)? {
+            if normalized_text(existing.content.as_deref().unwrap_or_default())
+                == normalized_text(memory.content.as_deref().unwrap_or_default())
+            {
+                identical += 1;
+                continue;
+            }
+
+            let context = format!(
+                "merge conflict from {}: local source={} priority={}, incoming source={} priority={}",
+                args.db.display(),
+                existing.source,
+                source_priority(&existing.source),
+                memory.source,
+                source_priority(&memory.source)
+            );
+            add_ambiguity_record(
+                &conn,
+                &format!("merge:{}", memory.name),
+                &[existing.id.clone(), memory.id.clone()],
+                Some(&context),
+            )?;
+            conflicts += 1;
+            continue;
+        }
+
+        let original_id = memory.id.clone();
+        memory.id = unique_memory_id(&conn, &memory.id)?;
+        if memory.id != original_id {
+            regenerated_ids += 1;
+        }
+        insert_memory_record(&conn, &memory)?;
+        log_change(
+            &conn,
+            &memory.id,
+            "merge",
+            None,
+            memory.content.as_deref(),
+            "merge",
+        )?;
+        upsert_index(app, &conn, &memory.id)?;
+        imported += 1;
+    }
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({
+            "status": "merged",
+            "imported": imported,
+            "identical": identical,
+            "conflicts": conflicts,
+            "regenerated_ids": regenerated_ids
+        }))?
+    );
+    Ok(())
+}
+
 fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> {
     app.init()?;
     let conn = app.conn()?;
     match command {
         AmbiguityCommand::Add(args) => {
             validate_tags(&args.memory_ids)?;
-            conn.execute(
-                "INSERT INTO ambiguities (query, memory_ids, context, resolution) VALUES (?1, ?2, ?3, 'pending')",
-                params![args.query, args.memory_ids, args.context],
-            )?;
+            let memory_ids = parse_string_array(&args.memory_ids)?;
+            add_ambiguity_record(&conn, &args.query, &memory_ids, args.context.as_deref())?;
             println!(
                 "{}",
                 json!({"status": "ambiguity_added", "id": conn.last_insert_rowid()})
@@ -923,6 +1119,16 @@ fn confidence_for_source(source: &str) -> &'static str {
         "agent" => "medium",
         "daily_retro" | "weekly_retro" => "low",
         _ => "medium",
+    }
+}
+
+fn source_priority(source: &str) -> u8 {
+    match source {
+        "manual" => 4,
+        "agent" => 3,
+        "daily_retro" => 2,
+        "weekly_retro" => 1,
+        _ => 2,
     }
 }
 
@@ -967,12 +1173,25 @@ fn slugify(name: &str) -> String {
 }
 
 fn validate_tags(tags: &str) -> Result<()> {
-    let parsed: Value =
-        serde_json::from_str(tags).context("tags/memory_ids must be a JSON array")?;
-    if !parsed.is_array() {
-        bail!("expected JSON array");
-    }
+    parse_string_array(tags)?;
     Ok(())
+}
+
+fn parse_string_array(raw: &str) -> Result<Vec<String>> {
+    let parsed: Value =
+        serde_json::from_str(raw).context("tags/memory_ids must be a JSON array")?;
+    let Value::Array(values) = parsed else {
+        bail!("expected JSON array");
+    };
+    values
+        .into_iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_string)
+                .ok_or_else(|| anyhow!("array items must be strings"))
+        })
+        .collect()
 }
 
 fn merge_tags(existing: &str, add: &str) -> Result<String> {
@@ -1020,6 +1239,18 @@ fn all_memories(conn: &Connection) -> Result<Vec<Memory>> {
         .map_err(Into::into)
 }
 
+fn active_expired_memories(conn: &Connection) -> Result<Vec<Memory>> {
+    let mut stmt = conn.prepare(
+        "SELECT * FROM memories
+         WHERE expires_at IS NOT NULL
+         AND datetime(expires_at) < datetime('now')
+         AND valid_until IS NULL",
+    )?;
+    let rows = stmt.query_map([], row_to_memory)?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
+}
+
 fn row_to_memory(row: &rusqlite::Row<'_>) -> rusqlite::Result<Memory> {
     Ok(Memory {
         id: row.get("id")?,
@@ -1043,6 +1274,54 @@ fn row_to_memory(row: &rusqlite::Row<'_>) -> rusqlite::Result<Memory> {
     })
 }
 
+fn insert_memory_record(conn: &Connection, memory: &Memory) -> Result<()> {
+    conn.execute(
+        "INSERT INTO memories
+        (id, type, name, description, content, tags, scope, source, confidence, protected,
+         created_at, updated_at, expires_at, valid_until, superseded_by, version, access_count, last_accessed_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+        params![
+            memory.id,
+            memory.r#type,
+            memory.name,
+            memory.description,
+            memory.content,
+            memory.tags,
+            memory.scope,
+            memory.source,
+            memory.confidence,
+            memory.protected,
+            memory.created_at,
+            memory.updated_at,
+            memory.expires_at,
+            memory.valid_until,
+            memory.superseded_by,
+            memory.version,
+            memory.access_count,
+            memory.last_accessed_at,
+        ],
+    )?;
+    Ok(())
+}
+
+fn unique_memory_id(conn: &Connection, preferred: &str) -> Result<String> {
+    let base = if preferred.trim().is_empty() {
+        format!("memory_{}", uuid::Uuid::new_v4())
+    } else {
+        preferred.to_string()
+    };
+    if memory_by_id(conn, &base)?.is_none() {
+        return Ok(base);
+    }
+    for suffix in 2.. {
+        let candidate = format!("{base}_{suffix}");
+        if memory_by_id(conn, &candidate)?.is_none() {
+            return Ok(candidate);
+        }
+    }
+    unreachable!()
+}
+
 fn log_change(
     conn: &Connection,
     memory_id: &str,
@@ -1057,6 +1336,91 @@ fn log_change(
         params![memory_id, action, old_content, new_content, source],
     )?;
     Ok(())
+}
+
+fn add_ambiguity_record(
+    conn: &Connection,
+    query: &str,
+    memory_ids: &[String],
+    context: Option<&str>,
+) -> Result<()> {
+    let memory_ids = serde_json::to_string(memory_ids)?;
+    conn.execute(
+        "INSERT INTO ambiguities (query, memory_ids, context, resolution)
+         VALUES (?1, ?2, ?3, 'pending')",
+        params![query, memory_ids, context],
+    )?;
+    Ok(())
+}
+
+fn similar_candidates(
+    app: &App,
+    conn: &Connection,
+    content: &str,
+    limit: usize,
+) -> Result<Vec<Value>> {
+    let ids = search_index(app, content, false, 25)?;
+    let mut candidates = Vec::new();
+    for id in ids {
+        let Some(memory) = memory_by_id(conn, &id)? else {
+            continue;
+        };
+        if memory.valid_until.is_some() {
+            continue;
+        }
+        let score = content_similarity(content, memory.content.as_deref().unwrap_or_default());
+        if score >= 0.55 {
+            candidates.push(json!({
+                "id": memory.id,
+                "name": memory.name,
+                "content": memory.content,
+                "score": score
+            }));
+        }
+    }
+    candidates.sort_by(|a, b| {
+        let a_score = a.get("score").and_then(Value::as_f64).unwrap_or_default();
+        let b_score = b.get("score").and_then(Value::as_f64).unwrap_or_default();
+        b_score
+            .partial_cmp(&a_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    candidates.truncate(limit);
+    Ok(candidates)
+}
+
+fn content_similarity(a: &str, b: &str) -> f64 {
+    let a_set = shingles(&normalized_text(a));
+    let b_set = shingles(&normalized_text(b));
+    if a_set.is_empty() || b_set.is_empty() {
+        return 0.0;
+    }
+    let intersection = a_set.intersection(&b_set).count() as f64;
+    let union = a_set.union(&b_set).count() as f64;
+    let smaller = a_set.len().min(b_set.len()) as f64;
+    (intersection / union).max(intersection / smaller)
+}
+
+fn normalized_text(input: &str) -> String {
+    input
+        .chars()
+        .flat_map(char::to_lowercase)
+        .filter(|ch| !ch.is_whitespace())
+        .collect()
+}
+
+fn shingles(input: &str) -> HashSet<String> {
+    let chars: Vec<char> = input.chars().collect();
+    if chars.is_empty() {
+        return HashSet::new();
+    }
+    if chars.len() <= 2 {
+        return HashSet::from([input.to_string()]);
+    }
+    chars
+        .windows(2)
+        .map(|window| window.iter().collect::<String>())
+        .collect()
 }
 
 fn grouped_count(conn: &Connection, column: &str) -> Result<Value> {

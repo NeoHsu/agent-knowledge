@@ -15,6 +15,8 @@ Confidence is inferred from source unless `--confidence` is provided:
 
 `save` strips common API keys, bearer tokens, and password/secret assignments before persistence.
 
+Without `--force`, `save` returns `duplicate_found` for an exact name match and `similar_found` for high-overlap content. The caller should decide whether to skip, update, or supersede. With `--force`, an exact-name save updates the existing memory only if the incoming source is at least as trusted as the existing source.
+
 ## Query
 
 ```bash
@@ -69,3 +71,11 @@ bin/mem export --format markdown
 bin/mem import memories.json
 bin/mem import note.md --type reference
 ```
+
+## Merge
+
+```bash
+bin/mem merge /path/to/theirs.db
+```
+
+Merge imports memories with new names, skips identical same-name memories, and records same-name content conflicts in `ambiguities` instead of overwriting automatically.
