@@ -1,0 +1,18 @@
+repo:
+  name: agent-knowledge
+  database: memory.db
+  index_dir: index
+
+platforms:
+  claude-code:
+    detected: false
+    session_log_path: ~/.claude/projects/
+    log_format: jsonl
+    reader: readers/claude-code.sh
+  openab-discord:
+    detected: true
+    channel_id: "1503319026900664441"
+    reader: readers/discord.sh
+  hermes:
+    detected: false
+    reader: readers/hermes.sh

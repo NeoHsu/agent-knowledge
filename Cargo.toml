@@ -1,0 +1,22 @@
+[package]
+name = "agent-knowledge"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "mem"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.5", features = ["derive"] }
+fs2 = "0.4"
+regex = "1.11"
+rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tantivy = "0.22"
+uuid = { version = "1.11", features = ["v4"] }

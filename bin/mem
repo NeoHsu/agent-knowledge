@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PATH="/home/node/bin:$PATH"
+exec /home/node/.cargo/bin/cargo run --quiet --manifest-path "$ROOT/Cargo.toml" -- "$@"
