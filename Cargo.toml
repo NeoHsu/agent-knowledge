@@ -1,8 +1,11 @@
 [package]
 name = "agent-knowledge"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/NeoHsu/agent-knowledge"
+homepage = "https://github.com/NeoHsu/agent-knowledge"
+rust-version = "1.85"
 
 [[bin]]
 name = "mem"
