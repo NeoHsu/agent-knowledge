@@ -1,6 +1,6 @@
 # Agent Knowledge
 
-Portable agent memory system. The repository owns profile files, a SQLite memory database, a rebuildable Tantivy index, deterministic session readers, and the `mem` CLI.
+Portable agent memory system. The repository owns the `mem` CLI, schema, skill instructions, deterministic session readers, and rebuildable Tantivy index logic. Runtime memory data lives in a local or private data checkout.
 
 ## Quick Start
 
@@ -14,7 +14,7 @@ scripts/build-release.sh
 bin/mem export --format markdown
 ```
 
-`memory.db` is the source of truth and should be committed. `index/` is ignored and can be rebuilt with `bin/mem reindex`.
+`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo or local `AGENT_KNOWLEDGE_HOME`. `index/` is ignored and can be rebuilt with `bin/mem reindex`.
 
 The multilingual tokenizer uses `lindera-tantivy` with embedded CC-CEDICT for Chinese tokenization. This pins Tantivy to 0.25 because `lindera-tantivy 2.0.0` is not yet compatible with Tantivy 0.26.
 

@@ -7,11 +7,25 @@ on:
 
 jobs:
   test:
+    name: test (${{ matrix.rust }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [stable, "1.85.0"]
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all -- --check
+      - if: matrix.rust == 'stable'
+        run: cargo fmt --all -- --check
+      - if: matrix.rust == 'stable'
+        run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked
-      - run: scripts/build-release.sh
+      - if: matrix.rust == 'stable'
+        run: scripts/build-release.sh
+      - if: matrix.rust == 'stable'
+        run: target/release/mem --help >/dev/null

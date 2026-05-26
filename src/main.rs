@@ -24,6 +24,7 @@ use tantivy::schema::{
 use tantivy::{doc, Index, IndexWriter, TantivyDocument, Term};
 
 const DEFAULT_LIMIT: usize = 20;
+const SCHEMA_VERSION: i64 = 1;
 
 #[derive(Parser)]
 #[command(name = "mem", version, about = "Portable agent memory CLI")]
@@ -106,6 +107,10 @@ struct QueryArgs {
     fuzzy: bool,
     #[arg(long)]
     semantic: bool,
+    #[arg(long)]
+    no_touch: bool,
+    #[arg(long)]
+    raw_query: bool,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -373,6 +378,7 @@ impl App {
             fs::read_to_string(&self.schema_path).context("read schema/memory-schema.sql")?;
         conn.execute_batch(&schema)
             .context("apply database schema")?;
+        migrate_schema(&conn)?;
         ensure_index(&self.index_path)?;
         Ok(())
     }
@@ -411,11 +417,59 @@ where
     let lock = File::create(lock_path)?;
     lock.lock_exclusive()?;
     let result = f();
-    lock.unlock()?;
+    FileExt::unlock(&lock)?;
     result
 }
 
+fn with_db_transaction<T, F>(conn: &Connection, f: F) -> Result<T>
+where
+    F: FnOnce(&Connection) -> Result<T>,
+{
+    conn.execute_batch("BEGIN IMMEDIATE TRANSACTION;")?;
+    let result = f(conn);
+    match result {
+        Ok(value) => {
+            if let Err(err) = conn.execute_batch("COMMIT;") {
+                let _ = conn.execute_batch("ROLLBACK;");
+                Err(err.into())
+            } else {
+                Ok(value)
+            }
+        }
+        Err(err) => {
+            let _ = conn.execute_batch("ROLLBACK;");
+            Err(err)
+        }
+    }
+}
+
+fn migrate_schema(conn: &Connection) -> Result<()> {
+    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    if version > SCHEMA_VERSION {
+        bail!("database schema version {version} is newer than supported version {SCHEMA_VERSION}");
+    }
+    if version == 0 {
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    }
+    Ok(())
+}
+
 fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
+    let result = save_memory(app, args)?;
+    let is_similar = result
+        .get("status")
+        .and_then(Value::as_str)
+        .map(|status| status == "similar_found")
+        .unwrap_or(false);
+    if is_similar {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+    } else {
+        println!("{}", result);
+    }
+    Ok(())
+}
+
+fn save_memory(app: &App, args: SaveArgs) -> Result<Value> {
     app.init()?;
     validate_tags(&args.tags)?;
 
@@ -424,16 +478,12 @@ fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
         let content = strip_secrets(&args.content)?;
         if args.force {
             if source_priority(&args.source) < source_priority(&existing.source) {
-                println!(
-                    "{}",
-                    json!({
-                        "status": "rejected",
-                        "reason": "lower_trust_source_cannot_overwrite",
-                        "existing": existing,
-                        "new_source": args.source
-                    })
-                );
-                return Ok(());
+                return Ok(json!({
+                    "status": "rejected",
+                    "reason": "lower_trust_source_cannot_overwrite",
+                    "existing": existing,
+                    "new_source": args.source
+                }));
             }
             let now = now();
             let description = args
@@ -443,77 +493,73 @@ fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
             let confidence = args
                 .confidence
                 .unwrap_or_else(|| confidence_for_source(&args.source).to_string());
-            conn.execute(
-                "UPDATE memories
-                 SET type = ?1, description = ?2, content = ?3, tags = ?4, scope = ?5,
-                     source = ?6, confidence = ?7, protected = ?8, updated_at = ?9,
-                     expires_at = ?10, version = version + 1
-                 WHERE id = ?11",
-                params![
-                    args.r#type,
-                    description,
-                    content,
-                    args.tags,
-                    args.scope,
-                    args.source,
-                    confidence,
-                    args.source == "manual",
-                    now,
-                    args.expires_at,
+            with_db_transaction(&conn, |conn| {
+                conn.execute(
+                    "UPDATE memories
+                     SET type = ?1, description = ?2, content = ?3, tags = ?4, scope = ?5,
+                         source = ?6, confidence = ?7, protected = ?8, updated_at = ?9,
+                         expires_at = ?10, version = version + 1
+                     WHERE id = ?11",
+                    params![
+                        args.r#type,
+                        description,
+                        content,
+                        args.tags,
+                        args.scope,
+                        args.source,
+                        confidence,
+                        args.source == "manual",
+                        now,
+                        args.expires_at,
+                        existing.id
+                    ],
+                )?;
+                log_change(
+                    conn,
+                    &existing.id,
+                    "update",
+                    existing.content.as_deref(),
+                    Some(&content),
+                    &args.source,
+                )?;
+                Ok(())
+            })?;
+            upsert_index(app, &conn, &existing.id).with_context(|| {
+                format!(
+                    "update index for {}; run `mem reindex` if needed",
                     existing.id
-                ],
-            )?;
-            log_change(
-                &conn,
-                &existing.id,
-                "update",
-                existing.content.as_deref(),
-                Some(&content),
-                &args.source,
-            )?;
-            upsert_index(app, &conn, &existing.id)?;
+                )
+            })?;
             let updated = memory_by_id(&conn, &existing.id)?.expect("updated memory exists");
-            println!(
-                "{}",
-                json!({
-                    "status": "updated",
-                    "match_type": "exact_name_force",
-                    "id": updated.id,
-                    "version": updated.version
-                })
-            );
-            return Ok(());
+            return Ok(json!({
+                "status": "updated",
+                "match_type": "exact_name_force",
+                "id": updated.id,
+                "version": updated.version
+            }));
         }
-        println!(
-            "{}",
-            json!({
-                "status": "duplicate_found",
-                "match_type": "exact_name",
-                "existing": existing,
-                "new_content": content
-            })
-        );
-        return Ok(());
+        return Ok(json!({
+            "status": "duplicate_found",
+            "match_type": "exact_name",
+            "existing": existing,
+            "new_content": content
+        }));
     }
 
     let content = strip_secrets(&args.content)?;
     if !args.force {
         let candidates = similar_candidates(app, &conn, &content, 5)?;
         if !candidates.is_empty() {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "status": "similar_found",
-                    "match_type": "bm25_lindera",
-                    "candidates": candidates,
-                    "new_content": content
-                }))?
-            );
-            return Ok(());
+            return Ok(json!({
+                "status": "similar_found",
+                "match_type": "bm25_lindera",
+                "candidates": candidates,
+                "new_content": content
+            }));
         }
     }
 
-    let id = slugify(&args.name);
+    let id = unique_memory_id(&conn, &slugify(&args.name))?;
     let now = now();
     let confidence = args
         .confidence
@@ -521,31 +567,34 @@ fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
     let protected = args.source == "manual";
     let description = args.description.or(args.why);
 
-    conn.execute(
-        "INSERT INTO memories
-        (id, type, name, description, content, tags, scope, source, confidence, protected, created_at, updated_at, expires_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12)",
-        params![
-            id,
-            args.r#type,
-            args.name,
-            description,
-            content,
-            args.tags,
-            args.scope,
-            args.source,
-            confidence,
-            protected,
-            now,
-            args.expires_at
-        ],
-    )
-    .context("insert memory")?;
-    log_change(&conn, &id, "save", None, Some(&content), &args.source)?;
-    upsert_index(app, &conn, &id)?;
+    with_db_transaction(&conn, |conn| {
+        conn.execute(
+            "INSERT INTO memories
+            (id, type, name, description, content, tags, scope, source, confidence, protected, created_at, updated_at, expires_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12)",
+            params![
+                id,
+                args.r#type,
+                args.name,
+                description,
+                content,
+                args.tags,
+                args.scope,
+                args.source,
+                confidence,
+                protected,
+                now,
+                args.expires_at
+            ],
+        )
+        .context("insert memory")?;
+        log_change(conn, &id, "save", None, Some(&content), &args.source)?;
+        Ok(())
+    })?;
+    upsert_index(app, &conn, &id)
+        .with_context(|| format!("update index for {id}; run `mem reindex` if needed"))?;
 
-    println!("{}", json!({"status": "saved", "id": id, "version": 1}));
-    Ok(())
+    Ok(json!({"status": "saved", "id": id, "version": 1}))
 }
 
 fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
@@ -569,7 +618,13 @@ fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
     };
 
     let mut ids = if let Some(query) = args.query.as_deref() {
-        search_index(app, query, args.fuzzy, args.limit.max(DEFAULT_LIMIT))?
+        search_index(
+            app,
+            query,
+            args.fuzzy,
+            args.raw_query,
+            args.limit.max(DEFAULT_LIMIT),
+        )?
     } else {
         Vec::new()
     };
@@ -596,7 +651,7 @@ fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
             }
         }
         if let Some(tag) = &args.tags {
-            if !memory.tags.contains(tag) {
+            if !memory_has_tag(&memory.tags, tag) {
                 return false;
             }
         }
@@ -614,16 +669,20 @@ fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
     match args.sort {
         SortMode::Relevance => {}
         SortMode::Time => memories.sort_by(|a, b| b.created_at.cmp(&a.created_at)),
-        SortMode::AccessCount => memories.sort_by(|a, b| b.access_count.cmp(&a.access_count)),
+        SortMode::AccessCount => {
+            memories.sort_by_key(|memory| std::cmp::Reverse(memory.access_count))
+        }
     }
     memories.truncate(args.limit);
 
-    let now = now();
-    for memory in &memories {
-        conn.execute(
-            "UPDATE memories SET access_count = access_count + 1, last_accessed_at = ?1 WHERE id = ?2",
-            params![now, memory.id],
-        )?;
+    if !args.no_touch {
+        let now = now();
+        for memory in &memories {
+            conn.execute(
+                "UPDATE memories SET access_count = access_count + 1, last_accessed_at = ?1 WHERE id = ?2",
+                params![now, memory.id],
+            )?;
+        }
     }
 
     println!("{}", serde_json::to_string_pretty(&memories)?);
@@ -665,21 +724,25 @@ fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
     };
     let now = now();
 
-    conn.execute(
-        "UPDATE memories
-        SET description = ?1, content = ?2, tags = ?3, updated_at = ?4, version = version + 1
-        WHERE id = ?5",
-        params![description, new_content, tags, now, old.id],
-    )?;
-    log_change(
-        &conn,
-        &old.id,
-        "update",
-        old.content.as_deref(),
-        new_content.as_deref(),
-        &args.source,
-    )?;
-    upsert_index(app, &conn, &old.id)?;
+    with_db_transaction(&conn, |conn| {
+        conn.execute(
+            "UPDATE memories
+            SET description = ?1, content = ?2, tags = ?3, updated_at = ?4, version = version + 1
+            WHERE id = ?5",
+            params![description, new_content, tags, now, old.id],
+        )?;
+        log_change(
+            conn,
+            &old.id,
+            "update",
+            old.content.as_deref(),
+            new_content.as_deref(),
+            &args.source,
+        )?;
+        Ok(())
+    })?;
+    upsert_index(app, &conn, &old.id)
+        .with_context(|| format!("update index for {}; run `mem reindex` if needed", old.id))?;
 
     let updated = memory_by_id(&conn, &old.id)?.expect("updated memory exists");
     println!(
@@ -713,44 +776,48 @@ fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
         );
         return Ok(());
     }
-    let new_id = slugify(&args.new_name);
+    let new_id = unique_memory_id(&conn, &slugify(&args.new_name))?;
     let now = now();
     let content = strip_secrets(&args.content)?;
     let confidence = confidence_for_source(&args.source);
     let protected = args.source == "manual";
 
-    conn.execute(
-        "INSERT INTO memories
-        (id, type, name, description, content, tags, scope, source, confidence, protected, created_at, updated_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11)",
-        params![
-            new_id,
-            old.r#type,
-            args.new_name,
-            args.description.or(old.description),
-            content,
-            old.tags,
-            old.scope,
-            args.source,
-            confidence,
-            protected,
-            now
-        ],
-    )?;
-    conn.execute(
-        "UPDATE memories SET valid_until = ?1, superseded_by = ?2, updated_at = ?1 WHERE id = ?3",
-        params![now, new_id, old.id],
-    )?;
-    log_change(
-        &conn,
-        &old.id,
-        "supersede",
-        old.content.as_deref(),
-        Some(&content),
-        &args.source,
-    )?;
-    upsert_index(app, &conn, &new_id)?;
-    reindex(app)?;
+    with_db_transaction(&conn, |conn| {
+        conn.execute(
+            "INSERT INTO memories
+            (id, type, name, description, content, tags, scope, source, confidence, protected, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11)",
+            params![
+                new_id,
+                old.r#type,
+                args.new_name,
+                args.description.or(old.description),
+                content,
+                old.tags,
+                old.scope,
+                args.source,
+                confidence,
+                protected,
+                now
+            ],
+        )?;
+        conn.execute(
+            "UPDATE memories SET valid_until = ?1, superseded_by = ?2, updated_at = ?1 WHERE id = ?3",
+            params![now, new_id, old.id],
+        )?;
+        log_change(
+            conn,
+            &old.id,
+            "supersede",
+            old.content.as_deref(),
+            Some(&content),
+            &args.source,
+        )?;
+        Ok(())
+    })?;
+    upsert_index(app, &conn, &new_id)
+        .with_context(|| format!("update index for {new_id}; run `mem reindex` if needed"))?;
+    reindex(app).context("rebuild index after supersede; run `mem reindex` if needed")?;
 
     println!(
         "{}",
@@ -779,35 +846,41 @@ fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
     }
 
     if args.hard {
-        conn.execute("DELETE FROM memories WHERE id = ?1", params![old.id])?;
-        log_change(
-            &conn,
-            &old.id,
-            "delete",
-            old.content.as_deref(),
-            None,
-            &args.source,
-        )?;
-        reindex(app)?;
+        with_db_transaction(&conn, |conn| {
+            conn.execute("DELETE FROM memories WHERE id = ?1", params![old.id])?;
+            log_change(
+                conn,
+                &old.id,
+                "delete",
+                old.content.as_deref(),
+                None,
+                &args.source,
+            )?;
+            Ok(())
+        })?;
+        reindex(app).context("rebuild index after delete; run `mem reindex` if needed")?;
         println!(
             "{}",
             json!({"status": "deleted", "mode": "hard", "id": old.id})
         );
     } else {
         let now = now();
-        conn.execute(
-            "UPDATE memories SET valid_until = ?1, updated_at = ?1 WHERE id = ?2",
-            params![now, old.id],
-        )?;
-        log_change(
-            &conn,
-            &old.id,
-            "delete",
-            old.content.as_deref(),
-            None,
-            &args.source,
-        )?;
-        reindex(app)?;
+        with_db_transaction(&conn, |conn| {
+            conn.execute(
+                "UPDATE memories SET valid_until = ?1, updated_at = ?1 WHERE id = ?2",
+                params![now, old.id],
+            )?;
+            log_change(
+                conn,
+                &old.id,
+                "delete",
+                old.content.as_deref(),
+                None,
+                &args.source,
+            )?;
+            Ok(())
+        })?;
+        reindex(app).context("rebuild index after delete; run `mem reindex` if needed")?;
         println!(
             "{}",
             json!({"status": "deleted", "mode": "soft", "id": old.id})
@@ -944,29 +1017,32 @@ fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Value> {
     if fix {
         let now = now();
         let expired_memories = active_expired_memories(conn)?;
-        for memory in &expired_memories {
-            conn.execute(
-                "UPDATE memories SET valid_until = ?1, updated_at = ?1 WHERE id = ?2",
-                params![now, memory.id],
+        with_db_transaction(conn, |conn| {
+            for memory in &expired_memories {
+                conn.execute(
+                    "UPDATE memories SET valid_until = ?1, updated_at = ?1 WHERE id = ?2",
+                    params![now, memory.id],
+                )?;
+                log_change(
+                    conn,
+                    &memory.id,
+                    "delete",
+                    memory.content.as_deref(),
+                    None,
+                    "audit",
+                )?;
+            }
+            fixed_expired = expired_memories.len();
+            fixed_broken_links = conn.execute(
+                "UPDATE memories
+                 SET superseded_by = NULL
+                 WHERE superseded_by IS NOT NULL
+                 AND superseded_by NOT IN (SELECT id FROM memories)",
+                [],
             )?;
-            log_change(
-                &conn,
-                &memory.id,
-                "delete",
-                memory.content.as_deref(),
-                None,
-                "audit",
-            )?;
-        }
-        fixed_expired = expired_memories.len();
-        fixed_broken_links = conn.execute(
-            "UPDATE memories
-             SET superseded_by = NULL
-             WHERE superseded_by IS NOT NULL
-             AND superseded_by NOT IN (SELECT id FROM memories)",
-            [],
-        )?;
-        reindex(app)?;
+            Ok(())
+        })?;
+        reindex(app).context("rebuild index after audit --fix; run `mem reindex` if needed")?;
     }
 
     Ok(json!({
@@ -985,11 +1061,25 @@ fn cmd_gc(app: &App, args: GcArgs) -> Result<()> {
     app.init()?;
     let conn = app.conn()?;
     let cutoff = (Utc::now() - Duration::days(args.days)).to_rfc3339();
-    let changed = conn.execute(
-        "DELETE FROM memories WHERE valid_until IS NOT NULL AND datetime(valid_until) < datetime(?1)",
-        params![cutoff],
-    )?;
-    reindex(app)?;
+    let changed = with_db_transaction(&conn, |conn| {
+        let gc_memories = gc_candidate_memories(conn, &cutoff)?;
+        for memory in &gc_memories {
+            log_change(
+                conn,
+                &memory.id,
+                "gc",
+                memory.content.as_deref(),
+                None,
+                "gc",
+            )?;
+        }
+        let changed = conn.execute(
+            "DELETE FROM memories WHERE valid_until IS NOT NULL AND datetime(valid_until) < datetime(?1)",
+            params![cutoff],
+        )?;
+        Ok(changed)
+    })?;
+    reindex(app).context("rebuild index after gc; run `mem reindex` if needed")?;
     println!("{}", json!({"status": "gc_complete", "deleted": changed}));
     Ok(())
 }
@@ -1028,54 +1118,91 @@ fn cmd_export(app: &App, args: ExportArgs) -> Result<()> {
     Ok(())
 }
 
+fn save_args_from_import_value(value: Value, source: &str) -> Result<SaveArgs> {
+    let name = value
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("import item missing name"))?;
+    let content = value
+        .get("content")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    Ok(SaveArgs {
+        r#type: value
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or("reference")
+            .to_string(),
+        name: name.to_string(),
+        description: value
+            .get("description")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        content: content.to_string(),
+        tags: value
+            .get("tags")
+            .map(Value::to_string)
+            .unwrap_or_else(|| "[]".to_string()),
+        scope: value
+            .get("scope")
+            .and_then(Value::as_str)
+            .unwrap_or("global")
+            .to_string(),
+        source: source.to_string(),
+        confidence: None,
+        expires_at: value
+            .get("expires_at")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        why: None,
+        force: false,
+    })
+}
+
+fn result_status(result: &Value) -> String {
+    result
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+fn increment_count(counts: &mut serde_json::Map<String, Value>, status: &str) {
+    let current = counts.get(status).and_then(Value::as_u64).unwrap_or(0);
+    counts.insert(status.to_string(), json!(current + 1));
+}
+
 fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
     app.init()?;
     let text =
         fs::read_to_string(&args.file).with_context(|| format!("read {}", args.file.display()))?;
+    let mut results = Vec::new();
+    let mut counts = serde_json::Map::new();
+
     if args.file.extension().and_then(|s| s.to_str()) == Some("json") {
         let values: Vec<Value> = serde_json::from_str(&text).context("parse json import")?;
-        for value in values {
-            let name = value
-                .get("name")
-                .and_then(Value::as_str)
-                .ok_or_else(|| anyhow!("import item missing name"))?;
-            let content = value
-                .get("content")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            cmd_save(
-                app,
-                SaveArgs {
-                    r#type: value
-                        .get("type")
-                        .and_then(Value::as_str)
-                        .unwrap_or("reference")
-                        .to_string(),
-                    name: name.to_string(),
-                    description: value
-                        .get("description")
-                        .and_then(Value::as_str)
-                        .map(str::to_string),
-                    content: content.to_string(),
-                    tags: value
-                        .get("tags")
-                        .map(Value::to_string)
-                        .unwrap_or_else(|| "[]".to_string()),
-                    scope: value
-                        .get("scope")
-                        .and_then(Value::as_str)
-                        .unwrap_or("global")
-                        .to_string(),
-                    source: args.source.clone(),
-                    confidence: None,
-                    expires_at: value
-                        .get("expires_at")
-                        .and_then(Value::as_str)
-                        .map(str::to_string),
-                    why: None,
-                    force: false,
-                },
-            )?;
+        for (index, value) in values.into_iter().enumerate() {
+            let import_result = save_args_from_import_value(value, &args.source)
+                .and_then(|save_args| save_memory(app, save_args));
+            match import_result {
+                Ok(result) => {
+                    let status = result_status(&result);
+                    increment_count(&mut counts, &status);
+                    results.push(json!({
+                        "index": index,
+                        "status": status,
+                        "result": result
+                    }));
+                }
+                Err(err) => {
+                    increment_count(&mut counts, "failed");
+                    results.push(json!({
+                        "index": index,
+                        "status": "failed",
+                        "error": err.to_string()
+                    }));
+                }
+            }
         }
     } else {
         let name = args
@@ -1084,7 +1211,7 @@ fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
             .and_then(|s| s.to_str())
             .ok_or_else(|| anyhow!("cannot infer name from file"))?
             .to_string();
-        cmd_save(
+        let result = save_memory(
             app,
             SaveArgs {
                 r#type: args.r#type.unwrap_or_else(|| "reference".to_string()),
@@ -1100,7 +1227,23 @@ fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
                 force: false,
             },
         )?;
+        let status = result_status(&result);
+        increment_count(&mut counts, &status);
+        results.push(json!({
+            "index": 0,
+            "status": status,
+            "result": result
+        }));
     }
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({
+            "status": "import_complete",
+            "total": results.len(),
+            "counts": Value::Object(counts),
+            "results": results
+        }))?
+    );
     Ok(())
 }
 
@@ -1120,62 +1263,92 @@ fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
     let mut trusted_updates = 0;
     let mut rejected_lower_trust = 0;
     let mut regenerated_ids = 0;
+    let mut changed_index_ids = Vec::new();
 
-    for mut memory in incoming {
-        if let Some(existing) = memory_by_name(&conn, &memory.name)? {
-            if normalized_text(existing.content.as_deref().unwrap_or_default())
-                == normalized_text(memory.content.as_deref().unwrap_or_default())
-            {
-                identical += 1;
+    with_db_transaction(&conn, |conn| {
+        for mut memory in incoming {
+            if let Some(content) = memory.content.take() {
+                memory.content = Some(strip_secrets(&content)?);
+            }
+
+            if let Some(existing) = memory_by_name(conn, &memory.name)? {
+                if normalized_text(existing.content.as_deref().unwrap_or_default())
+                    == normalized_text(memory.content.as_deref().unwrap_or_default())
+                {
+                    identical += 1;
+                    continue;
+                }
+
+                let incoming_priority = source_priority(&memory.source);
+                let existing_priority = source_priority(&existing.source);
+                if incoming_priority < existing_priority {
+                    rejected_lower_trust += 1;
+                    continue;
+                }
+                if args.prefer_trusted && incoming_priority > existing_priority {
+                    update_memory_from_merge(conn, &existing, &memory)?;
+                    changed_index_ids.push(existing.id.clone());
+                    trusted_updates += 1;
+                    continue;
+                }
+
+                let context = serde_json::to_string(&json!({
+                    "kind": "merge_conflict",
+                    "source_db": args.db.display().to_string(),
+                    "local": {
+                        "id": &existing.id,
+                        "name": &existing.name,
+                        "source": &existing.source,
+                        "priority": existing_priority,
+                        "content": &existing.content
+                    },
+                    "incoming": {
+                        "id": &memory.id,
+                        "name": &memory.name,
+                        "type": &memory.r#type,
+                        "description": &memory.description,
+                        "content": &memory.content,
+                        "tags": &memory.tags,
+                        "scope": &memory.scope,
+                        "source": &memory.source,
+                        "confidence": &memory.confidence,
+                        "priority": incoming_priority,
+                        "version": memory.version
+                    }
+                }))?;
+                add_ambiguity_record(
+                    conn,
+                    &format!("merge:{}", memory.name),
+                    &[existing.id.clone(), memory.id.clone()],
+                    Some(&context),
+                )?;
+                conflicts += 1;
                 continue;
             }
 
-            let incoming_priority = source_priority(&memory.source);
-            let existing_priority = source_priority(&existing.source);
-            if incoming_priority < existing_priority {
-                rejected_lower_trust += 1;
-                continue;
+            let original_id = memory.id.clone();
+            memory.id = unique_memory_id(conn, &memory.id)?;
+            if memory.id != original_id {
+                regenerated_ids += 1;
             }
-            if args.prefer_trusted && incoming_priority > existing_priority {
-                update_memory_from_merge(&conn, app, &existing, &memory)?;
-                trusted_updates += 1;
-                continue;
-            }
-
-            let context = format!(
-                "merge conflict from {}: local source={} priority={}, incoming source={} priority={}",
-                args.db.display(),
-                existing.source,
-                existing_priority,
-                memory.source,
-                incoming_priority
-            );
-            add_ambiguity_record(
-                &conn,
-                &format!("merge:{}", memory.name),
-                &[existing.id.clone(), memory.id.clone()],
-                Some(&context),
+            insert_memory_record(conn, &memory)?;
+            log_change(
+                conn,
+                &memory.id,
+                "merge",
+                None,
+                memory.content.as_deref(),
+                "merge",
             )?;
-            conflicts += 1;
-            continue;
+            changed_index_ids.push(memory.id.clone());
+            imported += 1;
         }
+        Ok(())
+    })?;
 
-        let original_id = memory.id.clone();
-        memory.id = unique_memory_id(&conn, &memory.id)?;
-        if memory.id != original_id {
-            regenerated_ids += 1;
-        }
-        insert_memory_record(&conn, &memory)?;
-        log_change(
-            &conn,
-            &memory.id,
-            "merge",
-            None,
-            memory.content.as_deref(),
-            "merge",
-        )?;
-        upsert_index(app, &conn, &memory.id)?;
-        imported += 1;
+    for id in &changed_index_ids {
+        upsert_index(app, &conn, id)
+            .with_context(|| format!("update index for {id}; run `mem reindex` if needed"))?;
     }
 
     println!(
@@ -1200,7 +1373,7 @@ fn cmd_retro(app: &App, command: RetroCommand) -> Result<()> {
         RetroCommand::Daily(args) => ("daily", args.limit),
         RetroCommand::Weekly(args) => ("weekly", args.limit),
     };
-    let limit = limit.max(1).min(500);
+    let limit = limit.clamp(1, 500);
     let recent_history = query_json_rows(
         &conn,
         &format!(
@@ -1210,13 +1383,7 @@ fn cmd_retro(app: &App, command: RetroCommand) -> Result<()> {
              LIMIT {limit}"
         ),
     )?;
-    let pending_ambiguities = query_json_rows(
-        &conn,
-        "SELECT id, query, memory_ids, context, resolution, created_at, resolved_at
-         FROM ambiguities
-         WHERE resolution = 'pending'
-         ORDER BY created_at DESC",
-    )?;
+    let pending_ambiguities = ambiguity_rows(&conn, true)?;
     let active_memories = query_json_rows(
         &conn,
         &format!(
@@ -1274,12 +1441,7 @@ fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> {
             );
         }
         AmbiguityCommand::List(args) => {
-            let sql = if args.pending {
-                "SELECT id, query, memory_ids, context, resolution, created_at, resolved_at FROM ambiguities WHERE resolution = 'pending' ORDER BY created_at DESC"
-            } else {
-                "SELECT id, query, memory_ids, context, resolution, created_at, resolved_at FROM ambiguities ORDER BY created_at DESC"
-            };
-            let rows = query_json_rows(&conn, sql)?;
+            let rows = ambiguity_rows(&conn, args.pending)?;
             println!("{}", serde_json::to_string_pretty(&rows)?);
         }
         AmbiguityCommand::Resolve(args) => {
@@ -1409,10 +1571,10 @@ fn slugify(name: &str) -> String {
     for ch in name.chars() {
         if ch.is_ascii_alphanumeric() {
             slug.push(ch.to_ascii_lowercase());
-        } else if ch == '_' || ch == '-' || ch.is_whitespace() || ch == '/' {
-            if !slug.ends_with('_') {
-                slug.push('_');
-            }
+        } else if (ch == '_' || ch == '-' || ch.is_whitespace() || ch == '/')
+            && !slug.ends_with('_')
+        {
+            slug.push('_');
         }
     }
     let slug = slug.trim_matches('_').to_string();
@@ -1443,6 +1605,12 @@ fn parse_string_array(raw: &str) -> Result<Vec<String>> {
                 .ok_or_else(|| anyhow!("array items must be strings"))
         })
         .collect()
+}
+
+fn memory_has_tag(tags: &str, wanted: &str) -> bool {
+    parse_string_array(tags)
+        .map(|tags| tags.iter().any(|tag| tag == wanted))
+        .unwrap_or(false)
 }
 
 fn merge_tags(existing: &str, add: &str) -> Result<String> {
@@ -1512,6 +1680,17 @@ fn active_expired_memories(conn: &Connection) -> Result<Vec<Memory>> {
         .map_err(Into::into)
 }
 
+fn gc_candidate_memories(conn: &Connection, cutoff: &str) -> Result<Vec<Memory>> {
+    let mut stmt = conn.prepare(
+        "SELECT * FROM memories
+         WHERE valid_until IS NOT NULL
+         AND datetime(valid_until) < datetime(?1)",
+    )?;
+    let rows = stmt.query_map(params![cutoff], row_to_memory)?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
+}
+
 fn row_to_memory(row: &rusqlite::Row<'_>) -> rusqlite::Result<Memory> {
     Ok(Memory {
         id: row.get("id")?,
@@ -1565,12 +1744,7 @@ fn insert_memory_record(conn: &Connection, memory: &Memory) -> Result<()> {
     Ok(())
 }
 
-fn update_memory_from_merge(
-    conn: &Connection,
-    app: &App,
-    existing: &Memory,
-    incoming: &Memory,
-) -> Result<()> {
+fn update_memory_from_merge(conn: &Connection, existing: &Memory, incoming: &Memory) -> Result<()> {
     let now = now();
     conn.execute(
         "UPDATE memories
@@ -1603,7 +1777,6 @@ fn update_memory_from_merge(
         incoming.content.as_deref(),
         "merge",
     )?;
-    upsert_index(app, conn, &existing.id)?;
     Ok(())
 }
 
@@ -1662,7 +1835,7 @@ fn similar_candidates(
     content: &str,
     limit: usize,
 ) -> Result<Vec<Value>> {
-    let ids = search_index(app, content, false, 25)?;
+    let ids = search_index(app, content, false, false, 25)?;
     let mut candidates = Vec::new();
     for id in ids {
         let Some(memory) = memory_by_id(conn, &id)? else {
@@ -1712,6 +1885,21 @@ fn normalized_text(input: &str) -> String {
         .collect()
 }
 
+fn literal_query_text(input: &str) -> String {
+    let mut output = String::new();
+    let mut last_was_space = false;
+    for ch in input.chars() {
+        if ch.is_alphanumeric() || ch == '_' {
+            output.push(ch);
+            last_was_space = false;
+        } else if !last_was_space {
+            output.push(' ');
+            last_was_space = true;
+        }
+    }
+    output.trim().to_string()
+}
+
 fn shingles(input: &str) -> HashSet<String> {
     let chars: Vec<char> = input.chars().collect();
     if chars.is_empty() {
@@ -1755,6 +1943,38 @@ fn query_json_rows(conn: &Connection, sql: &str) -> Result<Vec<Value>> {
     })?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
         .map_err(Into::into)
+}
+
+fn ambiguity_rows(conn: &Connection, pending_only: bool) -> Result<Vec<Value>> {
+    let sql = if pending_only {
+        "SELECT id, query, memory_ids, context, resolution, created_at, resolved_at
+         FROM ambiguities
+         WHERE resolution = 'pending'
+         ORDER BY created_at DESC"
+    } else {
+        "SELECT id, query, memory_ids, context, resolution, created_at, resolved_at
+         FROM ambiguities
+         ORDER BY created_at DESC"
+    };
+    let mut rows = query_json_rows(conn, sql)?;
+    for row in &mut rows {
+        parse_json_string_field(row, "memory_ids");
+        parse_json_string_field(row, "context");
+        parse_json_string_field(row, "resolution");
+    }
+    Ok(rows)
+}
+
+fn parse_json_string_field(row: &mut Value, field: &str) {
+    let Some(map) = row.as_object_mut() else {
+        return;
+    };
+    let Some(raw) = map.get(field).and_then(Value::as_str) else {
+        return;
+    };
+    if let Ok(parsed) = serde_json::from_str::<Value>(raw) {
+        map.insert(field.to_string(), parsed);
+    }
 }
 
 fn ambiguity_by_id(conn: &Connection, id: i64) -> Result<Option<Value>> {
@@ -1903,12 +2123,23 @@ fn fields_from_schema(schema: Schema) -> Result<IndexFields> {
     })
 }
 
-fn search_index(app: &App, query: &str, fuzzy: bool, limit: usize) -> Result<Vec<String>> {
+fn search_index(
+    app: &App,
+    query: &str,
+    fuzzy: bool,
+    raw_query: bool,
+    limit: usize,
+) -> Result<Vec<String>> {
     let index = ensure_index(&app.index_path)?;
     let fields = fields_from_schema(index.schema())?;
     let reader = index.reader()?;
     let searcher = reader.searcher();
-    let boxed_query: Box<dyn tantivy::query::Query> = if query.trim().is_empty() {
+    let query_text = if raw_query {
+        query.trim().to_string()
+    } else {
+        literal_query_text(query)
+    };
+    let boxed_query: Box<dyn tantivy::query::Query> = if query_text.is_empty() {
         Box::new(AllQuery)
     } else if fuzzy {
         let terms = [fields.name, fields.description, fields.content, fields.tags]
@@ -1917,7 +2148,7 @@ fn search_index(app: &App, query: &str, fuzzy: bool, limit: usize) -> Result<Vec
                 (
                     Occur::Should,
                     Box::new(FuzzyTermQuery::new(
-                        Term::from_field_text(field, query),
+                        Term::from_field_text(field, &query_text),
                         1,
                         true,
                     )) as Box<dyn tantivy::query::Query>,
@@ -1930,7 +2161,7 @@ fn search_index(app: &App, query: &str, fuzzy: bool, limit: usize) -> Result<Vec
             &index,
             vec![fields.name, fields.description, fields.content, fields.tags],
         );
-        Box::new(parser.parse_query(query)?)
+        Box::new(parser.parse_query(&query_text)?)
     };
     let docs = searcher.search(&boxed_query, &TopDocs::with_limit(limit))?;
     let mut ids = Vec::new();

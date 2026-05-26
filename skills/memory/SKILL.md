@@ -1,6 +1,6 @@
 # Memory Skill
 
-Use this skill when the user asks to save, recall, update, clean up, review, or migrate durable knowledge. The knowledge store is this repository; `memory.db` is the source of truth and `index/` is rebuildable.
+Use this skill when the user asks to save, recall, update, clean up, review, or migrate durable knowledge. The active knowledge store is the current `AGENT_KNOWLEDGE_HOME` or repository root; `memory.db` is the runtime source of truth and `index/` is rebuildable.
 
 ## When to Use
 

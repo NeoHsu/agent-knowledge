@@ -23,7 +23,7 @@
 │   └── memory/SKILL.md           唯一的 memory skill
 │                                 (CLI 操作 + 復盤 workflow)
 │
-├── memory.db                     SQLite（資料）
+├── memory.db                     SQLite（資料；runtime/local，不進 CLI 專案）
 │
 ├── index/                        Tantivy 搜尋索引（.gitignore，可從 db 重建）
 │
@@ -146,7 +146,7 @@ SQLite 儲存資料，Tantivy 負責搜尋索引。兩者分離：
 
 memory.db (SQLite)          index/ (Tantivy)
 ├─ source of truth          ├─ 可隨時從 db 重建
-├─ git 追蹤                 ├─ .gitignore（不追蹤）
+├─ local/private data       ├─ .gitignore（不追蹤）
 └─ 結構化篩選               └─ 全文搜尋 + BM25 排序
    (type, scope, tags)         (中英文分詞, fuzzy)
 ```
@@ -487,7 +487,7 @@ Level 2: references/xxx.md         (按需)         — 執行時
      └───────────┬───────────┴────────────────────┘
                  │
                  ▼
-         memory.db / skills/ / profile/
+         memory.db（local/private data）
          （唯一的知識終點，沒有中間產物）
                  │
                  ▼

@@ -1,4 +1,6 @@
 /target/
 /index/
+/memory.db
+/memory.db-*
 /.mem.lock
 *.tmp
