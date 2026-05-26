@@ -13,19 +13,16 @@
 
 ## 核心架構
 
+本專案分成兩層：
+
+- `agent-knowledge` repo：CLI、schema、skills、readers、docs、CI/release。這層可以發布，不追蹤私人 `memory.db`。
+- runtime/private knowledge store：實際的 `memory.db`、`index/`、可選 profile/config。這層由 `AGENT_KNOWLEDGE_HOME` 或當前 repo root 決定。
+
 ```
-~/.agent-knowledge/               (private GitHub repo)
-├── profile/
-│   ├── identity.yaml             你是誰
-│   └── preferences.yaml          你怎麼工作
-│
+agent-knowledge/                  (CLI/project repo)
 ├── skills/
 │   └── memory/SKILL.md           唯一的 memory skill
 │                                 (CLI 操作 + 復盤 workflow)
-│
-├── memory.db                     SQLite（資料；runtime/local，不進 CLI 專案）
-│
-├── index/                        Tantivy 搜尋索引（.gitignore，可從 db 重建）
 │
 ├── readers/                      session log 讀取器
 │   ├── claude-code.sh
@@ -38,6 +35,14 @@
 ├── config.yaml                   環境設定
 └── schema/
     └── memory-schema.sql         DB schema
+```
+
+```
+runtime/private store             (local 或 private data repo)
+├── memory.db                     SQLite source of truth
+├── index/                        Tantivy 搜尋索引（可從 db 重建）
+├── profile/                      可選：身份/偏好
+└── config.yaml                   可選：環境設定
 ```
 
 ---
@@ -301,17 +306,18 @@ mem export --format json                 # 給腳本/agent 用
 ────
 mem import <file.json>                   # 批次匯入記憶（JSON 格式）
 mem import <file.md> --type reference    # 從 markdown 匯入單筆
-mem import --from-legacy .memory/        # 從舊 .memory/ 系統遷移
+                                         # 輸出單一 import_complete summary JSON
 
 合併（跨平台衝突處理）
 ────
 mem merge <theirs.db>                    # 合併另一個平台的 memory.db
                                          # 流程：
                                          #   1. 讀取 theirs.db 所有記憶
-                                         #   2. 逐筆和本地比對（用 Tantivy BM25）
-                                         #   3. 相同 → 跳過
-                                         #   4. 新的 → 匯入
-                                         #   5. 衝突 → 記錄到 ambiguities，問呼叫者
+                                         #   2. strip incoming secrets
+                                         #   3. 逐筆和本地比對
+                                         #   4. 相同 → 跳過
+                                         #   5. 新的 → 匯入
+                                         #   6. 衝突 → 記錄到 ambiguities，含 incoming snapshot
 
 隱私
 ────
@@ -491,7 +497,7 @@ Level 2: references/xxx.md         (按需)         — 執行時
          （唯一的知識終點，沒有中間產物）
                  │
                  ▼
-            git commit + push
+            local/private data repo 可選 git commit + push
 ```
 
 #### 日復盤流程
@@ -536,7 +542,7 @@ Agent 載入 SKILL.md 復盤段落
      建議確認: user_pnpm 是否還有效？」
     │
     ▼
-(5) git commit + push
+(5) 若 runtime store 是 private data repo，git commit + push
 ```
 
 #### 週復盤流程
@@ -587,7 +593,7 @@ Agent 載入 SKILL.md 復盤段落
 (3) 執行修改 + 回報
     │
     ▼
-(4) git commit + push
+(4) 若 runtime store 是 private data repo，git commit + push
 ```
 
 ---
@@ -642,14 +648,15 @@ Cursor:       .cursorrules 加一段
 Hermes:       config 指向 skills/memory/SKILL.md
 ```
 
-知識庫同步靠 git：
+知識庫同步靠 runtime/private data store。若你選擇用 private Git repo 保存 runtime store，才需要 git：
 
 ```
 # 新環境
-git clone git@github.com:you/agent-knowledge.git ~/.agent-knowledge
+git clone git@github.com:you/private-memory-store.git ~/.agent-knowledge-data
+export AGENT_KNOWLEDGE_HOME=~/.agent-knowledge-data
 
 # 日常
-cd ~/.agent-knowledge && git pull  # 取得其他平台存的記憶
+cd ~/.agent-knowledge-data && git pull  # 取得其他平台存的記憶
 # ... 工作 ...
 git add -A && git commit && git push  # 推送新記憶
 ```
@@ -706,7 +713,7 @@ Agent 帶著正確的 context 開始工作
 ║  Agent 分析 → mem save/update/delete → memory.db          ║
 ║       │                                                   ║
 ║       ▼                                                   ║
-║  git commit + push                                        ║
+║  private data repo 可選 git commit + push                 ║
 ║                                                           ║
 ╠═══════════════════════════════════════════════════════════╣
 ║                                                           ║
@@ -722,13 +729,13 @@ Agent 帶著正確的 context 開始工作
 ║    • 信心度校準 / 合併 / 清理 / profile 更新                ║
 ║       │                                                   ║
 ║       ▼                                                   ║
-║  memory.db + skills/ + profile/ 更新                       ║
+║  memory.db + 可選 profile/skill 建議                       ║
 ║       │                                                   ║
 ║       ▼                                                   ║
-║  git commit + push                                        ║
+║  private data repo 可選 git commit + push                 ║
 ║       │                                                   ║
 ║       ▼                                                   ║
-║  所有平台下次 git pull 時同步                               ║
+║  所有平台下次同步 runtime store 時取得更新                  ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
 ```
@@ -770,7 +777,7 @@ Agent 帶著正確的 context 開始工作
 
 14. 寫第一個 reader（claude-code.sh）
 15. ambiguities 表 + `mem ambiguity` 子指令
-16. `mem import`（JSON/markdown/legacy .memory/ 遷移）
+16. `mem import`（JSON 批次、markdown/文字單筆）
 17. references/daily-retro.md + weekly-retro.md
 18. 測試日復盤流程（含矛盾偵測 + 歧義處理）
 19. 測試週復盤流程（含信心度校準 + 矛盾總清 + 健康檢查）

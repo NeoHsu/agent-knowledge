@@ -27,12 +27,16 @@ bin/mem query --tags "domain:security"
 bin/mem query --sort time
 bin/mem query --sort access-count
 bin/mem query "deplpy" --fuzzy
+bin/mem query "name:pr_small" --raw-query
+bin/mem query "security review" --no-touch
 bin/mem query "deploy" --semantic
 ```
 
-Query updates `access_count` and `last_accessed_at`. Superseded memories are hidden unless `--include-superseded` is used.
+By default, query treats punctuation as literal text so searches like `project:owner/repo` do not require Tantivy syntax escaping. Use `--raw-query` when you intentionally want Tantivy query syntax such as `name:pr_small`.
 
-`--fuzzy` searches across `name`, `description`, `content`, and `tags`. `--semantic` is a reserved interface and returns `unsupported` until an embedding backend is configured.
+Query updates `access_count` and `last_accessed_at`; use `--no-touch` for read-only context loading. Superseded memories are hidden unless `--include-superseded` is used.
+
+`--tags` matches exact JSON-array membership, not substrings. `--fuzzy` searches across `name`, `description`, `content`, and `tags`. `--semantic` is a reserved interface and returns `unsupported` until an embedding backend is configured.
 
 ## Update and Lifecycle
 
@@ -58,6 +62,7 @@ bin/mem ambiguity resolve 1 --keep pr_small --soft-delete-others
 ```
 
 `resolve --keep ... --soft-delete-others` soft-deletes non-protected alternatives referenced by the ambiguity and records skipped protected memories.
+`ambiguity list` parses JSON fields such as `memory_ids`, structured merge-conflict `context`, and JSON `resolution` into JSON objects/arrays in the output.
 
 ## History and Maintenance
 
@@ -84,6 +89,23 @@ bin/mem import memories.json
 bin/mem import note.md --type reference
 ```
 
+`import` emits one summary JSON object:
+
+```json
+{
+  "status": "import_complete",
+  "total": 3,
+  "counts": {
+    "saved": 1,
+    "duplicate_found": 1,
+    "failed": 1
+  },
+  "results": []
+}
+```
+
+JSON imports process an array of memory-like objects. Markdown or other files import as one `reference` memory unless `--type` is supplied.
+
 ## Merge
 
 ```bash
@@ -91,7 +113,7 @@ bin/mem merge /path/to/theirs.db
 bin/mem merge /path/to/theirs.db --prefer-trusted
 ```
 
-Merge imports memories with new names, skips identical same-name memories, and records same-name content conflicts in `ambiguities` instead of overwriting automatically.
+Merge strips common secrets from incoming content, imports memories with new names, skips identical same-name memories, and records same-name content conflicts in `ambiguities` instead of overwriting automatically. Merge conflict ambiguity records include a structured incoming snapshot in `context`.
 Lower-trust incoming same-name memories are rejected. `--prefer-trusted` lets a higher-trust incoming memory update a lower-trust local memory; equal-trust differences still become ambiguities.
 
 ## Release Build
