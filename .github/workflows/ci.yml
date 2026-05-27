@@ -23,9 +23,9 @@ jobs:
       - if: matrix.rust == 'stable'
         run: cargo fmt --all -- --check
       - if: matrix.rust == 'stable'
-        run: cargo clippy --locked --all-targets -- -D warnings
-      - run: cargo test --locked
+        run: cargo clippy --workspace --locked --all-targets -- -D warnings
+      - run: cargo test --workspace --locked
       - if: matrix.rust == 'stable'
         run: scripts/build-release.sh
       - if: matrix.rust == 'stable'
-        run: target/release/mem --help >/dev/null
+        run: scripts/smoke-release.sh

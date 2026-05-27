@@ -1,31 +1,21 @@
-use std::collections::HashSet;
-use std::env;
-use std::fs::{self, File};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use fs2::FileExt;
-use lindera::dictionary::load_dictionary;
-use lindera::mode::Mode;
-use lindera::segmenter::Segmenter;
-use lindera_tantivy::tokenizer::LinderaTokenizer;
-use regex::Regex;
-use rusqlite::{params, Connection, OptionalExtension};
-use serde::{Deserialize, Serialize};
+use rusqlite::{params, Connection};
+use serde::Serialize;
 use serde_json::{json, Value};
-use serde_yaml::Value as YamlValue;
-use tantivy::collector::TopDocs;
-use tantivy::query::{AllQuery, BooleanQuery, FuzzyTermQuery, Occur, QueryParser};
-use tantivy::schema::{
-    Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, Value as TantivyValue,
-    STORED, STRING,
-};
-use tantivy::{doc, Index, IndexWriter, TantivyDocument, Term};
+
+use mem_core::app::{with_lock, App};
+use mem_core::db::{self, *};
+use mem_core::index_state;
+use mem_core::search_index;
+use mem_core::util::*;
+use mem_core::workflow;
 
 const DEFAULT_LIMIT: usize = 20;
-const SCHEMA_VERSION: i64 = 2;
 
 #[derive(Parser)]
 #[command(name = "mem", version, about = "Portable agent memory CLI")]
@@ -321,47 +311,6 @@ struct AmbiguityResolveArgs {
     soft_delete_others: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct Memory {
-    id: String,
-    r#type: String,
-    name: String,
-    description: Option<String>,
-    content: Option<String>,
-    tags: String,
-    scope: String,
-    source: String,
-    confidence: String,
-    protected: bool,
-    created_at: String,
-    updated_at: String,
-    expires_at: Option<String>,
-    valid_until: Option<String>,
-    superseded_by: Option<String>,
-    version: i64,
-    access_count: i64,
-    last_accessed_at: Option<String>,
-}
-
-#[derive(Debug)]
-struct App {
-    root: PathBuf,
-    db_path: PathBuf,
-    index_path: PathBuf,
-    schema_path: PathBuf,
-}
-
-#[derive(Clone)]
-struct IndexFields {
-    id: Field,
-    name: Field,
-    description: Field,
-    content: Field,
-    tags: Field,
-    scope: Field,
-    r#type: Field,
-}
-
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let app = App::discover()?;
@@ -369,17 +318,17 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Init => {
             app.init()?;
-            println!("{}", json!({"status": "initialized", "root": app.root}));
+            print_json(&json!({"status": "initialized", "root": app.root}))?;
         }
         Command::Save(args) => with_lock(&app, || cmd_save(&app, args))?,
-        Command::Query(args) => cmd_query(&app, args)?,
+        Command::Query(args) => with_lock(&app, || cmd_query(&app, args))?,
         Command::Update(args) => with_lock(&app, || cmd_update(&app, args))?,
         Command::Supersede(args) => with_lock(&app, || cmd_supersede(&app, args))?,
         Command::Delete(args) => with_lock(&app, || cmd_delete(&app, args))?,
         Command::Reindex => with_lock(&app, || {
             app.init()?;
-            reindex(&app)?;
-            println!("{}", json!({"status": "reindexed"}));
+            reindex_or_mark_stale(&app, "rebuild index")?;
+            print_json(&json!({"status": "reindexed"}))?;
             Ok(())
         })?,
         Command::Context(args) => cmd_context(args)?,
@@ -396,84 +345,6 @@ fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-impl App {
-    fn discover() -> Result<Self> {
-        let exe_dir = env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(Path::to_path_buf));
-        let cwd = env::current_dir().context("read current directory")?;
-        let root = if cwd.join("schema/memory-schema.sql").exists() {
-            cwd
-        } else if let Some(dir) = exe_dir {
-            find_root(&dir).unwrap_or_else(|| {
-                env::var("AGENT_KNOWLEDGE_HOME")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| home_dir().join(".agent-knowledge"))
-            })
-        } else {
-            env::var("AGENT_KNOWLEDGE_HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|_| home_dir().join(".agent-knowledge"))
-        };
-
-        Ok(Self {
-            db_path: root.join("memory.db"),
-            index_path: root.join("index"),
-            schema_path: root.join("schema/memory-schema.sql"),
-            root,
-        })
-    }
-
-    fn init(&self) -> Result<()> {
-        fs::create_dir_all(&self.index_path).context("create index directory")?;
-        let conn = self.conn()?;
-        let schema =
-            fs::read_to_string(&self.schema_path).context("read schema/memory-schema.sql")?;
-        conn.execute_batch(&schema)
-            .context("apply database schema")?;
-        migrate_schema(&conn)?;
-        ensure_index(&self.index_path)?;
-        Ok(())
-    }
-
-    fn conn(&self) -> Result<Connection> {
-        let conn = Connection::open(&self.db_path)
-            .with_context(|| format!("open {}", self.db_path.display()))?;
-        conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;")?;
-        Ok(conn)
-    }
-}
-
-fn find_root(start: &Path) -> Option<PathBuf> {
-    let mut current = Some(start);
-    while let Some(path) = current {
-        if path.join("schema/memory-schema.sql").exists() {
-            return Some(path.to_path_buf());
-        }
-        current = path.parent();
-    }
-    None
-}
-
-fn home_dir() -> PathBuf {
-    env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
-}
-
-fn with_lock<F>(app: &App, f: F) -> Result<()>
-where
-    F: FnOnce() -> Result<()>,
-{
-    fs::create_dir_all(&app.root)?;
-    let lock_path = app.root.join(".mem.lock");
-    let lock = File::create(lock_path)?;
-    lock.lock_exclusive()?;
-    let result = f();
-    FileExt::unlock(&lock)?;
-    result
 }
 
 fn with_db_transaction<T, F>(conn: &Connection, f: F) -> Result<T>
@@ -498,60 +369,13 @@ where
     }
 }
 
-fn migrate_schema(conn: &Connection) -> Result<()> {
-    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    if version > SCHEMA_VERSION {
-        bail!("database schema version {version} is newer than supported version {SCHEMA_VERSION}");
-    }
-    if version < 2 {
-        migrate_memories_type_check_v2(conn)?;
-        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-        return Ok(());
-    }
-    if version == 0 {
-        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-    }
+fn print_json<T: Serialize + ?Sized>(value: &T) -> Result<()> {
+    println!("{}", serde_json::to_string(value)?);
     Ok(())
 }
 
-fn migrate_memories_type_check_v2(conn: &Connection) -> Result<()> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS memories_v2 (
-            id TEXT PRIMARY KEY,
-            type TEXT NOT NULL CHECK (type IN ('user', 'feedback', 'project', 'reference', 'preference', 'workflow')),
-            name TEXT NOT NULL UNIQUE,
-            description TEXT,
-            content TEXT,
-            tags TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(tags) AND json_type(tags) = 'array'),
-            scope TEXT DEFAULT 'global',
-            source TEXT NOT NULL CHECK (source IN ('manual', 'agent', 'daily_retro', 'weekly_retro')),
-            confidence TEXT DEFAULT 'medium' CHECK (confidence IN ('high', 'medium', 'low')),
-            protected BOOLEAN DEFAULT FALSE CHECK (protected IN (0, 1)),
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            expires_at DATETIME,
-            valid_until DATETIME,
-            superseded_by TEXT,
-            version INTEGER DEFAULT 1 CHECK (version >= 1),
-            access_count INTEGER DEFAULT 0 CHECK (access_count >= 0),
-            last_accessed_at DATETIME
-        );
-        INSERT INTO memories_v2
-        SELECT id, type, name, description, content, tags, scope, source, confidence, protected,
-               created_at, updated_at, expires_at, valid_until, superseded_by, version,
-               access_count, last_accessed_at
-        FROM memories;
-        DROP TABLE memories;
-        ALTER TABLE memories_v2 RENAME TO memories;
-        CREATE INDEX IF NOT EXISTS idx_type ON memories(type);
-        CREATE INDEX IF NOT EXISTS idx_scope ON memories(scope);
-        CREATE INDEX IF NOT EXISTS idx_expires ON memories(expires_at);
-        CREATE INDEX IF NOT EXISTS idx_source ON memories(source);
-        CREATE INDEX IF NOT EXISTS idx_valid_until ON memories(valid_until);
-        CREATE INDEX IF NOT EXISTS idx_access ON memories(access_count);
-        CREATE INDEX IF NOT EXISTS idx_confidence ON memories(confidence);",
-    )
-    .context("migrate memories type constraint to schema v2")?;
+fn print_json_pretty<T: Serialize + ?Sized>(value: &T) -> Result<()> {
+    println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
 }
 
@@ -563,9 +387,9 @@ fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
         .map(|status| status == "similar_found")
         .unwrap_or(false);
     if is_similar {
-        println!("{}", serde_json::to_string_pretty(&result)?);
+        print_json_pretty(&result)?;
     } else {
-        println!("{}", result);
+        print_json(&result)?;
     }
     Ok(())
 }
@@ -574,7 +398,7 @@ fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
     app.init()?;
     validate_tags(&args.tags)?;
     let raw_content = required_content(args.content.take(), args.content_file.as_deref())?;
-    validate_workflow_memory(
+    workflow::validate_memory(
         &args.r#type,
         &raw_content,
         &args.tags,
@@ -633,12 +457,7 @@ fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
                 )?;
                 Ok(())
             })?;
-            upsert_index(app, &conn, &existing.id).with_context(|| {
-                format!(
-                    "update index for {}; run `mem reindex` if needed",
-                    existing.id
-                )
-            })?;
+            upsert_index_or_mark_stale(app, &conn, &existing.id)?;
             let updated = memory_by_id(&conn, &existing.id)?.expect("updated memory exists");
             return Ok(json!({
                 "status": "updated",
@@ -657,6 +476,7 @@ fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
 
     let content = strip_secrets(&raw_content)?;
     if !args.force {
+        repair_stale_index(app)?;
         let candidates = similar_candidates(app, &conn, &content, 5)?;
         if !candidates.is_empty() {
             return Ok(json!({
@@ -700,8 +520,7 @@ fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
         log_change(conn, &id, "save", None, Some(&content), &args.source)?;
         Ok(())
     })?;
-    upsert_index(app, &conn, &id)
-        .with_context(|| format!("update index for {id}; run `mem reindex` if needed"))?;
+    upsert_index_or_mark_stale(app, &conn, &id)?;
 
     Ok(json!({"status": "saved", "id": id, "version": 1}))
 }
@@ -727,7 +546,8 @@ fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
     };
 
     let mut ids = if let Some(query) = args.query.as_deref() {
-        search_index(
+        repair_stale_index(app)?;
+        search_index_ids(
             app,
             query,
             args.fuzzy,
@@ -794,7 +614,7 @@ fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
         }
     }
 
-    println!("{}", serde_json::to_string_pretty(&memories)?);
+    print_json_pretty(&memories)?;
     Ok(())
 }
 
@@ -805,7 +625,7 @@ fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
         .ok_or_else(|| anyhow!("memory not found: {}", args.name))?;
     if let Some(expected) = args.expected_version {
         if let Some(conflict) = version_conflict(&old, expected) {
-            println!("{}", conflict);
+            print_json(&conflict)?;
             return Ok(());
         }
     }
@@ -831,7 +651,7 @@ fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
         Some(add) => merge_tags(&old.tags, &add)?,
         None => old.tags.clone(),
     };
-    validate_workflow_memory(
+    workflow::validate_memory(
         &old.r#type,
         new_content.as_deref().unwrap_or_default(),
         &tags,
@@ -857,8 +677,7 @@ fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
         )?;
         Ok(())
     })?;
-    upsert_index(app, &conn, &old.id)
-        .with_context(|| format!("update index for {}; run `mem reindex` if needed", old.id))?;
+    upsert_index_or_mark_stale(app, &conn, &old.id)?;
 
     let updated = memory_by_id(&conn, &old.id)?.expect("updated memory exists");
     println!(
@@ -875,7 +694,7 @@ fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
         .ok_or_else(|| anyhow!("memory not found: {}", args.old_name))?;
     if let Some(expected) = args.expected_version {
         if let Some(conflict) = version_conflict(&old, expected) {
-            println!("{}", conflict);
+            print_json(&conflict)?;
             return Ok(());
         }
     }
@@ -895,7 +714,7 @@ fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
     let new_id = unique_memory_id(&conn, &slugify(&args.new_name))?;
     let now = now();
     let raw_content = required_content(args.content, args.content_file.as_deref())?;
-    validate_workflow_memory(
+    workflow::validate_memory(
         &old.r#type,
         &raw_content,
         &old.tags,
@@ -939,9 +758,8 @@ fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
         )?;
         Ok(())
     })?;
-    upsert_index(app, &conn, &new_id)
-        .with_context(|| format!("update index for {new_id}; run `mem reindex` if needed"))?;
-    reindex(app).context("rebuild index after supersede; run `mem reindex` if needed")?;
+    upsert_index_or_mark_stale(app, &conn, &new_id)?;
+    reindex_or_mark_stale(app, "rebuild index after supersede")?;
 
     println!(
         "{}",
@@ -957,7 +775,7 @@ fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
         .ok_or_else(|| anyhow!("memory not found: {}", args.name))?;
     if let Some(expected) = args.expected_version {
         if let Some(conflict) = version_conflict(&old, expected) {
-            println!("{}", conflict);
+            print_json(&conflict)?;
             return Ok(());
         }
     }
@@ -982,7 +800,7 @@ fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
             )?;
             Ok(())
         })?;
-        reindex(app).context("rebuild index after delete; run `mem reindex` if needed")?;
+        reindex_or_mark_stale(app, "rebuild index after delete")?;
         println!(
             "{}",
             json!({"status": "deleted", "mode": "hard", "id": old.id})
@@ -1004,7 +822,7 @@ fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
             )?;
             Ok(())
         })?;
-        reindex(app).context("rebuild index after delete; run `mem reindex` if needed")?;
+        reindex_or_mark_stale(app, "rebuild index after delete")?;
         println!(
             "{}",
             json!({"status": "deleted", "mode": "soft", "id": old.id})
@@ -1017,7 +835,7 @@ fn cmd_context(args: ContextArgs) -> Result<()> {
     if !args.detect {
         bail!("use --detect");
     }
-    println!("{}", json!({"scope": detect_scope()?}));
+    print_json(&json!({"scope": detect_scope()?}))?;
     Ok(())
 }
 
@@ -1062,14 +880,14 @@ fn cmd_history(app: &App, args: HistoryArgs) -> Result<()> {
     })?;
 
     let values: Result<Vec<_>, _> = rows.collect();
-    println!("{}", serde_json::to_string_pretty(&values?)?);
+    print_json_pretty(&values?)?;
     Ok(())
 }
 
 fn cmd_stats(app: &App) -> Result<()> {
     app.init()?;
     let conn = app.conn()?;
-    println!("{}", serde_json::to_string_pretty(&stats_report(&conn)?)?);
+    print_json_pretty(&stats_report(&conn)?)?;
     Ok(())
 }
 
@@ -1077,7 +895,7 @@ fn cmd_audit(app: &App, args: AuditArgs) -> Result<()> {
     app.init()?;
     let conn = app.conn()?;
     let report = audit_report(&conn, app, args.fix)?;
-    println!("{}", serde_json::to_string_pretty(&report)?);
+    print_json_pretty(&report)?;
     Ok(())
 }
 
@@ -1166,7 +984,7 @@ fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Value> {
             )?;
             Ok(())
         })?;
-        reindex(app).context("rebuild index after audit --fix; run `mem reindex` if needed")?;
+        reindex_or_mark_stale(app, "rebuild index after audit --fix")?;
     }
 
     Ok(json!({
@@ -1203,8 +1021,8 @@ fn cmd_gc(app: &App, args: GcArgs) -> Result<()> {
         )?;
         Ok(changed)
     })?;
-    reindex(app).context("rebuild index after gc; run `mem reindex` if needed")?;
-    println!("{}", json!({"status": "gc_complete", "deleted": changed}));
+    reindex_or_mark_stale(app, "rebuild index after gc")?;
+    print_json(&json!({"status": "gc_complete", "deleted": changed}))?;
     Ok(())
 }
 
@@ -1217,7 +1035,7 @@ fn cmd_export(app: &App, args: ExportArgs) -> Result<()> {
     }
 
     match args.format {
-        ExportFormat::Json => println!("{}", serde_json::to_string_pretty(&memories)?),
+        ExportFormat::Json => print_json_pretty(&memories)?,
         ExportFormat::Markdown => {
             for memory in memories {
                 println!("## {}", memory.name);
@@ -1380,15 +1198,12 @@ fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
             "result": result
         }));
     }
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&json!({
-            "status": "import_complete",
-            "total": results.len(),
-            "counts": Value::Object(counts),
-            "results": results
-        }))?
-    );
+    print_json_pretty(&json!({
+        "status": "import_complete",
+        "total": results.len(),
+        "counts": Value::Object(counts),
+        "results": results
+    }))?;
     Ok(())
 }
 
@@ -1416,7 +1231,7 @@ fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
             if let Some(content) = memory.content.take() {
                 memory.content = Some(strip_secrets(&content)?);
             }
-            if let Err(err) = validate_workflow_record_content(&memory) {
+            if let Err(err) = workflow::validate_record_content(&memory) {
                 add_workflow_review_record(conn, &args.db, &memory, &err)?;
                 workflow_review_required += 1;
                 continue;
@@ -1498,23 +1313,19 @@ fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
     })?;
 
     for id in &changed_index_ids {
-        upsert_index(app, &conn, id)
-            .with_context(|| format!("update index for {id}; run `mem reindex` if needed"))?;
+        upsert_index_or_mark_stale(app, &conn, id)?;
     }
 
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&json!({
-            "status": "merged",
-            "imported": imported,
-            "identical": identical,
-            "conflicts": conflicts,
-            "trusted_updates": trusted_updates,
-            "rejected_lower_trust": rejected_lower_trust,
-            "workflow_review_required": workflow_review_required,
-            "regenerated_ids": regenerated_ids
-        }))?
-    );
+    print_json_pretty(&json!({
+        "status": "merged",
+        "imported": imported,
+        "identical": identical,
+        "conflicts": conflicts,
+        "trusted_updates": trusted_updates,
+        "rejected_lower_trust": rejected_lower_trust,
+        "workflow_review_required": workflow_review_required,
+        "regenerated_ids": regenerated_ids
+    }))?;
     Ok(())
 }
 
@@ -1565,20 +1376,17 @@ fn cmd_retro(app: &App, command: RetroCommand) -> Result<()> {
         ],
     };
 
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&json!({
-            "status": "retro_bundle",
-            "kind": kind,
-            "generated_at": now(),
-            "instructions": instructions,
-            "stats": stats_report(&conn)?,
-            "audit": audit_report(&conn, app, false)?,
-            "pending_ambiguities": pending_ambiguities,
-            "recent_history": recent_history,
-            "active_memories": active_memories
-        }))?
-    );
+    print_json_pretty(&json!({
+        "status": "retro_bundle",
+        "kind": kind,
+        "generated_at": now(),
+        "instructions": instructions,
+        "stats": stats_report(&conn)?,
+        "audit": audit_report(&conn, app, false)?,
+        "pending_ambiguities": pending_ambiguities,
+        "recent_history": recent_history,
+        "active_memories": active_memories
+    }))?;
     Ok(())
 }
 
@@ -1589,40 +1397,37 @@ fn cmd_workflow(app: &App, command: WorkflowCommand) -> Result<()> {
         WorkflowCommand::List(args) => {
             let scope_filter = workflow_scope_filter(args.scope.as_deref())?;
             let mut workflows = all_workflows(&conn, args.include_superseded)?;
-            retain_scope(&mut workflows, scope_filter.as_deref());
+            workflow::retain_scope(&mut workflows, scope_filter.as_deref());
             workflows.truncate(args.limit);
-            println!("{}", serde_json::to_string_pretty(&workflows)?);
+            print_json_pretty(&workflows)?;
         }
         WorkflowCommand::Show(args) => {
             let workflow = workflow_by_ref(&conn, &args.reference)?;
-            println!("{}", serde_json::to_string_pretty(&workflow)?);
+            print_json_pretty(&workflow)?;
         }
         WorkflowCommand::Find(args) => {
             let scope_filter = workflow_scope_filter(args.scope.as_deref())?;
             let mut workflows = all_workflows(&conn, false)?;
-            retain_scope(&mut workflows, scope_filter.as_deref());
-            workflows.retain(|workflow| workflow_matches_intent(workflow, &args.intent));
+            workflow::retain_scope(&mut workflows, scope_filter.as_deref());
+            workflows.retain(|memory| workflow::matches_intent(memory, &args.intent));
             workflows.sort_by_key(|workflow| {
-                std::cmp::Reverse(workflow_rank(
+                std::cmp::Reverse(workflow::rank(
                     workflow,
                     &args.intent,
                     scope_filter.as_deref(),
                 ))
             });
             workflows.truncate(args.limit);
-            println!("{}", serde_json::to_string_pretty(&workflows)?);
+            print_json_pretty(&workflows)?;
         }
         WorkflowCommand::Validate(args) => {
             let workflow = workflow_by_ref(&conn, &args.reference)?;
-            validate_workflow_record(&workflow)?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "status": "valid",
-                    "id": workflow.id,
-                    "name": workflow.name
-                }))?
-            );
+            workflow::validate_record(&workflow)?;
+            print_json_pretty(&json!({
+                "status": "valid",
+                "id": workflow.id,
+                "name": workflow.name
+            }))?;
         }
     }
     Ok(())
@@ -1643,7 +1448,7 @@ fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> {
         }
         AmbiguityCommand::List(args) => {
             let rows = ambiguity_rows(&conn, args.pending)?;
-            println!("{}", serde_json::to_string_pretty(&rows)?);
+            print_json_pretty(&rows)?;
         }
         AmbiguityCommand::Resolve(args) => {
             let now = now();
@@ -1664,7 +1469,7 @@ fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> {
                 let keep_id = keep_id
                     .as_deref()
                     .ok_or_else(|| anyhow!("--soft-delete-others requires --keep"))?;
-                for memory_id in memory_ids.iter().filter(|id| id.as_str() != Some(keep_id)) {
+                for memory_id in memory_ids.iter().filter(|id| id.as_str() != keep_id) {
                     let Some(memory) = memory_by_id(&conn, memory_id)? else {
                         continue;
                     };
@@ -1687,7 +1492,7 @@ fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> {
                     soft_deleted.push(memory.id);
                 }
                 if !soft_deleted.is_empty() {
-                    reindex(app)?;
+                    reindex_or_mark_stale(app, "rebuild index after ambiguity resolution")?;
                 }
             }
             let resolution = json!({
@@ -1702,316 +1507,14 @@ fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> {
                 "UPDATE ambiguities SET resolution = ?1, resolved_at = ?2 WHERE id = ?3",
                 params![resolution, now, args.id],
             )?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "status": "resolved",
-                    "id": args.id,
-                    "resolution": serde_json::from_str::<Value>(&resolution)?
-                }))?
-            );
+            print_json_pretty(&json!({
+                "status": "resolved",
+                "id": args.id,
+                "resolution": serde_json::from_str::<Value>(&resolution)?
+            }))?;
         }
     }
     Ok(())
-}
-
-fn confidence_for_source(source: &str) -> &'static str {
-    match source {
-        "manual" => "high",
-        "agent" => "medium",
-        "daily_retro" | "weekly_retro" => "low",
-        _ => "medium",
-    }
-}
-
-fn source_priority(source: &str) -> u8 {
-    match source {
-        "manual" => 4,
-        "agent" => 3,
-        "daily_retro" => 2,
-        "weekly_retro" => 1,
-        _ => 2,
-    }
-}
-
-fn version_conflict(memory: &Memory, expected_version: i64) -> Option<Value> {
-    (memory.version != expected_version).then(|| {
-        json!({
-            "status": "version_conflict",
-            "id": memory.id,
-            "name": memory.name,
-            "expected_version": expected_version,
-            "actual_version": memory.version
-        })
-    })
-}
-
-fn now() -> String {
-    Utc::now().to_rfc3339()
-}
-
-fn strip_secrets(input: &str) -> Result<String> {
-    let patterns = [
-        r"sk-[A-Za-z0-9_\-]{16,}",
-        r"ghp_[A-Za-z0-9_]{16,}",
-        r"xoxb-[A-Za-z0-9\-]{16,}",
-        r"AKIA[0-9A-Z]{16}",
-        r"(?i)bearer\s+[A-Za-z0-9._\-]{16,}",
-        r"(?i)(password|secret)\s*=\s*[^ \n\r]+",
-    ];
-    let mut output = input.to_string();
-    for pattern in patterns {
-        let re = Regex::new(pattern)?;
-        output = re.replace_all(&output, "[REDACTED]").to_string();
-    }
-    Ok(output)
-}
-
-fn slugify(name: &str) -> String {
-    let mut slug = String::new();
-    for ch in name.chars() {
-        if ch.is_ascii_alphanumeric() {
-            slug.push(ch.to_ascii_lowercase());
-        } else if (ch == '_' || ch == '-' || ch.is_whitespace() || ch == '/')
-            && !slug.ends_with('_')
-        {
-            slug.push('_');
-        }
-    }
-    let slug = slug.trim_matches('_').to_string();
-    if slug.is_empty() {
-        format!("memory_{}", uuid::Uuid::new_v4())
-    } else {
-        slug
-    }
-}
-
-fn required_content(content: Option<String>, content_file: Option<&Path>) -> Result<String> {
-    optional_content(content, content_file)?
-        .ok_or_else(|| anyhow!("one of --content or --content-file is required"))
-}
-
-fn optional_content(
-    content: Option<String>,
-    content_file: Option<&Path>,
-) -> Result<Option<String>> {
-    match (content, content_file) {
-        (Some(_), Some(_)) => bail!("use only one of --content or --content-file"),
-        (Some(content), None) => Ok(Some(content)),
-        (None, Some(path)) => fs::read_to_string(path)
-            .with_context(|| format!("read {}", path.display()))
-            .map(Some),
-        (None, None) => Ok(None),
-    }
-}
-
-fn validate_tags(tags: &str) -> Result<()> {
-    parse_string_array(tags)?;
-    Ok(())
-}
-
-fn parse_string_array(raw: &str) -> Result<Vec<String>> {
-    let parsed: Value =
-        serde_json::from_str(raw).context("tags/memory_ids must be a JSON array")?;
-    let Value::Array(values) = parsed else {
-        bail!("expected JSON array");
-    };
-    values
-        .into_iter()
-        .map(|value| {
-            value
-                .as_str()
-                .map(str::to_string)
-                .ok_or_else(|| anyhow!("array items must be strings"))
-        })
-        .collect()
-}
-
-fn validate_workflow_memory(
-    memory_type: &str,
-    content: &str,
-    tags: &str,
-    scope: &str,
-    no_validate_workflow: bool,
-) -> Result<()> {
-    if memory_type != "workflow" || no_validate_workflow {
-        return Ok(());
-    }
-    validate_workflow_content(content)?;
-    let tags = parse_string_array(tags)?;
-    validate_workflow_tags(&tags, scope)?;
-    Ok(())
-}
-
-fn validate_workflow_record(memory: &Memory) -> Result<()> {
-    if memory.r#type != "workflow" {
-        bail!("memory is not a workflow: {}", memory.name);
-    }
-    validate_workflow_record_content(memory)
-}
-
-fn validate_workflow_record_content(memory: &Memory) -> Result<()> {
-    validate_workflow_memory(
-        &memory.r#type,
-        memory.content.as_deref().unwrap_or_default(),
-        &memory.tags,
-        &memory.scope,
-        false,
-    )
-}
-
-fn validate_workflow_tags(tags: &[String], scope: &str) -> Result<()> {
-    if !tags.iter().any(|tag| tag.starts_with("workflow:")) {
-        bail!("workflow memory requires at least one workflow:* tag");
-    }
-    if scope.starts_with("project:") && !tags.iter().any(|tag| tag == scope) {
-        bail!("project-scoped workflow requires matching {scope} tag");
-    }
-    Ok(())
-}
-
-fn validate_workflow_content(content: &str) -> Result<()> {
-    let value: YamlValue = serde_yaml::from_str(content).context("parse workflow YAML/JSON")?;
-    let mapping = value
-        .as_mapping()
-        .ok_or_else(|| anyhow!("workflow content must be a YAML/JSON object"))?;
-    for field in [
-        "schema_version",
-        "goal",
-        "triggers",
-        "steps",
-        "stop_conditions",
-    ] {
-        yaml_get(mapping, field)
-            .ok_or_else(|| anyhow!("workflow missing required field: {field}"))?;
-    }
-    require_non_empty_sequence(mapping, "triggers")?;
-    require_non_empty_sequence(mapping, "stop_conditions")?;
-    let steps = yaml_get(mapping, "steps")
-        .and_then(YamlValue::as_sequence)
-        .ok_or_else(|| anyhow!("workflow steps must be a non-empty array"))?;
-    if steps.is_empty() {
-        bail!("workflow steps must be a non-empty array");
-    }
-    for (index, step) in steps.iter().enumerate() {
-        let step_mapping = step
-            .as_mapping()
-            .ok_or_else(|| anyhow!("workflow step {index} must be an object"))?;
-        let id = yaml_get(step_mapping, "id")
-            .and_then(YamlValue::as_str)
-            .unwrap_or_default();
-        if id.trim().is_empty() {
-            bail!("workflow step {index} requires non-empty id");
-        }
-        if !["run", "check", "manual", "ask"]
-            .iter()
-            .any(|key| yaml_get(step_mapping, key).is_some())
-        {
-            bail!("workflow step {id} requires one of run, check, manual, or ask");
-        }
-        if let Some(confirm) = yaml_get(step_mapping, "confirm") {
-            if !matches!(confirm, YamlValue::Bool(_)) {
-                bail!("workflow step {id} confirm must be boolean");
-            }
-        }
-    }
-    Ok(())
-}
-
-fn yaml_get<'a>(mapping: &'a serde_yaml::Mapping, key: &str) -> Option<&'a YamlValue> {
-    mapping.get(YamlValue::String(key.to_string()))
-}
-
-fn require_non_empty_sequence(mapping: &serde_yaml::Mapping, field: &str) -> Result<()> {
-    let sequence = yaml_get(mapping, field)
-        .and_then(YamlValue::as_sequence)
-        .ok_or_else(|| anyhow!("workflow {field} must be a non-empty array"))?;
-    if sequence.is_empty() {
-        bail!("workflow {field} must be a non-empty array");
-    }
-    Ok(())
-}
-
-fn memory_has_tag(tags: &str, wanted: &str) -> bool {
-    parse_string_array(tags)
-        .map(|tags| tags.iter().any(|tag| tag == wanted))
-        .unwrap_or(false)
-}
-
-fn merge_tags(existing: &str, add: &str) -> Result<String> {
-    let mut set = HashSet::new();
-    for raw in [existing, add] {
-        let Value::Array(values) = serde_json::from_str(raw)? else {
-            bail!("tags must be JSON arrays");
-        };
-        for value in values {
-            if let Some(tag) = value.as_str() {
-                set.insert(tag.to_string());
-            }
-        }
-    }
-    let mut tags: Vec<_> = set.into_iter().collect();
-    tags.sort();
-    Ok(serde_json::to_string(&tags)?)
-}
-
-fn is_expired(expires_at: Option<&str>) -> bool {
-    expires_at
-        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
-        .map(|expires| expires.with_timezone(&Utc) < Utc::now())
-        .unwrap_or(false)
-}
-
-fn memory_by_name(conn: &Connection, name: &str) -> Result<Option<Memory>> {
-    let mut stmt = conn.prepare("SELECT * FROM memories WHERE name = ?1")?;
-    stmt.query_row(params![name], row_to_memory)
-        .optional()
-        .map_err(Into::into)
-}
-
-fn memory_by_id(conn: &Connection, id: &str) -> Result<Option<Memory>> {
-    let mut stmt = conn.prepare("SELECT * FROM memories WHERE id = ?1")?;
-    stmt.query_row(params![id], row_to_memory)
-        .optional()
-        .map_err(Into::into)
-}
-
-fn resolve_memory_ref(conn: &Connection, reference: &str) -> Result<String> {
-    if let Some(memory) = memory_by_id(conn, reference)? {
-        return Ok(memory.id);
-    }
-    if let Some(memory) = memory_by_name(conn, reference)? {
-        return Ok(memory.id);
-    }
-    bail!("memory not found: {reference}")
-}
-
-fn all_memories(conn: &Connection) -> Result<Vec<Memory>> {
-    let mut stmt = conn.prepare("SELECT * FROM memories ORDER BY created_at DESC")?;
-    let rows = stmt.query_map([], row_to_memory)?;
-    rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)
-}
-
-fn all_workflows(conn: &Connection, include_superseded: bool) -> Result<Vec<Memory>> {
-    let sql = if include_superseded {
-        "SELECT * FROM memories WHERE type = 'workflow' ORDER BY updated_at DESC"
-    } else {
-        "SELECT * FROM memories WHERE type = 'workflow' AND valid_until IS NULL ORDER BY updated_at DESC"
-    };
-    let mut stmt = conn.prepare(sql)?;
-    let rows = stmt.query_map([], row_to_memory)?;
-    rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)
-}
-
-fn workflow_by_ref(conn: &Connection, reference: &str) -> Result<Memory> {
-    let memory_id = resolve_memory_ref(conn, reference)?;
-    let memory = memory_by_id(conn, &memory_id)?.expect("resolved memory exists");
-    if memory.r#type != "workflow" {
-        bail!("memory is not a workflow: {}", memory.name);
-    }
-    Ok(memory)
 }
 
 fn workflow_scope_filter(scope: Option<&str>) -> Result<Option<Vec<String>>> {
@@ -2020,247 +1523,6 @@ fn workflow_scope_filter(scope: Option<&str>) -> Result<Option<Vec<String>>> {
         Some(scope) => Ok(Some(vec!["global".to_string(), scope.to_string()])),
         None => Ok(None),
     }
-}
-
-fn retain_scope(memories: &mut Vec<Memory>, scope_filter: Option<&[String]>) {
-    if let Some(scopes) = scope_filter {
-        memories.retain(|memory| scopes.contains(&memory.scope));
-    }
-}
-
-fn workflow_matches_intent(memory: &Memory, intent: &str) -> bool {
-    let intent = intent.trim();
-    if intent.is_empty() {
-        return true;
-    }
-    let normalized_intent = normalized_text(intent);
-    if normalized_intent.is_empty() {
-        return true;
-    }
-    if workflow_has_intent_tag(memory, intent) {
-        return true;
-    }
-    [
-        memory.name.as_str(),
-        memory.description.as_deref().unwrap_or_default(),
-        memory.content.as_deref().unwrap_or_default(),
-        memory.tags.as_str(),
-    ]
-    .iter()
-    .any(|value| normalized_text(value).contains(&normalized_intent))
-}
-
-fn workflow_has_intent_tag(memory: &Memory, intent: &str) -> bool {
-    let exact_intent_tag = format!("intent:{}", intent.to_ascii_lowercase());
-    let exact_workflow_tag = format!("workflow:{}", intent.to_ascii_lowercase());
-    let normalized_intent = intent_key(intent);
-    parse_string_array(&memory.tags)
-        .map(|tags| {
-            tags.iter().any(|tag| {
-                let tag = tag.to_ascii_lowercase();
-                if tag == exact_intent_tag || tag == exact_workflow_tag {
-                    return true;
-                }
-                let Some((kind, value)) = tag.split_once(':') else {
-                    return false;
-                };
-                matches!(kind, "intent" | "workflow") && intent_key(value) == normalized_intent
-            })
-        })
-        .unwrap_or(false)
-}
-
-fn intent_key(input: &str) -> String {
-    let mut key = String::new();
-    for ch in input.chars() {
-        if ch.is_ascii_alphanumeric() {
-            key.push(ch.to_ascii_lowercase());
-        } else if !key.ends_with('_') {
-            key.push('_');
-        }
-    }
-    key.trim_matches('_').to_string()
-}
-
-fn workflow_rank(memory: &Memory, intent: &str, scope_filter: Option<&[String]>) -> i64 {
-    let mut score = 0;
-    if let Some(scopes) = scope_filter {
-        if scopes.last().map(String::as_str) == Some(memory.scope.as_str())
-            && memory.scope != "global"
-        {
-            score += 100;
-        }
-    }
-    score += match memory.confidence.as_str() {
-        "high" => 30,
-        "medium" => 20,
-        _ => 10,
-    };
-    if workflow_has_intent_tag(memory, intent) {
-        score += 50;
-    }
-    score
-}
-
-fn active_expired_memories(conn: &Connection) -> Result<Vec<Memory>> {
-    let mut stmt = conn.prepare(
-        "SELECT * FROM memories
-         WHERE expires_at IS NOT NULL
-         AND datetime(expires_at) < datetime('now')
-         AND valid_until IS NULL",
-    )?;
-    let rows = stmt.query_map([], row_to_memory)?;
-    rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)
-}
-
-fn gc_candidate_memories(conn: &Connection, cutoff: &str) -> Result<Vec<Memory>> {
-    let mut stmt = conn.prepare(
-        "SELECT * FROM memories
-         WHERE valid_until IS NOT NULL
-         AND datetime(valid_until) < datetime(?1)",
-    )?;
-    let rows = stmt.query_map(params![cutoff], row_to_memory)?;
-    rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)
-}
-
-fn row_to_memory(row: &rusqlite::Row<'_>) -> rusqlite::Result<Memory> {
-    Ok(Memory {
-        id: row.get("id")?,
-        r#type: row.get("type")?,
-        name: row.get("name")?,
-        description: row.get("description")?,
-        content: row.get("content")?,
-        tags: row.get("tags")?,
-        scope: row.get("scope")?,
-        source: row.get("source")?,
-        confidence: row.get("confidence")?,
-        protected: row.get("protected")?,
-        created_at: row.get("created_at")?,
-        updated_at: row.get("updated_at")?,
-        expires_at: row.get("expires_at")?,
-        valid_until: row.get("valid_until")?,
-        superseded_by: row.get("superseded_by")?,
-        version: row.get("version")?,
-        access_count: row.get("access_count")?,
-        last_accessed_at: row.get("last_accessed_at")?,
-    })
-}
-
-fn insert_memory_record(conn: &Connection, memory: &Memory) -> Result<()> {
-    conn.execute(
-        "INSERT INTO memories
-        (id, type, name, description, content, tags, scope, source, confidence, protected,
-         created_at, updated_at, expires_at, valid_until, superseded_by, version, access_count, last_accessed_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
-        params![
-            memory.id,
-            memory.r#type,
-            memory.name,
-            memory.description,
-            memory.content,
-            memory.tags,
-            memory.scope,
-            memory.source,
-            memory.confidence,
-            memory.protected,
-            memory.created_at,
-            memory.updated_at,
-            memory.expires_at,
-            memory.valid_until,
-            memory.superseded_by,
-            memory.version,
-            memory.access_count,
-            memory.last_accessed_at,
-        ],
-    )?;
-    Ok(())
-}
-
-fn update_memory_from_merge(conn: &Connection, existing: &Memory, incoming: &Memory) -> Result<()> {
-    let now = now();
-    conn.execute(
-        "UPDATE memories
-         SET type = ?1, description = ?2, content = ?3, tags = ?4, scope = ?5,
-             source = ?6, confidence = ?7, protected = ?8, updated_at = ?9,
-             expires_at = ?10, valid_until = ?11, superseded_by = ?12,
-             version = version + 1
-         WHERE id = ?13",
-        params![
-            &incoming.r#type,
-            &incoming.description,
-            &incoming.content,
-            &incoming.tags,
-            &incoming.scope,
-            &incoming.source,
-            &incoming.confidence,
-            incoming.protected,
-            now,
-            &incoming.expires_at,
-            &incoming.valid_until,
-            &incoming.superseded_by,
-            &existing.id,
-        ],
-    )?;
-    log_change(
-        conn,
-        &existing.id,
-        "merge",
-        existing.content.as_deref(),
-        incoming.content.as_deref(),
-        "merge",
-    )?;
-    Ok(())
-}
-
-fn unique_memory_id(conn: &Connection, preferred: &str) -> Result<String> {
-    let base = if preferred.trim().is_empty() {
-        format!("memory_{}", uuid::Uuid::new_v4())
-    } else {
-        preferred.to_string()
-    };
-    if memory_by_id(conn, &base)?.is_none() {
-        return Ok(base);
-    }
-    for suffix in 2.. {
-        let candidate = format!("{base}_{suffix}");
-        if memory_by_id(conn, &candidate)?.is_none() {
-            return Ok(candidate);
-        }
-    }
-    unreachable!()
-}
-
-fn log_change(
-    conn: &Connection,
-    memory_id: &str,
-    action: &str,
-    old_content: Option<&str>,
-    new_content: Option<&str>,
-    source: &str,
-) -> Result<()> {
-    conn.execute(
-        "INSERT INTO changelog (memory_id, action, old_content, new_content, source)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![memory_id, action, old_content, new_content, source],
-    )?;
-    Ok(())
-}
-
-fn add_ambiguity_record(
-    conn: &Connection,
-    query: &str,
-    memory_ids: &[String],
-    context: Option<&str>,
-) -> Result<()> {
-    let memory_ids = serde_json::to_string(memory_ids)?;
-    conn.execute(
-        "INSERT INTO ambiguities (query, memory_ids, context, resolution)
-         VALUES (?1, ?2, ?3, 'pending')",
-        params![query, memory_ids, context],
-    )?;
-    Ok(())
 }
 
 fn add_workflow_review_record(
@@ -2304,7 +1566,7 @@ fn similar_candidates(
     content: &str,
     limit: usize,
 ) -> Result<Vec<Value>> {
-    let ids = search_index(app, content, false, false, 25)?;
+    let ids = search_index_ids(app, content, false, false, 25)?;
     let mut candidates = Vec::new();
     for id in ids {
         let Some(memory) = memory_by_id(conn, &id)? else {
@@ -2334,316 +1596,103 @@ fn similar_candidates(
     Ok(candidates)
 }
 
-fn content_similarity(a: &str, b: &str) -> f64 {
-    let a_set = shingles(&normalized_text(a));
-    let b_set = shingles(&normalized_text(b));
-    if a_set.is_empty() || b_set.is_empty() {
-        return 0.0;
-    }
-    let intersection = a_set.intersection(&b_set).count() as f64;
-    let union = a_set.union(&b_set).count() as f64;
-    let smaller = a_set.len().min(b_set.len()) as f64;
-    (intersection / union).max(intersection / smaller)
+fn index_is_stale(app: &App) -> bool {
+    index_state::is_stale(&app.index_path) || index_dirty_in_db(app).unwrap_or(false)
 }
 
-fn normalized_text(input: &str) -> String {
-    input
-        .chars()
-        .flat_map(char::to_lowercase)
-        .filter(|ch| !ch.is_whitespace())
-        .collect()
+fn mark_index_stale(app: &App, reason: &str) -> Result<()> {
+    index_state::mark_stale(&app.index_path, reason, &now())?;
+    set_index_dirty(app, true)
 }
 
-fn literal_query_text(input: &str) -> String {
-    let mut output = String::new();
-    let mut last_was_space = false;
-    for ch in input.chars() {
-        if ch.is_alphanumeric() || ch == '_' {
-            output.push(ch);
-            last_was_space = false;
-        } else if !last_was_space {
-            output.push(' ');
-            last_was_space = true;
+fn clear_index_stale(app: &App) -> Result<()> {
+    index_state::clear_stale(&app.index_path)?;
+    set_index_dirty(app, false)
+}
+
+fn set_index_dirty(app: &App, dirty: bool) -> Result<()> {
+    let conn = app.conn()?;
+    db::set_index_dirty(&conn, dirty)
+}
+
+fn index_dirty_in_db(app: &App) -> Result<bool> {
+    let conn = app.conn()?;
+    db::index_dirty(&conn)
+}
+
+fn reindex_or_mark_stale(app: &App, action: &str) -> Result<()> {
+    match reindex(app) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            let reason = format!("{action}: {err:#}");
+            mark_index_stale(app, &reason).context("mark index stale")?;
+            Err(err).with_context(|| {
+                format!("{action}; index marked stale; run `mem reindex` or retry the query")
+            })
         }
     }
-    output.trim().to_string()
 }
 
-fn shingles(input: &str) -> HashSet<String> {
-    let chars: Vec<char> = input.chars().collect();
-    if chars.is_empty() {
-        return HashSet::new();
-    }
-    if chars.len() <= 2 {
-        return HashSet::from([input.to_string()]);
-    }
-    chars
-        .windows(2)
-        .map(|window| window.iter().collect::<String>())
-        .collect()
-}
-
-fn grouped_count(conn: &Connection, column: &str) -> Result<Value> {
-    let sql = format!(
-        "SELECT {column}, COUNT(*) FROM memories WHERE valid_until IS NULL GROUP BY {column}"
-    );
-    let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
-    })?;
-    let mut map = serde_json::Map::new();
-    for row in rows {
-        let (key, count) = row?;
-        map.insert(key, json!(count));
-    }
-    Ok(Value::Object(map))
-}
-
-fn query_json_rows(conn: &Connection, sql: &str) -> Result<Vec<Value>> {
-    let mut stmt = conn.prepare(sql)?;
-    let column_names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
-    let rows = stmt.query_map([], |row| {
-        let mut map = serde_json::Map::new();
-        for (idx, name) in column_names.iter().enumerate() {
-            let value: rusqlite::types::Value = row.get(idx)?;
-            map.insert(name.clone(), sqlite_value_to_json(value));
+fn upsert_index_or_mark_stale(app: &App, conn: &Connection, id: &str) -> Result<()> {
+    match upsert_index(app, conn, id) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            let action = format!("update index for {id}");
+            let reason = format!("{action}: {err:#}");
+            mark_index_stale(app, &reason).context("mark index stale")?;
+            Err(err).with_context(|| {
+                format!("{action}; index marked stale; run `mem reindex` or retry the query")
+            })
         }
-        Ok(Value::Object(map))
-    })?;
-    rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)
-}
-
-fn ambiguity_rows(conn: &Connection, pending_only: bool) -> Result<Vec<Value>> {
-    let sql = if pending_only {
-        "SELECT id, query, memory_ids, context, resolution, created_at, resolved_at
-         FROM ambiguities
-         WHERE resolution = 'pending'
-         ORDER BY created_at DESC"
-    } else {
-        "SELECT id, query, memory_ids, context, resolution, created_at, resolved_at
-         FROM ambiguities
-         ORDER BY created_at DESC"
-    };
-    let mut rows = query_json_rows(conn, sql)?;
-    for row in &mut rows {
-        parse_json_string_field(row, "memory_ids");
-        parse_json_string_field(row, "context");
-        parse_json_string_field(row, "resolution");
-    }
-    Ok(rows)
-}
-
-fn parse_json_string_field(row: &mut Value, field: &str) {
-    let Some(map) = row.as_object_mut() else {
-        return;
-    };
-    let Some(raw) = map.get(field).and_then(Value::as_str) else {
-        return;
-    };
-    if let Ok(parsed) = serde_json::from_str::<Value>(raw) {
-        map.insert(field.to_string(), parsed);
     }
 }
 
-fn ambiguity_by_id(conn: &Connection, id: i64) -> Result<Option<Value>> {
-    conn.query_row(
-        "SELECT id, query, memory_ids, context, resolution, created_at, resolved_at
-         FROM ambiguities
-         WHERE id = ?1",
-        params![id],
-        |row| {
-            Ok(json!({
-                "id": row.get::<_, i64>(0)?,
-                "query": row.get::<_, String>(1)?,
-                "memory_ids": row.get::<_, String>(2)?,
-                "context": row.get::<_, Option<String>>(3)?,
-                "resolution": row.get::<_, Option<String>>(4)?,
-                "created_at": row.get::<_, String>(5)?,
-                "resolved_at": row.get::<_, Option<String>>(6)?,
-            }))
-        },
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-fn sqlite_value_to_json(value: rusqlite::types::Value) -> Value {
-    match value {
-        rusqlite::types::Value::Null => Value::Null,
-        rusqlite::types::Value::Integer(v) => json!(v),
-        rusqlite::types::Value::Real(v) => json!(v),
-        rusqlite::types::Value::Text(v) => json!(v),
-        rusqlite::types::Value::Blob(v) => json!(v),
+fn repair_stale_index(app: &App) -> Result<()> {
+    if !index_is_stale(app) {
+        return Ok(());
     }
-}
-
-fn build_schema() -> (Schema, IndexFields) {
-    let mut builder = Schema::builder();
-    let id = builder.add_text_field("id", STRING | STORED);
-    let text_options = TextOptions::default().set_indexing_options(
-        TextFieldIndexing::default()
-            .set_tokenizer("multilingual")
-            .set_index_option(IndexRecordOption::WithFreqsAndPositions),
-    );
-    let name = builder.add_text_field("name", text_options.clone());
-    let description = builder.add_text_field("description", text_options.clone());
-    let content = builder.add_text_field("content", text_options.clone());
-    let tags = builder.add_text_field("tags", text_options);
-    let scope = builder.add_text_field("scope", STRING);
-    let r#type = builder.add_text_field("type", STRING);
-    let schema = builder.build();
-    let fields = IndexFields {
-        id,
-        name,
-        description,
-        content,
-        tags,
-        scope,
-        r#type,
-    };
-    (schema, fields)
-}
-
-fn ensure_index(path: &Path) -> Result<Index> {
-    fs::create_dir_all(path)?;
-    let index = match Index::open_in_dir(path) {
-        Ok(index) => Ok(index),
-        Err(_) => {
-            let (schema, _) = build_schema();
-            Index::create_in_dir(path, schema).context("create Tantivy index")
-        }
-    }?;
-    register_tokenizers(&index)?;
-    Ok(index)
-}
-
-fn register_tokenizers(index: &Index) -> Result<()> {
-    let dictionary = load_dictionary("embedded://cc-cedict").context("load embedded CC-CEDICT")?;
-    let segmenter = Segmenter::new(Mode::Normal, dictionary, None);
-    let tokenizer = LinderaTokenizer::from_segmenter(segmenter);
-    index.tokenizers().register("multilingual", tokenizer);
-    Ok(())
+    eprintln!("index is stale; rebuilding before search");
+    reindex_or_mark_stale(app, "repair stale index")
 }
 
 fn reindex(app: &App) -> Result<()> {
-    if app.index_path.exists() {
-        fs::remove_dir_all(&app.index_path)?;
-    }
-    fs::create_dir_all(&app.index_path)?;
-    let (schema, fields) = build_schema();
-    let index = Index::create_in_dir(&app.index_path, schema)?;
-    register_tokenizers(&index)?;
-    let mut writer = index.writer(50_000_000)?;
     let conn = app.conn()?;
-    for memory in all_memories(&conn)? {
-        add_memory_doc(&mut writer, &fields, &memory)?;
-    }
-    writer.commit()?;
+    let memories = all_memories(&conn)?
+        .iter()
+        .map(indexed_memory)
+        .collect::<Vec<_>>();
+    search_index::rebuild(&app.index_path, &memories)?;
+    clear_index_stale(app)?;
     Ok(())
 }
 
 fn upsert_index(app: &App, conn: &Connection, id: &str) -> Result<()> {
-    let index = ensure_index(&app.index_path)?;
-    let fields = fields_from_schema(index.schema())?;
     let memory =
         memory_by_id(conn, id)?.ok_or_else(|| anyhow!("memory not found for index: {id}"))?;
-    let mut writer = index.writer(50_000_000)?;
-    writer.delete_term(Term::from_field_text(fields.id, id));
-    add_memory_doc(&mut writer, &fields, &memory)?;
-    writer.commit()?;
+    search_index::upsert(&app.index_path, &indexed_memory(&memory))?;
     Ok(())
 }
 
-fn add_memory_doc(writer: &mut IndexWriter, fields: &IndexFields, memory: &Memory) -> Result<()> {
-    writer.add_document(doc!(
-        fields.id => memory.id.clone(),
-        fields.name => memory.name.clone(),
-        fields.description => memory.description.clone().unwrap_or_default(),
-        fields.content => memory.content.clone().unwrap_or_default(),
-        fields.tags => memory.tags.clone(),
-        fields.scope => memory.scope.clone(),
-        fields.r#type => memory.r#type.clone(),
-    ))?;
-    Ok(())
-}
-
-fn fields_from_schema(schema: Schema) -> Result<IndexFields> {
-    Ok(IndexFields {
-        id: schema.get_field("id").context("index missing id field")?,
-        name: schema
-            .get_field("name")
-            .context("index missing name field")?,
-        description: schema
-            .get_field("description")
-            .context("index missing description field")?,
-        content: schema
-            .get_field("content")
-            .context("index missing content field")?,
-        tags: schema
-            .get_field("tags")
-            .context("index missing tags field")?,
-        scope: schema
-            .get_field("scope")
-            .context("index missing scope field")?,
-        r#type: schema
-            .get_field("type")
-            .context("index missing type field")?,
-    })
-}
-
-fn search_index(
+fn search_index_ids(
     app: &App,
     query: &str,
     fuzzy: bool,
     raw_query: bool,
     limit: usize,
 ) -> Result<Vec<String>> {
-    let index = ensure_index(&app.index_path)?;
-    let fields = fields_from_schema(index.schema())?;
-    let reader = index.reader()?;
-    let searcher = reader.searcher();
-    let query_text = if raw_query {
-        query.trim().to_string()
-    } else {
-        literal_query_text(query)
-    };
-    let boxed_query: Box<dyn tantivy::query::Query> = if query_text.is_empty() {
-        Box::new(AllQuery)
-    } else if fuzzy {
-        let terms = [fields.name, fields.description, fields.content, fields.tags]
-            .into_iter()
-            .map(|field| {
-                (
-                    Occur::Should,
-                    Box::new(FuzzyTermQuery::new(
-                        Term::from_field_text(field, &query_text),
-                        1,
-                        true,
-                    )) as Box<dyn tantivy::query::Query>,
-                )
-            })
-            .collect();
-        Box::new(BooleanQuery::new(terms))
-    } else {
-        let parser = QueryParser::for_index(
-            &index,
-            vec![fields.name, fields.description, fields.content, fields.tags],
-        );
-        Box::new(parser.parse_query(&query_text)?)
-    };
-    let docs = searcher.search(&boxed_query, &TopDocs::with_limit(limit))?;
-    let mut ids = Vec::new();
-    for (_score, address) in docs {
-        let retrieved = searcher.doc::<TantivyDocument>(address)?;
-        if let Some(value) = retrieved
-            .get_first(fields.id)
-            .and_then(|value| value.as_str())
-        {
-            ids.push(value.to_string());
-        }
+    search_index::search(&app.index_path, query, fuzzy, raw_query, limit)
+}
+
+fn indexed_memory(memory: &Memory) -> search_index::IndexedMemory {
+    search_index::IndexedMemory {
+        id: memory.id.clone(),
+        name: memory.name.clone(),
+        description: memory.description.clone(),
+        content: memory.content.clone(),
+        tags: memory.tags.clone(),
+        scope: memory.scope.clone(),
+        r#type: memory.r#type.clone(),
     }
-    Ok(ids)
 }
 
 fn detect_scope_set() -> Result<Vec<String>> {
@@ -2664,90 +1713,57 @@ fn detect_scope() -> Result<String> {
     Ok(remote_to_scope(remote.trim()))
 }
 
-fn remote_to_scope(remote: &str) -> String {
-    let cleaned = remote
-        .trim_end_matches(".git")
-        .replace("git@github.com:", "")
-        .replace("https://github.com/", "");
-    if cleaned.contains('/') {
-        format!("project:{cleaned}")
-    } else {
-        "global".to_string()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn memory_with_version(version: i64) -> Memory {
-        Memory {
-            id: "id".to_string(),
-            r#type: "feedback".to_string(),
-            name: "name".to_string(),
-            description: None,
-            content: Some("content".to_string()),
-            tags: "[]".to_string(),
-            scope: "global".to_string(),
-            source: "manual".to_string(),
-            confidence: "high".to_string(),
-            protected: true,
-            created_at: now(),
-            updated_at: now(),
-            expires_at: None,
-            valid_until: None,
-            superseded_by: None,
-            version,
-            access_count: 0,
-            last_accessed_at: None,
+    fn temp_app(name: &str) -> App {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("agent-knowledge-main-{name}-{stamp}"));
+        fs::create_dir_all(root.join("schema")).expect("schema dir");
+        fs::write(
+            root.join("schema/memory-schema.sql"),
+            include_str!("../../../schema/memory-schema.sql"),
+        )
+        .expect("schema");
+        App {
+            db_path: root.join("memory.db"),
+            index_path: root.join("index"),
+            schema_path: root.join("schema/memory-schema.sql"),
+            root,
         }
     }
 
     #[test]
-    fn source_priority_orders_trust() {
-        assert!(source_priority("manual") > source_priority("agent"));
-        assert!(source_priority("agent") > source_priority("daily_retro"));
-        assert!(source_priority("daily_retro") > source_priority("weekly_retro"));
-    }
+    fn upsert_index_failure_marks_stale() {
+        let app = temp_app("upsert-stale");
+        app.init().expect("init app");
+        let conn = app.conn().expect("open db");
+        conn.execute(
+            "INSERT INTO memories
+            (id, type, name, content, tags, scope, source, confidence, protected, created_at, updated_at)
+            VALUES ('broken_index', 'reference', 'broken_index', 'content', '[]', 'global', 'manual', 'high', 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .expect("insert memory");
 
-    #[test]
-    fn version_conflict_reports_mismatch() {
-        let memory = memory_with_version(3);
-        assert!(version_conflict(&memory, 3).is_none());
-        let conflict = version_conflict(&memory, 2).expect("conflict");
-        assert_eq!(conflict["status"], "version_conflict");
-        assert_eq!(conflict["actual_version"], 3);
-    }
+        fs::remove_dir_all(&app.index_path).expect("remove index");
+        fs::create_dir_all(&app.index_path).expect("index dir");
+        fs::write(
+            app.index_path.join("meta.json"),
+            "not valid tantivy metadata",
+        )
+        .expect("corrupt index");
 
-    #[test]
-    fn strips_common_secret_patterns() {
-        let stripped = strip_secrets("token=Bearer abcdefghijklmnop password=hunter2").unwrap();
-        assert!(stripped.contains("[REDACTED]"));
-        assert!(!stripped.contains("hunter2"));
-    }
+        let result = upsert_index_or_mark_stale(&app, &conn, "broken_index");
 
-    #[test]
-    fn parses_string_arrays_only() {
-        assert_eq!(parse_string_array(r#"["a","b"]"#).unwrap(), vec!["a", "b"]);
-        assert!(parse_string_array(r#"["a",1]"#).is_err());
-        assert!(parse_string_array(r#"{"a":1}"#).is_err());
-    }
-
-    #[test]
-    fn content_similarity_handles_cjk_overlap() {
-        let score = content_similarity("不要使用 emoji", "不要在回覆中使用 emoji");
-        assert!(score > 0.8);
-    }
-
-    #[test]
-    fn remote_scope_supports_ssh_and_https() {
-        assert_eq!(
-            remote_to_scope("git@github.com:NeoHsu/agent-knowledge.git"),
-            "project:NeoHsu/agent-knowledge"
-        );
-        assert_eq!(
-            remote_to_scope("https://github.com/NeoHsu/agent-knowledge.git"),
-            "project:NeoHsu/agent-knowledge"
-        );
+        assert!(result.is_err());
+        assert!(index_state::is_stale(&app.index_path));
+        assert!(index_dirty_in_db(&app).expect("index dirty state"));
+        fs::remove_dir_all(app.root).ok();
     }
 }

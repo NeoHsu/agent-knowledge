@@ -39,6 +39,12 @@ CREATE TABLE IF NOT EXISTS changelog (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_type ON memories(type);
 CREATE INDEX IF NOT EXISTS idx_scope ON memories(scope);
 CREATE INDEX IF NOT EXISTS idx_expires ON memories(expires_at);

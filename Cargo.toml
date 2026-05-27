@@ -1,5 +1,8 @@
-[package]
-name = "agent-knowledge"
+[workspace]
+members = ["crates/mem-core", "crates/mem-cli"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.3"
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -7,11 +10,7 @@ repository = "https://github.com/NeoHsu/agent-knowledge"
 homepage = "https://github.com/NeoHsu/agent-knowledge"
 rust-version = "1.88"
 
-[[bin]]
-name = "mem"
-path = "src/main.rs"
-
-[dependencies]
+[workspace.dependencies]
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
