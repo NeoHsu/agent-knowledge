@@ -28,10 +28,13 @@ cp "$ROOT/schema/memory-schema.sql" "$WORKDIR/schema/memory-schema.sql"
     --tags '["smoke:test"]' \
     --content "release smoke searchable content" \
     --force >/dev/null
-  "$MEM_BIN" query "searchable" --no-touch | grep -q "smoke_release"
+  query_output="$("$MEM_BIN" query "searchable" --no-touch)"
+  [[ "$query_output" == *smoke_release* ]]
   "$MEM_BIN" reindex >/dev/null
-  "$MEM_BIN" query "release smoke" --no-touch | grep -q "smoke_release"
-  "$MEM_BIN" export --format json | grep -q "smoke_release"
+  query_output="$("$MEM_BIN" query "release smoke" --no-touch)"
+  [[ "$query_output" == *smoke_release* ]]
+  export_output="$("$MEM_BIN" export --format json)"
+  [[ "$export_output" == *smoke_release* ]]
 )
 
 echo "release smoke ok"

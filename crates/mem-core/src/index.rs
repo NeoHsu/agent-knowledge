@@ -62,7 +62,6 @@ pub fn repair_stale(app: &App) -> Result<()> {
     if !is_stale(app) {
         return Ok(());
     }
-    eprintln!("index is stale; rebuilding before search");
     reindex_or_mark_stale(app, "repair stale index")
 }
 
