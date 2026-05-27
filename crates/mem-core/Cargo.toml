@@ -12,7 +12,6 @@ anyhow.workspace = true
 chrono.workspace = true
 fs2.workspace = true
 lindera.workspace = true
-lindera-tantivy.workspace = true
 regex.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
