@@ -9,13 +9,22 @@ Goal: improve memory quality. Weekly retro reads `changelog`, `memory.db`, and `
 3. Run `bin/mem ambiguity list --pending` when resolving conflicts.
 4. Review `audit` and `stats` sections from the retro bundle.
 5. Identify duplicate or near-duplicate memories.
-6. Promote repeated patterns into a skill or reference document when useful.
-7. Calibrate confidence:
+6. Identify stale workflow steps, workflows with repeated failures, and repeated manual procedures that should become workflow memory.
+7. Promote stable cross-project execution policy into a skill or reference document when useful.
+8. Calibrate confidence:
    - frequently accessed low confidence can become medium after review
    - stale medium confidence can be downgraded or marked for cleanup
-8. Resolve ambiguities when scope or newer evidence makes the answer clear.
-9. Run `bin/mem audit --fix` if deterministic repairs are needed.
-10. Commit and push.
+9. Resolve ambiguities when scope or newer evidence makes the answer clear.
+10. Run `bin/mem audit --fix` if deterministic repairs are needed.
+11. Commit and push.
+
+The promotion direction is:
+
+```text
+repeated facts/preferences -> memory
+repeated project procedures -> workflow memory
+stable cross-project execution policy -> skill
+```
 
 ## Output
 
@@ -27,5 +36,6 @@ Weekly memory retro:
 - confidence changes: 3
 - pending ambiguities: 1
 - cleanup candidates: 4
+- workflow candidates: ...
 - skill candidates: ...
 ```

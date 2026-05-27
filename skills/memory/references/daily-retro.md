@@ -8,11 +8,12 @@ Goal: extract durable knowledge missed during the day and keep `memory.db` curre
 2. Run `bin/mem retro daily` to get active memories, recent changelog, pending ambiguities, stats, and audit context.
 3. Compare available platform context with existing memory.
 4. Save new facts with `source=daily_retro`.
-5. Update or supersede stale memories when evidence is clear.
-6. Add ambiguity records when two memories conflict or scope is unclear.
-7. Run `bin/mem stats` and `bin/mem audit`.
-8. Report concise counts and unresolved questions.
-9. Commit and push the repository.
+5. Detect repeated manual procedures and suggest or save `type=workflow` memories when they are durable.
+6. Update or supersede stale memories when evidence is clear.
+7. Add ambiguity records when two memories conflict or scope is unclear.
+8. Run `bin/mem stats` and `bin/mem audit`.
+9. Report concise counts and unresolved questions.
+10. Commit and push the repository.
 
 ## What to Save
 
@@ -20,6 +21,7 @@ Goal: extract durable knowledge missed during the day and keep `memory.db` curre
 - Explicit corrections.
 - Project decisions, deadlines, owners, constraints.
 - Stable references to systems, repos, docs, or workflows.
+- Repeated project procedures as `type=workflow` with `workflow:*` and `intent:*` tags.
 
 ## What Not to Save
 

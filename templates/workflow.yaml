@@ -1,0 +1,26 @@
+schema_version: 1
+goal: Describe the recurring task outcome.
+triggers:
+  - user asks for this recurring task
+preconditions:
+  - required repository or system context is available
+steps:
+  - id: inspect
+    check: confirm the current state and relevant inputs
+    verify: the task scope and safety conditions are understood
+  - id: act
+    manual: perform the smallest appropriate action
+    verify: the action completed as intended
+  - id: risky-step
+    run: command that has external side effects
+    confirm: true
+    verify: external side effect completed as expected
+stop_conditions:
+  - required access is missing
+  - unrelated dirty files or unsafe state exist
+  - a verification step fails
+outputs:
+  - concise summary of actions taken
+  - links, commits, or artifacts produced
+post_run_memory:
+  - save durable failures, lessons, or confirmed workflow changes

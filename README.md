@@ -7,7 +7,11 @@ Portable agent memory system. The repository owns the `mem` CLI, schema, skill i
 ```bash
 bin/mem init
 bin/mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
+bin/mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file workflows/release.yaml
 bin/mem query "emoji"
+bin/mem query "release" --type workflow
+bin/mem workflow find release --scope auto
+bin/mem workflow validate release_runbook
 bin/mem query "name:no_emoji" --raw-query --no-touch
 bin/mem import memories.json
 bin/mem merge /path/to/theirs.db
@@ -21,6 +25,10 @@ bin/mem export --format markdown
 The multilingual tokenizer uses `lindera-tantivy` with embedded CC-CEDICT for Chinese tokenization. This pins Tantivy to 0.25 because `lindera-tantivy 2.0.0` is not yet compatible with Tantivy 0.26.
 
 Session readers are optional adapters. Retrospectives should use platform-provided conversation history when available, then use `bin/mem retro daily|weekly` for repository state.
+
+## Development
+
+`mise.toml` pins the local Rust MSRV toolchain and Zig C toolchain used in restricted environments. Run `mise install` when setting up a fresh checkout. If the host has no `cc`, expose a `cc` shim that delegates to `zig cc` before running Cargo; the OpenAB environment keeps that shim in `/home/node/bin`.
 
 ## Runtime Model
 
@@ -38,3 +46,13 @@ CI/release
 `mem` discovers the active store from the current directory when it contains `schema/memory-schema.sql`; otherwise it walks from the executable location and finally falls back to `AGENT_KNOWLEDGE_HOME` or `~/.agent-knowledge`.
 
 Writes update SQLite in a transaction, write changelog rows, and then update the Tantivy index. If the index is stale, run `bin/mem reindex`.
+
+## Memory Types
+
+Supported memory types are `user`, `feedback`, `project`, `reference`, `preference`, and `workflow`.
+
+Workflow memories store recurring task runbooks as YAML or JSON text. They are searchable knowledge, not executable automation: agents read them, verify each checkpoint, and ask before risky steps such as push, publish, deploy, release, destructive commands, secret changes, or production access.
+
+Use `templates/workflow.yaml` as the baseline shape for new workflow memories.
+
+Workflow content is validated on save/import unless `--no-validate-workflow` is passed. Merge also validates workflow records; invalid incoming workflows are skipped and recorded as pending ambiguity records for human review. Required fields are `schema_version`, `goal`, `triggers`, `steps`, and `stop_conditions`; each step needs an `id` and at least one of `run`, `check`, `manual`, or `ask`. Workflow tags must include `workflow:*`, and project-scoped workflows must include the matching `project:<owner/repo>` tag.

@@ -4,6 +4,7 @@
 
 ```bash
 bin/mem save --type feedback --name pr_small --scope "project:example/ot-product" --source agent --tags '["style:review","decision:pr-size"]' --content "PR 拆小逐個 review"
+bin/mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file workflows/release.yaml
 ```
 
 Confidence is inferred from source unless `--confidence` is provided:
@@ -13,9 +14,11 @@ Confidence is inferred from source unless `--confidence` is provided:
 - `daily_retro`: low
 - `weekly_retro`: low
 
-`save` strips common API keys, bearer tokens, and password/secret assignments before persistence.
+`save` accepts inline `--content` or `--content-file`. It strips common API keys, bearer tokens, and password/secret assignments before persistence.
 
 Without `--force`, `save` returns `duplicate_found` for an exact name match and `similar_found` for high-overlap content. The caller should decide whether to skip, update, or supersede. With `--force`, an exact-name save updates the existing memory only if the incoming source is at least as trusted as the existing source.
+
+Workflow memories are validated on save/import unless `--no-validate-workflow` is passed. Merge validates workflow records too; invalid incoming workflows are not imported automatically and are recorded as pending ambiguity records for human review. Required fields are `schema_version`, `goal`, `triggers`, `steps`, and `stop_conditions`; each step needs `id` plus one of `run`, `check`, `manual`, or `ask`. Use `templates/workflow.yaml` as the baseline template.
 
 ## Query
 
@@ -23,6 +26,7 @@ Without `--force`, `save` returns `duplicate_found` for an exact name match and 
 bin/mem query "security review"
 bin/mem query "部署流程" --scope auto
 bin/mem query --type feedback
+bin/mem query "release" --type workflow --scope auto
 bin/mem query --tags "domain:security"
 bin/mem query --sort time
 bin/mem query --sort access-count
@@ -42,6 +46,7 @@ Query updates `access_count` and `last_accessed_at`; use `--no-touch` for read-o
 
 ```bash
 bin/mem update no_emoji --content "不要在回覆中使用 emoji"
+bin/mem update release_runbook --content-file workflows/release.yaml
 bin/mem update no_emoji --expected-version 2 --content "不要在回覆中使用 emoji"
 bin/mem update no_emoji --add-tags '["style:output"]'
 bin/mem supersede old_policy new_policy --expected-version 3 --content "新的政策內容"
@@ -51,6 +56,17 @@ bin/mem delete old_policy --hard --force
 
 Soft delete sets `valid_until`. Hard delete removes the row; protected memories require `--force`.
 `--expected-version` returns `version_conflict` if the stored memory changed after the caller read it.
+
+## Workflow
+
+```bash
+bin/mem workflow list --scope auto
+bin/mem workflow find release --scope auto
+bin/mem workflow show release_runbook
+bin/mem workflow validate release_runbook
+```
+
+Workflow helpers discover, display, and validate workflow memories. They never execute workflow commands. Agents execute runbook steps themselves, verify checkpoints, and ask before risky side effects.
 
 ## Ambiguity
 
@@ -67,7 +83,7 @@ bin/mem ambiguity resolve 1 --keep pr_small --soft-delete-others
 ## History and Maintenance
 
 ```bash
-bin/mem history --recent
+bin/mem history
 bin/mem history no_emoji
 bin/mem stats
 bin/mem audit
@@ -87,6 +103,7 @@ bin/mem export --format json
 bin/mem export --format markdown
 bin/mem import memories.json
 bin/mem import note.md --type reference
+bin/mem import workflows.json --no-validate-workflow
 ```
 
 `import` emits one summary JSON object:
