@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS memories (
     id TEXT PRIMARY KEY,
-    type TEXT NOT NULL CHECK (type IN ('user', 'feedback', 'project', 'reference', 'preference')),
+    type TEXT NOT NULL CHECK (type IN ('user', 'feedback', 'project', 'reference', 'preference', 'workflow')),
     name TEXT NOT NULL UNIQUE,
     description TEXT,
     content TEXT,

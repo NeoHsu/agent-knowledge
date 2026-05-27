@@ -15,6 +15,7 @@ use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use serde_yaml::Value as YamlValue;
 use tantivy::collector::TopDocs;
 use tantivy::query::{AllQuery, BooleanQuery, FuzzyTermQuery, Occur, QueryParser};
 use tantivy::schema::{
@@ -24,7 +25,7 @@ use tantivy::schema::{
 use tantivy::{doc, Index, IndexWriter, TantivyDocument, Term};
 
 const DEFAULT_LIMIT: usize = 20;
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 #[derive(Parser)]
 #[command(name = "mem", version, about = "Portable agent memory CLI")]
@@ -54,6 +55,10 @@ enum Command {
         #[command(subcommand)]
         command: RetroCommand,
     },
+    Workflow {
+        #[command(subcommand)]
+        command: WorkflowCommand,
+    },
     Ambiguity {
         #[command(subcommand)]
         command: AmbiguityCommand,
@@ -69,7 +74,9 @@ struct SaveArgs {
     #[arg(long)]
     description: Option<String>,
     #[arg(long)]
-    content: String,
+    content: Option<String>,
+    #[arg(long)]
+    content_file: Option<PathBuf>,
     #[arg(long, default_value = "[]")]
     tags: String,
     #[arg(long, default_value = "global")]
@@ -84,6 +91,8 @@ struct SaveArgs {
     why: Option<String>,
     #[arg(long)]
     force: bool,
+    #[arg(long)]
+    no_validate_workflow: bool,
 }
 
 #[derive(Args)]
@@ -126,6 +135,8 @@ struct UpdateArgs {
     #[arg(long)]
     content: Option<String>,
     #[arg(long)]
+    content_file: Option<PathBuf>,
+    #[arg(long)]
     description: Option<String>,
     #[arg(long)]
     add_tags: Option<String>,
@@ -133,6 +144,8 @@ struct UpdateArgs {
     source: String,
     #[arg(long)]
     expected_version: Option<i64>,
+    #[arg(long)]
+    no_validate_workflow: bool,
 }
 
 #[derive(Args)]
@@ -140,13 +153,17 @@ struct SupersedeArgs {
     old_name: String,
     new_name: String,
     #[arg(long)]
-    content: String,
+    content: Option<String>,
+    #[arg(long)]
+    content_file: Option<PathBuf>,
     #[arg(long)]
     description: Option<String>,
     #[arg(long, default_value = "agent")]
     source: String,
     #[arg(long)]
     expected_version: Option<i64>,
+    #[arg(long)]
+    no_validate_workflow: bool,
 }
 
 #[derive(Args)]
@@ -171,8 +188,6 @@ struct ContextArgs {
 #[derive(Args)]
 struct HistoryArgs {
     name: Option<String>,
-    #[arg(long)]
-    recent: bool,
     #[arg(long)]
     action: Option<String>,
     #[arg(long, default_value_t = 20)]
@@ -212,6 +227,8 @@ struct ImportArgs {
     r#type: Option<String>,
     #[arg(long, default_value = "manual")]
     source: String,
+    #[arg(long)]
+    no_validate_workflow: bool,
 }
 
 #[derive(Args)]
@@ -225,6 +242,43 @@ struct MergeArgs {
 enum RetroCommand {
     Daily(RetroArgs),
     Weekly(RetroArgs),
+}
+
+#[derive(Subcommand)]
+enum WorkflowCommand {
+    List(WorkflowListArgs),
+    Show(WorkflowShowArgs),
+    Find(WorkflowFindArgs),
+    Validate(WorkflowValidateArgs),
+}
+
+#[derive(Args)]
+struct WorkflowListArgs {
+    #[arg(long)]
+    scope: Option<String>,
+    #[arg(long, default_value_t = DEFAULT_LIMIT)]
+    limit: usize,
+    #[arg(long)]
+    include_superseded: bool,
+}
+
+#[derive(Args)]
+struct WorkflowShowArgs {
+    reference: String,
+}
+
+#[derive(Args)]
+struct WorkflowFindArgs {
+    intent: String,
+    #[arg(long)]
+    scope: Option<String>,
+    #[arg(long, default_value_t = DEFAULT_LIMIT)]
+    limit: usize,
+}
+
+#[derive(Args)]
+struct WorkflowValidateArgs {
+    reference: String,
 }
 
 #[derive(Args)]
@@ -337,6 +391,7 @@ fn main() -> Result<()> {
         Command::Import(args) => with_lock(&app, || cmd_import(&app, args))?,
         Command::Merge(args) => with_lock(&app, || cmd_merge(&app, args))?,
         Command::Retro { command } => cmd_retro(&app, command)?,
+        Command::Workflow { command } => cmd_workflow(&app, command)?,
         Command::Ambiguity { command } => with_lock(&app, || cmd_ambiguity(&app, command))?,
     }
 
@@ -448,9 +503,55 @@ fn migrate_schema(conn: &Connection) -> Result<()> {
     if version > SCHEMA_VERSION {
         bail!("database schema version {version} is newer than supported version {SCHEMA_VERSION}");
     }
+    if version < 2 {
+        migrate_memories_type_check_v2(conn)?;
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+        return Ok(());
+    }
     if version == 0 {
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     }
+    Ok(())
+}
+
+fn migrate_memories_type_check_v2(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS memories_v2 (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL CHECK (type IN ('user', 'feedback', 'project', 'reference', 'preference', 'workflow')),
+            name TEXT NOT NULL UNIQUE,
+            description TEXT,
+            content TEXT,
+            tags TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(tags) AND json_type(tags) = 'array'),
+            scope TEXT DEFAULT 'global',
+            source TEXT NOT NULL CHECK (source IN ('manual', 'agent', 'daily_retro', 'weekly_retro')),
+            confidence TEXT DEFAULT 'medium' CHECK (confidence IN ('high', 'medium', 'low')),
+            protected BOOLEAN DEFAULT FALSE CHECK (protected IN (0, 1)),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME,
+            valid_until DATETIME,
+            superseded_by TEXT,
+            version INTEGER DEFAULT 1 CHECK (version >= 1),
+            access_count INTEGER DEFAULT 0 CHECK (access_count >= 0),
+            last_accessed_at DATETIME
+        );
+        INSERT INTO memories_v2
+        SELECT id, type, name, description, content, tags, scope, source, confidence, protected,
+               created_at, updated_at, expires_at, valid_until, superseded_by, version,
+               access_count, last_accessed_at
+        FROM memories;
+        DROP TABLE memories;
+        ALTER TABLE memories_v2 RENAME TO memories;
+        CREATE INDEX IF NOT EXISTS idx_type ON memories(type);
+        CREATE INDEX IF NOT EXISTS idx_scope ON memories(scope);
+        CREATE INDEX IF NOT EXISTS idx_expires ON memories(expires_at);
+        CREATE INDEX IF NOT EXISTS idx_source ON memories(source);
+        CREATE INDEX IF NOT EXISTS idx_valid_until ON memories(valid_until);
+        CREATE INDEX IF NOT EXISTS idx_access ON memories(access_count);
+        CREATE INDEX IF NOT EXISTS idx_confidence ON memories(confidence);",
+    )
+    .context("migrate memories type constraint to schema v2")?;
     Ok(())
 }
 
@@ -469,13 +570,21 @@ fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
     Ok(())
 }
 
-fn save_memory(app: &App, args: SaveArgs) -> Result<Value> {
+fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
     app.init()?;
     validate_tags(&args.tags)?;
+    let raw_content = required_content(args.content.take(), args.content_file.as_deref())?;
+    validate_workflow_memory(
+        &args.r#type,
+        &raw_content,
+        &args.tags,
+        &args.scope,
+        args.no_validate_workflow,
+    )?;
 
     let conn = app.conn()?;
     if let Some(existing) = memory_by_name(&conn, &args.name)? {
-        let content = strip_secrets(&args.content)?;
+        let content = strip_secrets(&raw_content)?;
         if args.force {
             if source_priority(&args.source) < source_priority(&existing.source) {
                 return Ok(json!({
@@ -546,7 +655,7 @@ fn save_memory(app: &App, args: SaveArgs) -> Result<Value> {
         }));
     }
 
-    let content = strip_secrets(&args.content)?;
+    let content = strip_secrets(&raw_content)?;
     if !args.force {
         let candidates = similar_candidates(app, &conn, &content, 5)?;
         if !candidates.is_empty() {
@@ -713,7 +822,7 @@ fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
         );
         return Ok(());
     }
-    let new_content = match args.content {
+    let new_content = match optional_content(args.content, args.content_file.as_deref())? {
         Some(content) => Some(strip_secrets(&content)?),
         None => old.content.clone(),
     };
@@ -722,6 +831,13 @@ fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
         Some(add) => merge_tags(&old.tags, &add)?,
         None => old.tags.clone(),
     };
+    validate_workflow_memory(
+        &old.r#type,
+        new_content.as_deref().unwrap_or_default(),
+        &tags,
+        &old.scope,
+        args.no_validate_workflow,
+    )?;
     let now = now();
 
     with_db_transaction(&conn, |conn| {
@@ -778,7 +894,15 @@ fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
     }
     let new_id = unique_memory_id(&conn, &slugify(&args.new_name))?;
     let now = now();
-    let content = strip_secrets(&args.content)?;
+    let raw_content = required_content(args.content, args.content_file.as_deref())?;
+    validate_workflow_memory(
+        &old.r#type,
+        &raw_content,
+        &old.tags,
+        &old.scope,
+        args.no_validate_workflow,
+    )?;
+    let content = strip_secrets(&raw_content)?;
     let confidence = confidence_for_source(&args.source);
     let protected = args.source == "manual";
 
@@ -1118,7 +1242,11 @@ fn cmd_export(app: &App, args: ExportArgs) -> Result<()> {
     Ok(())
 }
 
-fn save_args_from_import_value(value: Value, source: &str) -> Result<SaveArgs> {
+fn save_args_from_import_value(
+    value: Value,
+    source: &str,
+    no_validate_workflow: bool,
+) -> Result<SaveArgs> {
     let name = value
         .get("name")
         .and_then(Value::as_str)
@@ -1138,11 +1266,9 @@ fn save_args_from_import_value(value: Value, source: &str) -> Result<SaveArgs> {
             .get("description")
             .and_then(Value::as_str)
             .map(str::to_string),
-        content: content.to_string(),
-        tags: value
-            .get("tags")
-            .map(Value::to_string)
-            .unwrap_or_else(|| "[]".to_string()),
+        content: Some(content.to_string()),
+        content_file: None,
+        tags: import_tags(&value)?,
         scope: value
             .get("scope")
             .and_then(Value::as_str)
@@ -1156,6 +1282,7 @@ fn save_args_from_import_value(value: Value, source: &str) -> Result<SaveArgs> {
             .map(str::to_string),
         why: None,
         force: false,
+        no_validate_workflow,
     })
 }
 
@@ -1165,6 +1292,21 @@ fn result_status(result: &Value) -> String {
         .and_then(Value::as_str)
         .unwrap_or("unknown")
         .to_string()
+}
+
+fn import_tags(value: &Value) -> Result<String> {
+    match value.get("tags") {
+        Some(Value::String(tags)) => {
+            validate_tags(tags)?;
+            Ok(tags.clone())
+        }
+        Some(tags) => {
+            let tags = tags.to_string();
+            validate_tags(&tags)?;
+            Ok(tags)
+        }
+        None => Ok("[]".to_string()),
+    }
 }
 
 fn increment_count(counts: &mut serde_json::Map<String, Value>, status: &str) {
@@ -1182,8 +1324,9 @@ fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
     if args.file.extension().and_then(|s| s.to_str()) == Some("json") {
         let values: Vec<Value> = serde_json::from_str(&text).context("parse json import")?;
         for (index, value) in values.into_iter().enumerate() {
-            let import_result = save_args_from_import_value(value, &args.source)
-                .and_then(|save_args| save_memory(app, save_args));
+            let import_result =
+                save_args_from_import_value(value, &args.source, args.no_validate_workflow)
+                    .and_then(|save_args| save_memory(app, save_args));
             match import_result {
                 Ok(result) => {
                     let status = result_status(&result);
@@ -1217,7 +1360,8 @@ fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
                 r#type: args.r#type.unwrap_or_else(|| "reference".to_string()),
                 name,
                 description: None,
-                content: text,
+                content: Some(text),
+                content_file: None,
                 tags: "[]".to_string(),
                 scope: "global".to_string(),
                 source: args.source,
@@ -1225,6 +1369,7 @@ fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
                 expires_at: None,
                 why: None,
                 force: false,
+                no_validate_workflow: args.no_validate_workflow,
             },
         )?;
         let status = result_status(&result);
@@ -1263,12 +1408,18 @@ fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
     let mut trusted_updates = 0;
     let mut rejected_lower_trust = 0;
     let mut regenerated_ids = 0;
+    let mut workflow_review_required = 0;
     let mut changed_index_ids = Vec::new();
 
     with_db_transaction(&conn, |conn| {
         for mut memory in incoming {
             if let Some(content) = memory.content.take() {
                 memory.content = Some(strip_secrets(&content)?);
+            }
+            if let Err(err) = validate_workflow_record_content(&memory) {
+                add_workflow_review_record(conn, &args.db, &memory, &err)?;
+                workflow_review_required += 1;
+                continue;
             }
 
             if let Some(existing) = memory_by_name(conn, &memory.name)? {
@@ -1360,6 +1511,7 @@ fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
             "conflicts": conflicts,
             "trusted_updates": trusted_updates,
             "rejected_lower_trust": rejected_lower_trust,
+            "workflow_review_required": workflow_review_required,
             "regenerated_ids": regenerated_ids
         }))?
     );
@@ -1399,12 +1551,15 @@ fn cmd_retro(app: &App, command: RetroCommand) -> Result<()> {
             "Use platform-provided conversation context; repo readers are optional adapters.",
             "Compare today's conversation facts against active_memories.",
             "Persist durable new facts with source=daily_retro.",
+            "Detect repeated manual procedures and suggest type=workflow memories.",
             "Use update/supersede/delete with --expected-version when changing existing memory.",
             "Record unresolved conflicts with mem ambiguity add.",
         ],
         _ => vec![
             "Review memory quality from changelog, audit, and pending ambiguities.",
-            "Merge duplicates, resolve ambiguities, and identify skill/profile candidates.",
+            "Merge duplicates, resolve ambiguities, and identify workflow/profile/skill candidates.",
+            "Detect stale workflow steps and workflows with repeated failures.",
+            "Prefer repeated project procedures as workflow memory; reserve skills for stable cross-project execution policy.",
             "Calibrate low-confidence high-access memories after review.",
             "Use audit --fix only for deterministic repairs.",
         ],
@@ -1424,6 +1579,52 @@ fn cmd_retro(app: &App, command: RetroCommand) -> Result<()> {
             "active_memories": active_memories
         }))?
     );
+    Ok(())
+}
+
+fn cmd_workflow(app: &App, command: WorkflowCommand) -> Result<()> {
+    app.init()?;
+    let conn = app.conn()?;
+    match command {
+        WorkflowCommand::List(args) => {
+            let scope_filter = workflow_scope_filter(args.scope.as_deref())?;
+            let mut workflows = all_workflows(&conn, args.include_superseded)?;
+            retain_scope(&mut workflows, scope_filter.as_deref());
+            workflows.truncate(args.limit);
+            println!("{}", serde_json::to_string_pretty(&workflows)?);
+        }
+        WorkflowCommand::Show(args) => {
+            let workflow = workflow_by_ref(&conn, &args.reference)?;
+            println!("{}", serde_json::to_string_pretty(&workflow)?);
+        }
+        WorkflowCommand::Find(args) => {
+            let scope_filter = workflow_scope_filter(args.scope.as_deref())?;
+            let mut workflows = all_workflows(&conn, false)?;
+            retain_scope(&mut workflows, scope_filter.as_deref());
+            workflows.retain(|workflow| workflow_matches_intent(workflow, &args.intent));
+            workflows.sort_by_key(|workflow| {
+                std::cmp::Reverse(workflow_rank(
+                    workflow,
+                    &args.intent,
+                    scope_filter.as_deref(),
+                ))
+            });
+            workflows.truncate(args.limit);
+            println!("{}", serde_json::to_string_pretty(&workflows)?);
+        }
+        WorkflowCommand::Validate(args) => {
+            let workflow = workflow_by_ref(&conn, &args.reference)?;
+            validate_workflow_record(&workflow)?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "status": "valid",
+                    "id": workflow.id,
+                    "name": workflow.name
+                }))?
+            );
+        }
+    }
     Ok(())
 }
 
@@ -1585,6 +1786,25 @@ fn slugify(name: &str) -> String {
     }
 }
 
+fn required_content(content: Option<String>, content_file: Option<&Path>) -> Result<String> {
+    optional_content(content, content_file)?
+        .ok_or_else(|| anyhow!("one of --content or --content-file is required"))
+}
+
+fn optional_content(
+    content: Option<String>,
+    content_file: Option<&Path>,
+) -> Result<Option<String>> {
+    match (content, content_file) {
+        (Some(_), Some(_)) => bail!("use only one of --content or --content-file"),
+        (Some(content), None) => Ok(Some(content)),
+        (None, Some(path)) => fs::read_to_string(path)
+            .with_context(|| format!("read {}", path.display()))
+            .map(Some),
+        (None, None) => Ok(None),
+    }
+}
+
 fn validate_tags(tags: &str) -> Result<()> {
     parse_string_array(tags)?;
     Ok(())
@@ -1605,6 +1825,111 @@ fn parse_string_array(raw: &str) -> Result<Vec<String>> {
                 .ok_or_else(|| anyhow!("array items must be strings"))
         })
         .collect()
+}
+
+fn validate_workflow_memory(
+    memory_type: &str,
+    content: &str,
+    tags: &str,
+    scope: &str,
+    no_validate_workflow: bool,
+) -> Result<()> {
+    if memory_type != "workflow" || no_validate_workflow {
+        return Ok(());
+    }
+    validate_workflow_content(content)?;
+    let tags = parse_string_array(tags)?;
+    validate_workflow_tags(&tags, scope)?;
+    Ok(())
+}
+
+fn validate_workflow_record(memory: &Memory) -> Result<()> {
+    if memory.r#type != "workflow" {
+        bail!("memory is not a workflow: {}", memory.name);
+    }
+    validate_workflow_record_content(memory)
+}
+
+fn validate_workflow_record_content(memory: &Memory) -> Result<()> {
+    validate_workflow_memory(
+        &memory.r#type,
+        memory.content.as_deref().unwrap_or_default(),
+        &memory.tags,
+        &memory.scope,
+        false,
+    )
+}
+
+fn validate_workflow_tags(tags: &[String], scope: &str) -> Result<()> {
+    if !tags.iter().any(|tag| tag.starts_with("workflow:")) {
+        bail!("workflow memory requires at least one workflow:* tag");
+    }
+    if scope.starts_with("project:") && !tags.iter().any(|tag| tag == scope) {
+        bail!("project-scoped workflow requires matching {scope} tag");
+    }
+    Ok(())
+}
+
+fn validate_workflow_content(content: &str) -> Result<()> {
+    let value: YamlValue = serde_yaml::from_str(content).context("parse workflow YAML/JSON")?;
+    let mapping = value
+        .as_mapping()
+        .ok_or_else(|| anyhow!("workflow content must be a YAML/JSON object"))?;
+    for field in [
+        "schema_version",
+        "goal",
+        "triggers",
+        "steps",
+        "stop_conditions",
+    ] {
+        yaml_get(mapping, field)
+            .ok_or_else(|| anyhow!("workflow missing required field: {field}"))?;
+    }
+    require_non_empty_sequence(mapping, "triggers")?;
+    require_non_empty_sequence(mapping, "stop_conditions")?;
+    let steps = yaml_get(mapping, "steps")
+        .and_then(YamlValue::as_sequence)
+        .ok_or_else(|| anyhow!("workflow steps must be a non-empty array"))?;
+    if steps.is_empty() {
+        bail!("workflow steps must be a non-empty array");
+    }
+    for (index, step) in steps.iter().enumerate() {
+        let step_mapping = step
+            .as_mapping()
+            .ok_or_else(|| anyhow!("workflow step {index} must be an object"))?;
+        let id = yaml_get(step_mapping, "id")
+            .and_then(YamlValue::as_str)
+            .unwrap_or_default();
+        if id.trim().is_empty() {
+            bail!("workflow step {index} requires non-empty id");
+        }
+        if !["run", "check", "manual", "ask"]
+            .iter()
+            .any(|key| yaml_get(step_mapping, key).is_some())
+        {
+            bail!("workflow step {id} requires one of run, check, manual, or ask");
+        }
+        if let Some(confirm) = yaml_get(step_mapping, "confirm") {
+            if !matches!(confirm, YamlValue::Bool(_)) {
+                bail!("workflow step {id} confirm must be boolean");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn yaml_get<'a>(mapping: &'a serde_yaml::Mapping, key: &str) -> Option<&'a YamlValue> {
+    mapping.get(YamlValue::String(key.to_string()))
+}
+
+fn require_non_empty_sequence(mapping: &serde_yaml::Mapping, field: &str) -> Result<()> {
+    let sequence = yaml_get(mapping, field)
+        .and_then(YamlValue::as_sequence)
+        .ok_or_else(|| anyhow!("workflow {field} must be a non-empty array"))?;
+    if sequence.is_empty() {
+        bail!("workflow {field} must be a non-empty array");
+    }
+    Ok(())
 }
 
 fn memory_has_tag(tags: &str, wanted: &str) -> bool {
@@ -1666,6 +1991,115 @@ fn all_memories(conn: &Connection) -> Result<Vec<Memory>> {
     let rows = stmt.query_map([], row_to_memory)?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
         .map_err(Into::into)
+}
+
+fn all_workflows(conn: &Connection, include_superseded: bool) -> Result<Vec<Memory>> {
+    let sql = if include_superseded {
+        "SELECT * FROM memories WHERE type = 'workflow' ORDER BY updated_at DESC"
+    } else {
+        "SELECT * FROM memories WHERE type = 'workflow' AND valid_until IS NULL ORDER BY updated_at DESC"
+    };
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt.query_map([], row_to_memory)?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
+}
+
+fn workflow_by_ref(conn: &Connection, reference: &str) -> Result<Memory> {
+    let memory_id = resolve_memory_ref(conn, reference)?;
+    let memory = memory_by_id(conn, &memory_id)?.expect("resolved memory exists");
+    if memory.r#type != "workflow" {
+        bail!("memory is not a workflow: {}", memory.name);
+    }
+    Ok(memory)
+}
+
+fn workflow_scope_filter(scope: Option<&str>) -> Result<Option<Vec<String>>> {
+    match scope {
+        Some("auto") => Ok(Some(detect_scope_set()?)),
+        Some(scope) => Ok(Some(vec!["global".to_string(), scope.to_string()])),
+        None => Ok(None),
+    }
+}
+
+fn retain_scope(memories: &mut Vec<Memory>, scope_filter: Option<&[String]>) {
+    if let Some(scopes) = scope_filter {
+        memories.retain(|memory| scopes.contains(&memory.scope));
+    }
+}
+
+fn workflow_matches_intent(memory: &Memory, intent: &str) -> bool {
+    let intent = intent.trim();
+    if intent.is_empty() {
+        return true;
+    }
+    let normalized_intent = normalized_text(intent);
+    if normalized_intent.is_empty() {
+        return true;
+    }
+    if workflow_has_intent_tag(memory, intent) {
+        return true;
+    }
+    [
+        memory.name.as_str(),
+        memory.description.as_deref().unwrap_or_default(),
+        memory.content.as_deref().unwrap_or_default(),
+        memory.tags.as_str(),
+    ]
+    .iter()
+    .any(|value| normalized_text(value).contains(&normalized_intent))
+}
+
+fn workflow_has_intent_tag(memory: &Memory, intent: &str) -> bool {
+    let exact_intent_tag = format!("intent:{}", intent.to_ascii_lowercase());
+    let exact_workflow_tag = format!("workflow:{}", intent.to_ascii_lowercase());
+    let normalized_intent = intent_key(intent);
+    parse_string_array(&memory.tags)
+        .map(|tags| {
+            tags.iter().any(|tag| {
+                let tag = tag.to_ascii_lowercase();
+                if tag == exact_intent_tag || tag == exact_workflow_tag {
+                    return true;
+                }
+                let Some((kind, value)) = tag.split_once(':') else {
+                    return false;
+                };
+                matches!(kind, "intent" | "workflow") && intent_key(value) == normalized_intent
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn intent_key(input: &str) -> String {
+    let mut key = String::new();
+    for ch in input.chars() {
+        if ch.is_ascii_alphanumeric() {
+            key.push(ch.to_ascii_lowercase());
+        } else if !key.ends_with('_') {
+            key.push('_');
+        }
+    }
+    key.trim_matches('_').to_string()
+}
+
+fn workflow_rank(memory: &Memory, intent: &str, scope_filter: Option<&[String]>) -> i64 {
+    let mut score = 0;
+    if let Some(scopes) = scope_filter {
+        if scopes.last().map(String::as_str) == Some(memory.scope.as_str())
+            && memory.scope != "global"
+        {
+            score += 100;
+        }
+    }
+    score += match memory.confidence.as_str() {
+        "high" => 30,
+        "medium" => 20,
+        _ => 10,
+    };
+    if workflow_has_intent_tag(memory, intent) {
+        score += 50;
+    }
+    score
 }
 
 fn active_expired_memories(conn: &Connection) -> Result<Vec<Memory>> {
@@ -1827,6 +2261,41 @@ fn add_ambiguity_record(
         params![query, memory_ids, context],
     )?;
     Ok(())
+}
+
+fn add_workflow_review_record(
+    conn: &Connection,
+    source_db: &Path,
+    memory: &Memory,
+    err: &anyhow::Error,
+) -> Result<()> {
+    let context = serde_json::to_string(&json!({
+        "kind": "workflow_validation_failed",
+        "source_db": source_db.display().to_string(),
+        "error": err.to_string(),
+        "incoming": {
+            "id": &memory.id,
+            "name": &memory.name,
+            "type": &memory.r#type,
+            "description": &memory.description,
+            "content": &memory.content,
+            "tags": &memory.tags,
+            "scope": &memory.scope,
+            "source": &memory.source,
+            "confidence": &memory.confidence,
+            "version": memory.version
+        },
+        "review": {
+            "action": "fix_or_reject_before_import",
+            "reason": "workflow memories must be valid before merge can import or update them"
+        }
+    }))?;
+    add_ambiguity_record(
+        conn,
+        &format!("merge workflow review:{}", memory.name),
+        std::slice::from_ref(&memory.id),
+        Some(&context),
+    )
 }
 
 fn similar_candidates(
