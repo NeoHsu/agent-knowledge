@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 
 use crate::{util::now, INDEX_DIRTY_KEY};
 
-pub const SCHEMA_VERSION: i64 = 3;
+pub(crate) const SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Memory {
@@ -42,6 +42,28 @@ pub fn migrate_schema(conn: &Connection) -> Result<()> {
     }
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
+}
+
+pub fn with_transaction<T, F>(conn: &Connection, f: F) -> Result<T>
+where
+    F: FnOnce(&Connection) -> Result<T>,
+{
+    conn.execute_batch("BEGIN IMMEDIATE TRANSACTION;")?;
+    let result = f(conn);
+    match result {
+        Ok(value) => {
+            if let Err(err) = conn.execute_batch("COMMIT;") {
+                let _ = conn.execute_batch("ROLLBACK;");
+                Err(err.into())
+            } else {
+                Ok(value)
+            }
+        }
+        Err(err) => {
+            let _ = conn.execute_batch("ROLLBACK;");
+            Err(err)
+        }
+    }
 }
 
 pub fn memory_by_name(conn: &Connection, name: &str) -> Result<Option<Memory>> {

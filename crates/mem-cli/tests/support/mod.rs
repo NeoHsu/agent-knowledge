@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -16,6 +18,7 @@ impl TestRepo {
         }
     }
 
+    #[allow(dead_code)]
     pub fn path(&self) -> &PathBuf {
         &self.path
     }
@@ -28,6 +31,7 @@ impl TestRepo {
         run(&self.path, args)
     }
 
+    #[allow(dead_code)]
     pub fn run_fail(&self, args: &[&str]) -> String {
         run_fail(&self.path, args)
     }
@@ -78,6 +82,7 @@ pub fn run(repo: &PathBuf, args: &[&str]) -> String {
     String::from_utf8(output.stdout).expect("utf8 stdout")
 }
 
+#[allow(dead_code)]
 pub fn run_fail(repo: &PathBuf, args: &[&str]) -> String {
     let output = Command::new(mem_bin())
         .current_dir(repo)

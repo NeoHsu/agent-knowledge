@@ -5,26 +5,30 @@ Portable agent memory system. The repository owns the `mem` CLI, schema, skill i
 ## Quick Start
 
 ```bash
-cargo run -p agent-knowledge --bin mem -- init
-cargo run -p agent-knowledge --bin mem -- save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
-cargo run -p agent-knowledge --bin mem -- save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file workflows/release.yaml
-cargo run -p agent-knowledge --bin mem -- query "emoji"
-cargo run -p agent-knowledge --bin mem -- query "release" --type workflow
-cargo run -p agent-knowledge --bin mem -- workflow find release --scope auto
-cargo run -p agent-knowledge --bin mem -- workflow validate release_runbook
-cargo run -p agent-knowledge --bin mem -- query "name:no_emoji" --raw-query --no-touch
-cargo run -p agent-knowledge --bin mem -- import memories.json
-cargo run -p agent-knowledge --bin mem -- merge /path/to/theirs.db
-cargo run -p agent-knowledge --bin mem -- retro daily
 scripts/build-release.sh
-cargo run -p agent-knowledge --bin mem -- export --format markdown
+export PATH="$PWD/target/release:$PATH"
+
+mem init
+mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
+mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file workflows/release.yaml
+mem query "emoji"
+mem query "release" --type workflow
+mem workflow find release --scope auto
+mem workflow validate release_runbook
+mem query "name:no_emoji" --raw-query --no-touch
+mem import memories.json
+mem merge /path/to/theirs.db
+mem retro daily
+mem export --format markdown
 ```
 
-`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo or local `AGENT_KNOWLEDGE_HOME`. `index/` is ignored and can be rebuilt with `cargo run -p agent-knowledge --bin mem -- reindex`.
+For source-only development, run commands as `cargo run -p agent-knowledge --bin mem -- <args>`.
+
+`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo or local `AGENT_KNOWLEDGE_HOME`. `index/` is ignored and can be rebuilt with `mem reindex`.
 
 The multilingual tokenizer uses `lindera-tantivy` with embedded CC-CEDICT for Chinese tokenization. This pins Tantivy to 0.25 because `lindera-tantivy 2.0.0` is not yet compatible with Tantivy 0.26.
 
-Session readers are optional adapters. Retrospectives should use platform-provided conversation history when available, then use `cargo run -p agent-knowledge --bin mem -- retro daily|weekly` for repository state.
+Session readers are optional adapters. Retrospectives should use platform-provided conversation history when available, then use `mem retro daily|weekly` for repository state.
 
 ## Development
 
@@ -45,7 +49,7 @@ CI/release
 
 `mem` discovers the active store from the current directory when it contains `schema/memory-schema.sql`; otherwise it walks from the executable location and finally falls back to `AGENT_KNOWLEDGE_HOME` or `~/.agent-knowledge`.
 
-Writes update SQLite in a transaction, write changelog rows, and then update the Tantivy index. If the index is stale, run `cargo run -p agent-knowledge --bin mem -- reindex`.
+Writes update SQLite in a transaction, write changelog rows, and then update the Tantivy index. If the index is stale, run `mem reindex`.
 
 ## Memory Types
 

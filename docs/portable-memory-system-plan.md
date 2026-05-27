@@ -286,7 +286,7 @@ mem ambiguity resolve <id>               # 標記已解決
 歷史
 ────
 mem history <name>                       # 查看某筆記憶的修改歷史（從 changelog）
-mem history --recent                     # 最近 20 筆操作
+mem history                              # 最近 20 筆操作
 mem history --action delete              # 篩選特定操作類型
 
 維護
