@@ -58,6 +58,23 @@ pub fn upsert_or_mark_stale(app: &App, conn: &Connection, id: &str) -> Result<()
     }
 }
 
+pub fn upsert_batch_or_mark_stale(app: &App, conn: &Connection, ids: &[String]) -> Result<()> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let memories: Vec<IndexedMemory> = ids
+        .iter()
+        .filter_map(|id| memory_by_id(conn, id).ok().flatten().map(|m| indexed_memory(&m)))
+        .collect();
+    match search_index::upsert_batch(&app.index_path, &memories) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            mark_stale(app, &format!("batch upsert: {err:#}")).context("mark index stale")?;
+            Err(err).context("batch index update failed; index marked stale; run `mem reindex`")
+        }
+    }
+}
+
 pub fn repair_stale(app: &App) -> Result<()> {
     if !is_stale(app) {
         return Ok(());
@@ -89,8 +106,18 @@ pub fn search_ids(
     fuzzy: bool,
     raw_query: bool,
     limit: usize,
+    type_filter: Option<&str>,
+    scope_filter: Option<&[String]>,
 ) -> Result<Vec<String>> {
-    search_index::search(&app.index_path, query, fuzzy, raw_query, limit)
+    search_index::search(
+        &app.index_path,
+        query,
+        fuzzy,
+        raw_query,
+        limit,
+        type_filter,
+        scope_filter,
+    )
 }
 
 fn indexed_memory(memory: &Memory) -> IndexedMemory {

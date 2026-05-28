@@ -39,7 +39,7 @@ pub(crate) use admin::{
 };
 pub(crate) use ambiguity::cmd_ambiguity;
 pub(crate) use io::{cmd_export, cmd_import};
-pub(crate) use memory::{cmd_delete, cmd_save, cmd_supersede, cmd_update, save_memory};
+pub(crate) use memory::{cmd_delete, cmd_save, cmd_supersede, cmd_update, save_memory, save_memory_no_index};
 pub(crate) use merge::cmd_merge;
 pub(crate) use query::cmd_query;
 pub(crate) use retro::cmd_retro;

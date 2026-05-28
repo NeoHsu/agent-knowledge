@@ -105,9 +105,7 @@ pub(crate) fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
         Ok(())
     })?;
 
-    for id in &changed_index_ids {
-        memory_index::upsert_or_mark_stale(app, &conn, id)?;
-    }
+    memory_index::upsert_batch_or_mark_stale(app, &conn, &changed_index_ids)?;
 
     print_json_pretty(&json!({
         "status": "merged",

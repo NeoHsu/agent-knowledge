@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use tantivy::collector::TopDocs;
-use tantivy::query::{AllQuery, BooleanQuery, FuzzyTermQuery, Occur, QueryParser};
+use tantivy::query::{AllQuery, BooleanQuery, FuzzyTermQuery, Occur, QueryParser, TermQuery};
 use tantivy::schema::{
     Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, Value as TantivyValue,
     STORED, STRING,
@@ -92,6 +92,8 @@ pub fn search(
     fuzzy: bool,
     raw_query: bool,
     limit: usize,
+    type_filter: Option<&str>,
+    scope_filter: Option<&[String]>,
 ) -> Result<Vec<String>> {
     let index = ensure_index(index_path)?;
     let fields = fields_from_schema(index.schema())?;
@@ -102,8 +104,10 @@ pub fn search(
     } else {
         literal_query_text(query)
     };
-    let boxed_query: Box<dyn tantivy::query::Query> = if query_text.is_empty() {
-        Box::new(AllQuery)
+
+    // Build the text query clause (or AllQuery when no text provided).
+    let text_clause: Option<Box<dyn tantivy::query::Query>> = if query_text.is_empty() {
+        None
     } else if fuzzy {
         let terms = [fields.name, fields.description, fields.content, fields.tags]
             .into_iter()
@@ -118,14 +122,62 @@ pub fn search(
                 )
             })
             .collect();
-        Box::new(BooleanQuery::new(terms))
+        Some(Box::new(BooleanQuery::new(terms)))
     } else {
         let parser = QueryParser::for_index(
             &index,
             vec![fields.name, fields.description, fields.content, fields.tags],
         );
-        Box::new(parser.parse_query(&query_text)?)
+        Some(Box::new(parser.parse_query(&query_text)?))
     };
+
+    // Build filter clauses for type and scope.
+    let type_clause: Option<Box<dyn tantivy::query::Query>> = type_filter.map(|t| {
+        Box::new(TermQuery::new(
+            Term::from_field_text(fields.r#type, t),
+            IndexRecordOption::Basic,
+        )) as Box<dyn tantivy::query::Query>
+    });
+
+    let scope_clause: Option<Box<dyn tantivy::query::Query>> = scope_filter.and_then(|scopes| {
+        if scopes.is_empty() {
+            return None;
+        }
+        let should_terms: Vec<(Occur, Box<dyn tantivy::query::Query>)> = scopes
+            .iter()
+            .map(|s| {
+                (
+                    Occur::Should,
+                    Box::new(TermQuery::new(
+                        Term::from_field_text(fields.scope, s),
+                        IndexRecordOption::Basic,
+                    )) as Box<dyn tantivy::query::Query>,
+                )
+            })
+            .collect();
+        Some(Box::new(BooleanQuery::new(should_terms)) as Box<dyn tantivy::query::Query>)
+    });
+
+    // Combine all clauses. If there are any filters or text, build a BooleanQuery.
+    // Otherwise fall back to AllQuery.
+    let boxed_query: Box<dyn tantivy::query::Query> = {
+        let mut must_clauses: Vec<(Occur, Box<dyn tantivy::query::Query>)> = Vec::new();
+        if let Some(tc) = text_clause {
+            must_clauses.push((Occur::Must, tc));
+        }
+        if let Some(tf) = type_clause {
+            must_clauses.push((Occur::Must, tf));
+        }
+        if let Some(sf) = scope_clause {
+            must_clauses.push((Occur::Must, sf));
+        }
+        if must_clauses.is_empty() {
+            Box::new(AllQuery)
+        } else {
+            Box::new(BooleanQuery::new(must_clauses))
+        }
+    };
+
     let docs = searcher.search(&boxed_query, &TopDocs::with_limit(limit).order_by_score())?;
     let mut ids = Vec::new();
     for (_score, address) in docs {

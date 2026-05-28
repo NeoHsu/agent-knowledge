@@ -115,13 +115,18 @@ pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
 
     if args.file.extension().and_then(|s| s.to_str()) == Some("json") {
         let values: Vec<Value> = serde_json::from_str(&text).context("parse json import")?;
+        let conn = app.conn()?;
+        let mut saved_ids: Vec<String> = Vec::new();
         for (index, value) in values.into_iter().enumerate() {
             let import_result =
                 save_args_from_import_value(value, &args.source, args.no_validate_workflow)
-                    .and_then(|save_args| save_memory(app, save_args));
+                    .and_then(|save_args| save_memory_no_index(app, save_args));
             match import_result {
-                Ok(result) => {
+                Ok((result, maybe_id)) => {
                     let status = result_status(&result);
+                    if let Some(id) = maybe_id {
+                        saved_ids.push(id);
+                    }
                     increment_count(&mut counts, &status);
                     results.push(json!({
                         "index": index,
@@ -139,6 +144,7 @@ pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
                 }
             }
         }
+        memory_index::upsert_batch_or_mark_stale(app, &conn, &saved_ids)?;
     } else {
         let name = args
             .file

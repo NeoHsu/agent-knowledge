@@ -34,6 +34,18 @@ Session readers are optional adapters. Retrospectives should use platform-provid
 
 `mise.toml` pins the local Rust MSRV toolchain and Zig C toolchain used in restricted environments. Run `mise install` when setting up a fresh checkout. If the host has no `cc`, expose a `cc` shim that delegates to `zig cc` before running Cargo; the OpenAB environment keeps that shim in `/home/node/bin`.
 
+## Developer Notes
+
+**`--no-touch` flag**: Queries with `--no-touch` skip the `access_count` update and do not acquire the write lock, making them safe for read-only agent polling.
+
+**`serde_yaml_ng` alias**: The original `serde_yaml` crate was abandoned; the workspace uses `serde_yaml_ng` (the maintained fork) aliased as `serde_yaml` in `Cargo.toml` for drop-in compatibility.
+
+**Audit advisory suppression**: `.cargo/audit.toml` suppresses `RUSTSEC-2021-0153` (a transitive from `lindera-dictionary`). Revisit when Lindera removes the dependency.
+
+**Stale index tracking**: The index stale state is tracked exclusively in the `metadata` table (`index_dirty` key). There is no longer a `.stale` filesystem marker.
+
+**Bulk operations**: `mem import` (JSON arrays) and `mem merge` use a single Tantivy `IndexWriter` commit for all changes instead of N individual commits.
+
 ## Runtime Model
 
 ```text

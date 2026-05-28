@@ -20,7 +20,15 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
     let mut ids = if let Some(query) = args.query.as_deref() {
         memory_index::repair_stale(app)?;
         let search_limit = memory_count(&conn)?.max(args.limit).max(DEFAULT_LIMIT);
-        memory_index::search_ids(app, query, args.fuzzy, args.raw_query, search_limit)?
+        memory_index::search_ids(
+            app,
+            query,
+            args.fuzzy,
+            args.raw_query,
+            search_limit,
+            args.r#type.as_deref(),
+            scope_filter.as_deref(),
+        )?
     } else {
         Vec::new()
     };

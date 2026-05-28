@@ -7,6 +7,10 @@ repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
 
+[features]
+default = ["cjk"]
+cjk = ["lindera/embed-cc-cedict"]
+
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
