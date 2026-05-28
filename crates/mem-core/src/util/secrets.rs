@@ -69,7 +69,8 @@ mod tests {
 
     #[test]
     fn strips_jwt_token() {
-        let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+        let jwt =
+            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
         let stripped = strip_secrets(jwt).unwrap();
         assert!(stripped.contains("[REDACTED]"));
         assert!(!stripped.contains("eyJ"));
@@ -77,7 +78,8 @@ mod tests {
 
     #[test]
     fn strips_pem_private_key() {
-        let pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----";
+        let pem =
+            "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----";
         let stripped = strip_secrets(pem).unwrap();
         assert!(stripped.contains("[REDACTED]"));
         assert!(!stripped.contains("MIIEowIBAAKCAQEA"));

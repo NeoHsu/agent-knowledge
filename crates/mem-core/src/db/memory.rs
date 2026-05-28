@@ -84,7 +84,10 @@ pub fn list_memories_filtered(
         format!("WHERE {}", conditions.join(" AND "))
     };
 
-    let sql = format!("SELECT * FROM memories {} ORDER BY created_at DESC", where_clause);
+    let sql = format!(
+        "SELECT * FROM memories {} ORDER BY created_at DESC",
+        where_clause
+    );
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(
         rusqlite::params_from_iter(params_vec.iter().map(|p| p.as_ref())),
