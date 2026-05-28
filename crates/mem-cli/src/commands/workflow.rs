@@ -1,7 +1,7 @@
 use super::*;
 
 pub(crate) fn cmd_workflow(app: &App, command: WorkflowCommand) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     let conn = app.conn()?;
     match command {
         WorkflowCommand::List(args) => {

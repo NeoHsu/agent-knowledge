@@ -1,7 +1,7 @@
 use super::*;
 
 pub(crate) fn cmd_export(app: &App, args: ExportArgs) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     let conn = app.conn()?;
     let mut memories = all_memories(&conn)?;
     if !args.include_superseded {
@@ -107,7 +107,7 @@ fn increment_count(counts: &mut serde_json::Map<String, Value>, status: &str) {
 }
 
 pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     let text =
         fs::read_to_string(&args.file).with_context(|| format!("read {}", args.file.display()))?;
     let mut results = Vec::new();

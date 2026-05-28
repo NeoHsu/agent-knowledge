@@ -16,7 +16,7 @@ pub(crate) fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
 }
 
 pub(crate) fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
-    app.init()?;
+    app.ensure_schema()?;
     validate_tags(&args.tags)?;
     let raw_content = required_content(args.content.take(), args.content_file.as_deref())?;
     workflow_core::validate_memory(
@@ -148,7 +148,7 @@ pub(crate) fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
 }
 
 pub(crate) fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     let conn = app.conn()?;
     let old = memory_by_name(&conn, &args.name)?
         .ok_or_else(|| anyhow!("memory not found: {}", args.name))?;
@@ -218,7 +218,7 @@ pub(crate) fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
 }
 
 pub(crate) fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     let conn = app.conn()?;
     let old = memory_by_name(&conn, &args.old_name)?
         .ok_or_else(|| anyhow!("memory not found: {}", args.old_name))?;
@@ -299,7 +299,7 @@ pub(crate) fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
 }
 
 pub(crate) fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     let conn = app.conn()?;
     let old = memory_by_name(&conn, &args.name)?
         .ok_or_else(|| anyhow!("memory not found: {}", args.name))?;

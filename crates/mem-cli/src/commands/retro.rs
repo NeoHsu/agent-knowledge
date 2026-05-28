@@ -1,7 +1,7 @@
 use super::*;
 
 pub(crate) fn cmd_retro(app: &App, command: RetroCommand) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     let conn = app.conn()?;
     let (kind, limit) = match command {
         RetroCommand::Daily(args) => ("daily", args.limit),

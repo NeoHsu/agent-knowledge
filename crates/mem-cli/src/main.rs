@@ -20,12 +20,13 @@ fn main() -> Result<()> {
             print_json(&json!({"status": "initialized", "root": app.root}))?;
         }
         Command::Save(args) => with_lock(&app, || cmd_save(&app, args))?,
+        Command::Query(args) if args.no_touch => cmd_query(&app, args)?,
         Command::Query(args) => with_lock(&app, || cmd_query(&app, args))?,
         Command::Update(args) => with_lock(&app, || cmd_update(&app, args))?,
         Command::Supersede(args) => with_lock(&app, || cmd_supersede(&app, args))?,
         Command::Delete(args) => with_lock(&app, || cmd_delete(&app, args))?,
         Command::Reindex => with_lock(&app, || {
-            app.init()?;
+            app.ensure_schema()?;
             memory_index::reindex_or_mark_stale(&app, "rebuild index")?;
             print_json(&json!({"status": "reindexed"}))?;
             Ok(())

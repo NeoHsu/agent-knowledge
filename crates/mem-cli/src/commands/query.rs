@@ -1,7 +1,7 @@
 use super::*;
 
 pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     if args.semantic {
         println!(
             "{}",
@@ -22,13 +22,8 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
 
     let mut ids = if let Some(query) = args.query.as_deref() {
         memory_index::repair_stale(app)?;
-        memory_index::search_ids(
-            app,
-            query,
-            args.fuzzy,
-            args.raw_query,
-            args.limit.max(DEFAULT_LIMIT),
-        )?
+        let search_limit = memory_count(&conn)?.max(args.limit).max(DEFAULT_LIMIT);
+        memory_index::search_ids(app, query, args.fuzzy, args.raw_query, search_limit)?
     } else {
         Vec::new()
     };

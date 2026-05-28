@@ -9,7 +9,7 @@ pub(crate) fn cmd_context(args: ContextArgs) -> Result<()> {
 }
 
 pub(crate) fn cmd_history(app: &App, args: HistoryArgs) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     let conn = app.conn()?;
     let mut sql = String::from(
         "SELECT changelog.id, memory_id, action, old_content, new_content, source, changelog.created_at
@@ -54,14 +54,14 @@ pub(crate) fn cmd_history(app: &App, args: HistoryArgs) -> Result<()> {
 }
 
 pub(crate) fn cmd_stats(app: &App) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     let conn = app.conn()?;
     print_json_pretty(&stats_report(&conn)?)?;
     Ok(())
 }
 
 pub(crate) fn cmd_audit(app: &App, args: AuditArgs) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     let conn = app.conn()?;
     let report = audit_report(&conn, app, args.fix)?;
     print_json_pretty(&report)?;
@@ -169,7 +169,7 @@ pub(crate) fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Va
 }
 
 pub(crate) fn cmd_gc(app: &App, args: GcArgs) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     let conn = app.conn()?;
     let cutoff = (Utc::now() - Duration::days(args.days)).to_rfc3339();
     let changed = with_transaction(&conn, |conn| {

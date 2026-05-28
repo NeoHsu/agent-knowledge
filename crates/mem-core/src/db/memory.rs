@@ -31,6 +31,11 @@ pub fn all_memories(conn: &Connection) -> Result<Vec<Memory>> {
         .map_err(Into::into)
 }
 
+pub fn memory_count(conn: &Connection) -> Result<usize> {
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM memories", [], |row| row.get(0))?;
+    Ok(count.max(0) as usize)
+}
+
 pub fn all_workflows(conn: &Connection, include_superseded: bool) -> Result<Vec<Memory>> {
     let sql = if include_superseded {
         "SELECT * FROM memories WHERE type = 'workflow' ORDER BY updated_at DESC"

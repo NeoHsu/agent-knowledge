@@ -83,6 +83,42 @@ fn raw_query_supports_tantivy_field_syntax() {
 }
 
 #[test]
+fn filtered_query_is_not_crowded_out_before_filtering() {
+    let repo = TestRepo::new("filtered-query-crowding");
+    repo.run(&["init"]);
+    for index in 0..25 {
+        let name = format!("needle_ref_{index}");
+        let content = format!("needle needle needle reference crowd {index}");
+        repo.insert_raw_memory(name.as_str(), name.as_str(), content.as_str());
+    }
+    repo.run(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "needle_workflow",
+        "--tags",
+        r#"["workflow:test"]"#,
+        "--content",
+        "schema_version: 1\ngoal: needle workflow\ntriggers:\n  - needle\nsteps:\n  - id: check\n    manual: needle\nstop_conditions:\n  - stop\n",
+        "--force",
+    ]);
+    repo.run(&["reindex"]);
+
+    let query = repo.run(&[
+        "query",
+        "needle",
+        "--type",
+        "workflow",
+        "--limit",
+        "1",
+        "--no-touch",
+    ]);
+
+    assert!(query.contains("needle_workflow"));
+}
+
+#[test]
 fn query_no_touch_does_not_increment_access_count() {
     let repo = TestRepo::new("query-no-touch");
     repo.run(&["init"]);

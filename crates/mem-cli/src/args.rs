@@ -3,6 +3,39 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 pub(crate) const DEFAULT_LIMIT: usize = 20;
+pub(crate) const MEMORY_TYPES: &[&str] = &[
+    "user",
+    "feedback",
+    "project",
+    "reference",
+    "preference",
+    "workflow",
+];
+pub(crate) const MEMORY_SOURCES: &[&str] = &["manual", "agent", "daily_retro", "weekly_retro"];
+pub(crate) const CONFIDENCE_LEVELS: &[&str] = &["high", "medium", "low"];
+
+fn parse_memory_type(value: &str) -> Result<String, String> {
+    parse_allowed(value, MEMORY_TYPES, "memory type")
+}
+
+fn parse_memory_source(value: &str) -> Result<String, String> {
+    parse_allowed(value, MEMORY_SOURCES, "memory source")
+}
+
+fn parse_confidence(value: &str) -> Result<String, String> {
+    parse_allowed(value, CONFIDENCE_LEVELS, "confidence")
+}
+
+fn parse_allowed(value: &str, allowed: &[&str], label: &str) -> Result<String, String> {
+    if allowed.contains(&value) {
+        Ok(value.to_string())
+    } else {
+        Err(format!(
+            "invalid {label} '{value}'; expected one of: {}",
+            allowed.join(", ")
+        ))
+    }
+}
 
 #[derive(Parser)]
 #[command(name = "mem", version, about = "Portable agent memory CLI")]
@@ -44,7 +77,7 @@ pub(crate) enum Command {
 
 #[derive(Args)]
 pub(crate) struct SaveArgs {
-    #[arg(long, default_value = "reference")]
+    #[arg(long, default_value = "reference", value_parser = parse_memory_type)]
     pub(crate) r#type: String,
     #[arg(long)]
     pub(crate) name: String,
@@ -58,9 +91,9 @@ pub(crate) struct SaveArgs {
     pub(crate) tags: String,
     #[arg(long, default_value = "global")]
     pub(crate) scope: String,
-    #[arg(long, default_value = "agent")]
+    #[arg(long, default_value = "agent", value_parser = parse_memory_source)]
     pub(crate) source: String,
-    #[arg(long)]
+    #[arg(long, value_parser = parse_confidence)]
     pub(crate) confidence: Option<String>,
     #[arg(long)]
     pub(crate) expires_at: Option<String>,
@@ -75,7 +108,7 @@ pub(crate) struct SaveArgs {
 #[derive(Args)]
 pub(crate) struct QueryArgs {
     pub(crate) query: Option<String>,
-    #[arg(long)]
+    #[arg(long, value_parser = parse_memory_type)]
     pub(crate) r#type: Option<String>,
     #[arg(long)]
     pub(crate) tags: Option<String>,
@@ -117,7 +150,7 @@ pub(crate) struct UpdateArgs {
     pub(crate) description: Option<String>,
     #[arg(long)]
     pub(crate) add_tags: Option<String>,
-    #[arg(long, default_value = "agent")]
+    #[arg(long, default_value = "agent", value_parser = parse_memory_source)]
     pub(crate) source: String,
     #[arg(long)]
     pub(crate) expected_version: Option<i64>,
@@ -135,7 +168,7 @@ pub(crate) struct SupersedeArgs {
     pub(crate) content_file: Option<PathBuf>,
     #[arg(long)]
     pub(crate) description: Option<String>,
-    #[arg(long, default_value = "agent")]
+    #[arg(long, default_value = "agent", value_parser = parse_memory_source)]
     pub(crate) source: String,
     #[arg(long)]
     pub(crate) expected_version: Option<i64>,
@@ -150,7 +183,7 @@ pub(crate) struct DeleteArgs {
     pub(crate) hard: bool,
     #[arg(long)]
     pub(crate) force: bool,
-    #[arg(long, default_value = "agent")]
+    #[arg(long, default_value = "agent", value_parser = parse_memory_source)]
     pub(crate) source: String,
     #[arg(long)]
     pub(crate) expected_version: Option<i64>,
@@ -200,9 +233,9 @@ pub(crate) enum ExportFormat {
 #[derive(Args)]
 pub(crate) struct ImportArgs {
     pub(crate) file: PathBuf,
-    #[arg(long)]
+    #[arg(long, value_parser = parse_memory_type)]
     pub(crate) r#type: Option<String>,
-    #[arg(long, default_value = "manual")]
+    #[arg(long, default_value = "manual", value_parser = parse_memory_source)]
     pub(crate) source: String,
     #[arg(long)]
     pub(crate) no_validate_workflow: bool,

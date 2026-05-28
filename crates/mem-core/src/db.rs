@@ -40,8 +40,8 @@ pub use ambiguity::{add_ambiguity_record, ambiguity_by_id, ambiguity_rows};
 pub use changelog::log_change;
 pub use memory::{
     active_expired_memories, all_memories, all_workflows, gc_candidate_memories,
-    insert_memory_record, memory_by_id, memory_by_name, resolve_memory_ref, unique_memory_id,
-    update_memory_from_merge, workflow_by_ref,
+    insert_memory_record, memory_by_id, memory_by_name, memory_count, resolve_memory_ref,
+    unique_memory_id, update_memory_from_merge, workflow_by_ref,
 };
 pub use metadata::{index_dirty, set_index_dirty};
 pub use migration::migrate_schema;

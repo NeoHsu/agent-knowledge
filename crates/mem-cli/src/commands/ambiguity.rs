@@ -1,7 +1,7 @@
 use super::*;
 
 pub(crate) fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     let conn = app.conn()?;
     match command {
         AmbiguityCommand::Add(args) => {
@@ -32,55 +32,65 @@ pub(crate) fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> 
                 Some(reference) => Some(resolve_memory_ref(&conn, reference)?),
                 None => None,
             };
-            if args.soft_delete_others {
-                let keep_id = keep_id
-                    .as_deref()
-                    .ok_or_else(|| anyhow!("--soft-delete-others requires --keep"))?;
-                for memory_id in memory_ids.iter().filter(|id| id.as_str() != keep_id) {
-                    let Some(memory) = memory_by_id(&conn, memory_id)? else {
-                        continue;
-                    };
-                    if memory.protected {
-                        skipped_protected.push(memory.id);
-                        continue;
+            let reindex_needed = with_transaction(&conn, |conn| {
+                if args.soft_delete_others {
+                    let keep_id = keep_id
+                        .as_deref()
+                        .ok_or_else(|| anyhow!("--soft-delete-others requires --keep"))?;
+                    for memory_id in memory_ids.iter().filter(|id| id.as_str() != keep_id) {
+                        let Some(memory) = memory_by_id(conn, memory_id)? else {
+                            continue;
+                        };
+                        if memory.protected {
+                            skipped_protected.push(memory.id);
+                            continue;
+                        }
+                        conn.execute(
+                            "UPDATE memories SET valid_until = ?1, updated_at = ?1 WHERE id = ?2",
+                            params![now, memory.id],
+                        )?;
+                        log_change(
+                            conn,
+                            &memory.id,
+                            "delete",
+                            memory.content.as_deref(),
+                            None,
+                            "ambiguity_resolve",
+                        )?;
+                        soft_deleted.push(memory.id);
                     }
-                    conn.execute(
-                        "UPDATE memories SET valid_until = ?1, updated_at = ?1 WHERE id = ?2",
-                        params![now, memory.id],
-                    )?;
-                    log_change(
-                        &conn,
-                        &memory.id,
-                        "delete",
-                        memory.content.as_deref(),
-                        None,
-                        "ambiguity_resolve",
-                    )?;
-                    soft_deleted.push(memory.id);
                 }
-                if !soft_deleted.is_empty() {
-                    memory_index::reindex_or_mark_stale(
-                        app,
-                        "rebuild index after ambiguity resolution",
-                    )?;
-                }
+
+                let resolution = json!({
+                    "status": "resolved",
+                    "note": args.note,
+                    "keep": keep_id,
+                    "soft_deleted": soft_deleted,
+                    "skipped_protected": skipped_protected
+                })
+                .to_string();
+                conn.execute(
+                    "UPDATE ambiguities SET resolution = ?1, resolved_at = ?2 WHERE id = ?3",
+                    params![resolution, now, args.id],
+                )?;
+                Ok(!soft_deleted.is_empty())
+            })?;
+            if reindex_needed {
+                memory_index::reindex_or_mark_stale(
+                    app,
+                    "rebuild index after ambiguity resolution",
+                )?;
             }
-            let resolution = json!({
-                "status": "resolved",
-                "note": args.note,
-                "keep": keep_id,
-                "soft_deleted": soft_deleted,
-                "skipped_protected": skipped_protected
-            })
-            .to_string();
-            conn.execute(
-                "UPDATE ambiguities SET resolution = ?1, resolved_at = ?2 WHERE id = ?3",
-                params![resolution, now, args.id],
-            )?;
             print_json_pretty(&json!({
                 "status": "resolved",
                 "id": args.id,
-                "resolution": serde_json::from_str::<Value>(&resolution)?
+                "resolution": {
+                    "status": "resolved",
+                    "note": args.note,
+                    "keep": keep_id,
+                    "soft_deleted": soft_deleted,
+                    "skipped_protected": skipped_protected
+                }
             }))?;
         }
     }

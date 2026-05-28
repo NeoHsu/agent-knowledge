@@ -39,14 +39,20 @@ impl App {
     }
 
     pub fn init(&self) -> Result<()> {
+        self.ensure_schema()?;
         fs::create_dir_all(&self.index_path).context("create index directory")?;
+        search_index::ensure(&self.index_path)?;
+        Ok(())
+    }
+
+    pub fn ensure_schema(&self) -> Result<()> {
+        fs::create_dir_all(&self.root).context("create app root")?;
         let conn = self.conn()?;
         let schema =
             fs::read_to_string(&self.schema_path).context("read schema/memory-schema.sql")?;
         conn.execute_batch(&schema)
             .context("apply database schema")?;
         migrate_schema(&conn)?;
-        search_index::ensure(&self.index_path)?;
         Ok(())
     }
 

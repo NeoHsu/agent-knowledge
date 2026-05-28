@@ -1,7 +1,7 @@
 use super::*;
 
 pub(crate) fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
-    app.init()?;
+    app.ensure_schema()?;
     if !args.db.exists() {
         bail!("merge database not found: {}", args.db.display());
     }
