@@ -3,8 +3,8 @@
 ## Write
 
 ```bash
-bin/mem save --type feedback --name pr_small --scope "project:example/ot-product" --source agent --tags '["style:review","decision:pr-size"]' --content "PR 拆小逐個 review"
-bin/mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file workflows/release.yaml
+mem save --type feedback --name pr_small --scope "project:example/ot-product" --source agent --tags '["style:review","decision:pr-size"]' --content "PR 拆小逐個 review"
+mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
 ```
 
 Confidence is inferred from source unless `--confidence` is provided:
@@ -23,17 +23,17 @@ Workflow memories are validated on save/import unless `--no-validate-workflow` i
 ## Query
 
 ```bash
-bin/mem query "security review"
-bin/mem query "部署流程" --scope auto
-bin/mem query --type feedback
-bin/mem query "release" --type workflow --scope auto
-bin/mem query --tags "domain:security"
-bin/mem query --sort time
-bin/mem query --sort access-count
-bin/mem query "deplpy" --fuzzy
-bin/mem query "name:pr_small" --raw-query
-bin/mem query "security review" --no-touch
-bin/mem query "deploy" --semantic
+mem query "security review"
+mem query "部署流程" --scope auto
+mem query --type feedback
+mem query "release" --type workflow --scope auto
+mem query --tags "domain:security"
+mem query --sort time
+mem query --sort access-count
+mem query "deplpy" --fuzzy
+mem query "name:pr_small" --raw-query
+mem query "security review" --no-touch
+mem query "deploy" --semantic
 ```
 
 By default, query treats punctuation as literal text so searches like `project:owner/repo` do not require Tantivy syntax escaping. Use `--raw-query` when you intentionally want Tantivy query syntax such as `name:pr_small`.
@@ -45,13 +45,13 @@ Query updates `access_count` and `last_accessed_at`; use `--no-touch` for read-o
 ## Update and Lifecycle
 
 ```bash
-bin/mem update no_emoji --content "不要在回覆中使用 emoji"
-bin/mem update release_runbook --content-file workflows/release.yaml
-bin/mem update no_emoji --expected-version 2 --content "不要在回覆中使用 emoji"
-bin/mem update no_emoji --add-tags '["style:output"]'
-bin/mem supersede old_policy new_policy --expected-version 3 --content "新的政策內容"
-bin/mem delete old_policy --expected-version 4
-bin/mem delete old_policy --hard --force
+mem update no_emoji --content "不要在回覆中使用 emoji"
+mem update release_runbook --content-file templates/workflow.yaml
+mem update no_emoji --expected-version 2 --content "不要在回覆中使用 emoji"
+mem update no_emoji --add-tags '["style:output"]'
+mem supersede old_policy new_policy --expected-version 3 --content "新的政策內容"
+mem delete old_policy --expected-version 4
+mem delete old_policy --hard --force
 ```
 
 Soft delete sets `valid_until`. Hard delete removes the row; protected memories require `--force`.
@@ -60,10 +60,10 @@ Soft delete sets `valid_until`. Hard delete removes the row; protected memories 
 ## Workflow
 
 ```bash
-bin/mem workflow list --scope auto
-bin/mem workflow find release --scope auto
-bin/mem workflow show release_runbook
-bin/mem workflow validate release_runbook
+mem workflow list --scope auto
+mem workflow find release --scope auto
+mem workflow show release_runbook
+mem workflow validate release_runbook
 ```
 
 Workflow helpers discover, display, and validate workflow memories. They never execute workflow commands. Agents execute runbook steps themselves, verify checkpoints, and ask before risky side effects.
@@ -71,10 +71,10 @@ Workflow helpers discover, display, and validate workflow memories. They never e
 ## Ambiguity
 
 ```bash
-bin/mem ambiguity add --query "PR 策略" --memory-ids '["pr_small","pr_bundled"]' --context "scope unclear"
-bin/mem ambiguity list --pending
-bin/mem ambiguity resolve 1 --note "project-specific preference"
-bin/mem ambiguity resolve 1 --keep pr_small --soft-delete-others
+mem ambiguity add --query "PR 策略" --memory-ids '["pr_small","pr_bundled"]' --context "scope unclear"
+mem ambiguity list --pending
+mem ambiguity resolve 1 --note "project-specific preference"
+mem ambiguity resolve 1 --keep pr_small --soft-delete-others
 ```
 
 `resolve --keep ... --soft-delete-others` soft-deletes non-protected alternatives referenced by the ambiguity and records skipped protected memories.
@@ -83,15 +83,15 @@ bin/mem ambiguity resolve 1 --keep pr_small --soft-delete-others
 ## History and Maintenance
 
 ```bash
-bin/mem history
-bin/mem history no_emoji
-bin/mem stats
-bin/mem audit
-bin/mem audit --fix
-bin/mem gc --days 90
-bin/mem reindex
-bin/mem retro daily
-bin/mem retro weekly --limit 200
+mem history
+mem history no_emoji
+mem stats
+mem audit
+mem audit --fix
+mem gc --days 90
+mem reindex
+mem retro daily
+mem retro weekly --limit 200
 ```
 
 `retro` emits an orchestration bundle for the LLM. It does not read platform logs itself; the active platform or harness should provide conversation history.
@@ -99,11 +99,11 @@ bin/mem retro weekly --limit 200
 ## Import and Export
 
 ```bash
-bin/mem export --format json
-bin/mem export --format markdown
-bin/mem import memories.json
-bin/mem import note.md --type reference
-bin/mem import workflows.json --no-validate-workflow
+mem export --format json
+mem export --format markdown
+mem import memories.json
+mem import note.md --type reference
+mem import workflows.json --no-validate-workflow
 ```
 
 `import` emits one summary JSON object:
@@ -126,8 +126,8 @@ JSON imports process an array of memory-like objects. Markdown or other files im
 ## Merge
 
 ```bash
-bin/mem merge /path/to/theirs.db
-bin/mem merge /path/to/theirs.db --prefer-trusted
+mem merge /path/to/theirs.db
+mem merge /path/to/theirs.db --prefer-trusted
 ```
 
 Merge strips common secrets from incoming content, imports memories with new names, skips identical same-name memories, and records same-name content conflicts in `ambiguities` instead of overwriting automatically. Merge conflict ambiguity records include a structured incoming snapshot in `context`.
@@ -139,4 +139,4 @@ Lower-trust incoming same-name memories are rejected. `--prefer-trusted` lets a 
 scripts/build-release.sh
 ```
 
-`bin/mem` runs `target/release/mem` when present and falls back to `cargo run` otherwise.
+After building, install or expose `target/release/mem` on `PATH` (for example via `cargo install --path crates/mem-cli`, or by adding `target/release` to `PATH`). All examples in this guide assume `mem` is on `PATH`.

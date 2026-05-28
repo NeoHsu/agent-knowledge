@@ -14,25 +14,25 @@ Do not store raw secrets, transient chat filler, or one-off facts that will not 
 
 ## Quick Reference
 
-Run commands from the repository root:
+Install the `mem` CLI (see README) so it is on `PATH`, then run commands from the repository root:
 
 ```bash
-bin/mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
-bin/mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file workflows/release.yaml
-bin/mem query "部署" --scope auto
-bin/mem query "release" --scope auto --type workflow
-bin/mem workflow find release --scope auto
-bin/mem workflow show release_runbook
-bin/mem workflow validate release_runbook
-bin/mem update no_emoji --content "不要在回覆中使用 emoji"
-bin/mem supersede old_name new_name --content "replacement memory"
-bin/mem delete old_name
-bin/mem history
-bin/mem stats
-bin/mem audit
-bin/mem retro daily
-bin/mem retro weekly
-bin/mem reindex
+mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
+mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
+mem query "部署" --scope auto
+mem query "release" --scope auto --type workflow
+mem workflow find release --scope auto
+mem workflow show release_runbook
+mem workflow validate release_runbook
+mem update no_emoji --content "不要在回覆中使用 emoji"
+mem supersede old_name new_name --content "replacement memory"
+mem delete old_name
+mem history
+mem stats
+mem audit
+mem retro daily
+mem retro weekly
+mem reindex
 ```
 
 Full CLI details: `references/cli-guide.md`.
@@ -59,7 +59,7 @@ Keep tags stable, lowercase, and specific. Details: `references/tag-rules.md`.
 2. Choose `type`: `user`, `feedback`, `project`, `reference`, `preference`, or `workflow`.
 3. Choose `scope`: `global` or `project:<owner/repo>`.
 4. Extract tags.
-5. Run `bin/mem save`.
+5. Run `mem save`.
 6. If duplicate/similar/conflict is returned, decide whether to update, supersede, or skip.
 7. Commit and push memory changes when the work unit is complete.
 
@@ -70,12 +70,12 @@ Keep tags stable, lowercase, and specific. Details: `references/tag-rules.md`.
 At task start:
 
 ```bash
-bin/mem context --detect
-bin/mem query --scope auto --type feedback
-bin/mem query --scope auto --type preference
-bin/mem query --scope auto --type project
-bin/mem query "<task keywords>" --scope auto
-bin/mem query "<task intent>" --scope auto --type workflow
+mem context --detect
+mem query --scope auto --type feedback
+mem query --scope auto --type preference
+mem query --scope auto --type project
+mem query "<task keywords>" --scope auto
+mem query "<task intent>" --scope auto --type workflow
 ```
 
 Load only relevant memories into the answer context.
@@ -87,7 +87,7 @@ For recurring tasks, read `references/workflow-rules.md`. Prefer project-scoped 
 Use `references/daily-retro.md` when the user asks for daily review. The short flow is:
 
 1. Use platform-provided conversation context or logs; repo readers are optional adapters.
-2. Run `bin/mem retro daily` for current memory, changelog, ambiguity, and audit context.
+2. Run `mem retro daily` for current memory, changelog, ambiguity, and audit context.
 3. Compare available platform context against existing memory.
 4. Save new durable knowledge, update stale knowledge, detect repeated manual procedures that should become workflow memories, and record ambiguities.
 5. Report counts and pending questions.

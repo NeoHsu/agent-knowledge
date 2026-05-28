@@ -4,9 +4,9 @@ Goal: improve memory quality. Weekly retro reads `changelog`, `memory.db`, and `
 
 ## Steps
 
-1. Run `bin/mem retro weekly --limit 200`.
-2. Run `bin/mem export --format json --include-superseded` if full memory content is needed.
-3. Run `bin/mem ambiguity list --pending` when resolving conflicts.
+1. Run `mem retro weekly --limit 200`.
+2. Run `mem export --format json --include-superseded` if full memory content is needed.
+3. Run `mem ambiguity list --pending` when resolving conflicts.
 4. Review `audit` and `stats` sections from the retro bundle.
 5. Identify duplicate or near-duplicate memories.
 6. Identify stale workflow steps, workflows with repeated failures, and repeated manual procedures that should become workflow memory.
@@ -15,7 +15,7 @@ Goal: improve memory quality. Weekly retro reads `changelog`, `memory.db`, and `
    - frequently accessed low confidence can become medium after review
    - stale medium confidence can be downgraded or marked for cleanup
 9. Resolve ambiguities when scope or newer evidence makes the answer clear.
-10. Run `bin/mem audit --fix` if deterministic repairs are needed.
+10. Run `mem audit --fix` if deterministic repairs are needed.
 11. Commit and push.
 
 The promotion direction is:

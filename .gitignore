@@ -4,5 +4,3 @@
 /memory.db-*
 /.mem.lock
 *.tmp
-/config.yaml
-!/config.yaml.example

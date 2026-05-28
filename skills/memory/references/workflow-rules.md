@@ -9,11 +9,11 @@ Use `templates/workflow.yaml` as the fixed baseline template for new workflow me
 At task start, load context in this order:
 
 ```bash
-bin/mem query --scope auto --type feedback
-bin/mem query --scope auto --type preference
-bin/mem query --scope auto --type project
-bin/mem query "<task intent>" --scope auto --type workflow
-bin/mem workflow find "<task intent>" --scope auto
+mem query --scope auto --type feedback
+mem query --scope auto --type preference
+mem query --scope auto --type project
+mem query "<task intent>" --scope auto --type workflow
+mem workflow find "<task intent>" --scope auto
 ```
 
 If multiple workflows match, prefer project-scoped records, then high confidence, then exact `workflow:*` or `intent:*` tag matches. If the match is still ambiguous, ask the user and record the ambiguity.
@@ -33,6 +33,6 @@ If multiple workflows match, prefer project-scoped records, then high confidence
 
 - Save durable failures or lessons after a run.
 - Propose updates to manual workflow memories instead of silently editing them.
-- Use `bin/mem workflow validate <name-or-id>` before relying on a workflow.
+- Use `mem workflow validate <name-or-id>` before relying on a workflow.
 - Use `--no-validate-workflow` only for deliberate migration or recovery.
 - Treat merge-created `workflow_validation_failed` ambiguity records as requiring human review before import or update.

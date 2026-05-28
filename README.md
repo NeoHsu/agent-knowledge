@@ -5,12 +5,13 @@ Portable agent memory system. The repository owns the `mem` CLI, schema, skill i
 ## Quick Start
 
 ```bash
+mise install                       # Rust + Zig toolchain pinned in mise.toml
 scripts/build-release.sh
-export PATH="$PWD/target/release:$PATH"
+cargo install --path crates/mem-cli # installs `mem` into ~/.cargo/bin (on PATH)
 
 mem init
 mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
-mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file workflows/release.yaml
+mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
 mem query "emoji"
 mem query "release" --type workflow
 mem workflow find release --scope auto
