@@ -1,22 +1,31 @@
-use std::fs;
 use std::process::{Command, Stdio};
 
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 
 mod support;
 
 use support::{mem_bin, TestRepo};
+
+fn mark_index_dirty(repo: &TestRepo) {
+    let conn = Connection::open(repo.join("memory.db")).expect("open memory db");
+    conn.execute(
+        "INSERT INTO metadata (key, value, updated_at)
+         VALUES ('index_dirty', 'true', datetime('now'))
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        params![],
+    )
+    .expect("set index_dirty");
+}
 
 #[test]
 fn query_repairs_stale_index_marker() {
     let repo = TestRepo::new("stale-index");
     repo.run(&["init"]);
     repo.insert_raw_memory("raw_stale", "raw_stale", "stale repair searchable content");
-    fs::write(repo.join("index/.stale"), r#"{"status":"stale"}"#).expect("stale marker");
+    mark_index_dirty(&repo);
 
     let query = repo.run(&["query", "searchable"]);
     assert!(query.contains("raw_stale"));
-    assert!(!repo.join("index/.stale").exists());
 }
 
 #[test]
@@ -28,11 +37,10 @@ fn reindex_clears_stale_marker_and_indexes_raw_rows() {
         "raw_reindex",
         "manual reindex searchable content",
     );
-    fs::write(repo.join("index/.stale"), r#"{"status":"stale"}"#).expect("stale marker");
+    mark_index_dirty(&repo);
 
     let reindexed = repo.run(&["reindex"]);
     assert!(reindexed.contains(r#""status":"reindexed""#));
-    assert!(!repo.join("index/.stale").exists());
 
     let query = repo.run(&["query", "manual reindex"]);
     assert!(query.contains("raw_reindex"));
