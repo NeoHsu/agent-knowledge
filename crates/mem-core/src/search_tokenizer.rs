@@ -2,9 +2,9 @@ use anyhow::Result;
 use tantivy::Index;
 
 #[cfg(feature = "cjk")]
-use std::borrow::Cow;
-#[cfg(feature = "cjk")]
 use anyhow::Context;
+#[cfg(feature = "cjk")]
+use std::borrow::Cow;
 #[cfg(feature = "cjk")]
 use tantivy::tokenizer::{Token, TokenStream, Tokenizer};
 

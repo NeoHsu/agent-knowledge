@@ -64,7 +64,12 @@ pub fn upsert_batch_or_mark_stale(app: &App, conn: &Connection, ids: &[String]) 
     }
     let memories: Vec<IndexedMemory> = ids
         .iter()
-        .filter_map(|id| memory_by_id(conn, id).ok().flatten().map(|m| indexed_memory(&m)))
+        .filter_map(|id| {
+            memory_by_id(conn, id)
+                .ok()
+                .flatten()
+                .map(|m| indexed_memory(&m))
+        })
         .collect();
     match search_index::upsert_batch(&app.index_path, &memories) {
         Ok(()) => Ok(()),
