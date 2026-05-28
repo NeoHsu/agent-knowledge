@@ -2,16 +2,13 @@ use super::*;
 
 pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
     app.ensure_schema()?;
+    // TODO(F2): --semantic is planned but unimplemented; no embedding backend
+    // is configured yet. Return an explicit error rather than silently succeeding.
     if args.semantic {
-        println!(
-            "{}",
-            json!({
-                "status": "unsupported",
-                "feature": "semantic_query",
-                "message": "semantic query interface is reserved; no embedding backend is configured"
-            })
+        anyhow::bail!(
+            "--semantic is not yet implemented; no embedding backend is configured. \
+             Remove --semantic to use full-text/fuzzy search instead."
         );
-        return Ok(());
     }
     let conn = app.conn()?;
     let scope_filter = match args.scope.as_deref() {
@@ -28,6 +25,7 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
         Vec::new()
     };
 
+    // P2: when listing (no query), push filters into SQL to avoid a full table scan.
     let mut memories = if args.query.is_some() {
         let mut rows = Vec::new();
         for id in ids.drain(..) {
@@ -35,35 +33,20 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
                 rows.push(memory);
             }
         }
+        // Post-filter search results (IDs come from tantivy which doesn't know about filters).
+        rows.retain(|memory| passes_filters(memory, &args, scope_filter.as_deref()));
         rows
     } else {
-        all_memories(&conn)?
+        // Push all applicable filters into the SQL WHERE clause.
+        mem_core::db::list_memories_filtered(
+            &conn,
+            args.include_superseded,
+            args.r#type.as_deref(),
+            args.tags.as_deref(),
+            scope_filter.as_deref(),
+            args.expired,
+        )?
     };
-
-    memories.retain(|memory| {
-        if !args.include_superseded && memory.valid_until.is_some() {
-            return false;
-        }
-        if let Some(want_type) = &args.r#type {
-            if &memory.r#type != want_type {
-                return false;
-            }
-        }
-        if let Some(tag) = &args.tags {
-            if !memory_has_tag(&memory.tags, tag) {
-                return false;
-            }
-        }
-        if let Some(scopes) = &scope_filter {
-            if !scopes.contains(&memory.scope) {
-                return false;
-            }
-        }
-        if args.expired {
-            return is_expired(memory.expires_at.as_deref());
-        }
-        true
-    });
 
     match args.sort {
         SortMode::Relevance => {}
@@ -74,16 +57,56 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
     }
     memories.truncate(args.limit);
 
-    if !args.no_touch {
+    // P4: wrap all access_count updates in a single transaction instead of
+    // individual UPDATE statements in a loop.
+    if !args.no_touch && !memories.is_empty() {
         let now = now();
-        for memory in &memories {
-            conn.execute(
-                "UPDATE memories SET access_count = access_count + 1, last_accessed_at = ?1 WHERE id = ?2",
-                params![now, memory.id],
-            )?;
+        let ids_list: Vec<&str> = memories.iter().map(|m| m.id.as_str()).collect();
+        // Build WHERE id IN (?2, ?3, ...) — ?1 is reserved for `now`.
+        let sql = format!(
+            "UPDATE memories SET access_count = access_count + 1, last_accessed_at = ?1 WHERE id IN ({})",
+            (2..=ids_list.len() + 1)
+                .map(|i| format!("?{i}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let mut bind_params: Vec<&dyn rusqlite::types::ToSql> = vec![&now];
+        for id in &ids_list {
+            bind_params.push(id);
         }
+        stmt.execute(bind_params.as_slice())?;
     }
 
     print_json_pretty(&memories)?;
     Ok(())
+}
+
+fn passes_filters(
+    memory: &mem_core::db::Memory,
+    args: &QueryArgs,
+    scope_filter: Option<&[String]>,
+) -> bool {
+    if !args.include_superseded && memory.valid_until.is_some() {
+        return false;
+    }
+    if let Some(want_type) = &args.r#type {
+        if &memory.r#type != want_type {
+            return false;
+        }
+    }
+    if let Some(tag) = &args.tags {
+        if !memory_has_tag(&memory.tags, tag) {
+            return false;
+        }
+    }
+    if let Some(scopes) = scope_filter {
+        if !scopes.contains(&memory.scope) {
+            return false;
+        }
+    }
+    if args.expired {
+        return is_expired(memory.expires_at.as_deref());
+    }
+    true
 }

@@ -1,8 +1,41 @@
 use super::*;
 
+/// Whitelisted columns allowed in `grouped_count` to prevent SQL injection.
+enum GroupColumn {
+    Type,
+    Scope,
+    Source,
+    Confidence,
+}
+
+impl GroupColumn {
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "type" => Some(Self::Type),
+            "scope" => Some(Self::Scope),
+            "source" => Some(Self::Source),
+            "confidence" => Some(Self::Confidence),
+            _ => None,
+        }
+    }
+
+    fn as_sql_column(&self) -> &'static str {
+        match self {
+            Self::Type => "type",
+            Self::Scope => "scope",
+            Self::Source => "source",
+            Self::Confidence => "confidence",
+        }
+    }
+}
+
 pub fn grouped_count(conn: &Connection, column: &str) -> Result<Value> {
+    let col = GroupColumn::from_str(column)
+        .ok_or_else(|| anyhow::anyhow!("grouped_count: unsupported column '{column}'; expected one of: type, scope, source, confidence"))?;
     let sql = format!(
-        "SELECT {column}, COUNT(*) FROM memories WHERE valid_until IS NULL GROUP BY {column}"
+        "SELECT {}, COUNT(*) FROM memories WHERE valid_until IS NULL GROUP BY {}",
+        col.as_sql_column(),
+        col.as_sql_column()
     );
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map([], |row| {

@@ -11,6 +11,7 @@ platforms:
     reader: readers/claude-code.sh
   openab-discord:
     detected: true
+    # Set the DISCORD_CHANNEL_ID environment variable to your channel's ID.
     channel_id: "${DISCORD_CHANNEL_ID}"
     reader: readers/discord.sh
   hermes:

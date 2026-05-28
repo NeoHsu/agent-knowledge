@@ -1,80 +1,61 @@
-use std::fs;
-use std::path::{Path, PathBuf};
+// index_state.rs — stale-tracking via SQLite metadata only.
+//
+// The previous implementation also wrote a `.stale` file to the filesystem
+// (dual tracking). That file-based side effect has been removed; staleness is
+// now authoritative from the database `index_dirty` key (see db/metadata.rs).
+//
+// The `mark_stale` / `clear_stale` / `is_stale` functions in `index.rs` call
+// `db::set_index_dirty` / `db::index_dirty` directly. This module is retained
+// only so that existing call-sites in `index.rs` compile without further edits.
 
-use anyhow::{Context, Result};
-use serde_json::json;
+use std::path::PathBuf;
 
-const INDEX_STALE_MARKER: &str = ".stale";
+use anyhow::Result;
 
-pub fn marker_path(index_path: &Path) -> PathBuf {
-    index_path.join(INDEX_STALE_MARKER)
+/// Retained for tests that previously tested the file-based marker.
+/// These are kept as no-ops so compilation is not broken.
+#[allow(dead_code)]
+pub fn marker_path(_index_path: &std::path::Path) -> PathBuf {
+    // No longer used — staleness is tracked in SQLite.
+    PathBuf::new()
 }
 
-pub fn is_stale(index_path: &Path) -> bool {
-    marker_path(index_path).exists()
+/// Returns `false` always; staleness is now read from the DB via `index.rs`.
+#[allow(dead_code)]
+pub fn is_stale(_index_path: &std::path::Path) -> bool {
+    false
 }
 
-pub fn mark_stale(index_path: &Path, reason: &str, marked_at: &str) -> Result<()> {
-    fs::create_dir_all(index_path)?;
-    let marker = json!({
-        "status": "stale",
-        "reason": reason,
-        "marked_at": marked_at
-    });
-    fs::write(marker_path(index_path), serde_json::to_vec_pretty(&marker)?)?;
+/// No-op: staleness is now written to SQLite via `index.rs`.
+#[allow(dead_code)]
+pub fn mark_stale(_index_path: &std::path::Path, _reason: &str, _marked_at: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn clear_stale(index_path: &Path) -> Result<()> {
-    match fs::remove_file(marker_path(index_path)) {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(err).context("clear stale index marker"),
-    }
+/// No-op: staleness is now cleared in SQLite via `index.rs`.
+#[allow(dead_code)]
+pub fn clear_stale(_index_path: &std::path::Path) -> Result<()> {
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    use serde_json::Value;
-
     use super::*;
 
-    fn temp_index(name: &str) -> PathBuf {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("time")
-            .as_nanos();
-        std::env::temp_dir().join(format!("agent-knowledge-index-state-{name}-{stamp}"))
-    }
-
     #[test]
-    fn mark_stale_writes_structured_marker() {
-        let index = temp_index("mark");
-
+    fn mark_stale_is_noop() {
+        let index = std::env::temp_dir().join("agent-knowledge-index-state-noop");
         mark_stale(&index, "index writer failed", "2026-05-27T00:00:00Z").expect("mark stale");
-
-        assert!(is_stale(&index));
-        let marker: Value =
-            serde_json::from_slice(&fs::read(marker_path(&index)).expect("read stale marker"))
-                .expect("marker json");
-        assert_eq!(marker["status"], "stale");
-        assert_eq!(marker["reason"], "index writer failed");
-        assert_eq!(marker["marked_at"], "2026-05-27T00:00:00Z");
-
-        fs::remove_dir_all(index).ok();
+        // File-based marker is no longer written; is_stale always returns false.
+        assert!(!is_stale(&index));
     }
 
     #[test]
     fn clear_stale_is_idempotent() {
-        let index = temp_index("clear");
+        let index = std::env::temp_dir().join("agent-knowledge-index-state-noop2");
         mark_stale(&index, "stale", "2026-05-27T00:00:00Z").expect("mark stale");
-
         clear_stale(&index).expect("clear stale");
         clear_stale(&index).expect("clear missing stale marker");
-
         assert!(!is_stale(&index));
-        fs::remove_dir_all(index).ok();
     }
 }

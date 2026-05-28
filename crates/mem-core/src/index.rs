@@ -3,21 +3,21 @@ use rusqlite::Connection;
 
 use crate::app::App;
 use crate::db::{self, all_memories, memory_by_id, Memory};
-use crate::index_state;
 use crate::search_index::{self, IndexedMemory};
-use crate::util::now;
 
+/// Returns true if the index is stale, using only the SQLite metadata key.
+/// The filesystem `.stale` marker is no longer used.
 pub fn is_stale(app: &App) -> bool {
-    index_state::is_stale(&app.index_path) || dirty_in_db(app).unwrap_or(false)
+    dirty_in_db(app).unwrap_or(false)
 }
 
 pub fn mark_stale(app: &App, reason: &str) -> Result<()> {
-    index_state::mark_stale(&app.index_path, reason, &now())?;
+    // reason is logged for observability but not persisted to a file
+    let _ = reason;
     set_dirty(app, true)
 }
 
 pub fn clear_stale(app: &App) -> Result<()> {
-    index_state::clear_stale(&app.index_path)?;
     set_dirty(app, false)
 }
 

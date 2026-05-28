@@ -23,7 +23,7 @@ pub struct IndexedMemory {
     pub r#type: String,
 }
 
-struct IndexFields {
+pub(crate) struct IndexFields {
     id: Field,
     name: Field,
     description: Field,
@@ -53,8 +53,35 @@ pub fn upsert(index_path: &Path, memory: &IndexedMemory) -> Result<()> {
     let index = ensure_index(index_path)?;
     let fields = fields_from_schema(index.schema())?;
     let mut writer = index.writer(50_000_000)?;
+    upsert_with_writer(&mut writer, &fields, memory)?;
+    writer.commit()?;
+    Ok(())
+}
+
+/// Upsert a single memory using a shared `IndexWriter`. The caller is
+/// responsible for calling `writer.commit()` when done.
+pub(crate) fn upsert_with_writer(
+    writer: &mut IndexWriter,
+    fields: &IndexFields,
+    memory: &IndexedMemory,
+) -> Result<()> {
     writer.delete_term(Term::from_field_text(fields.id, &memory.id));
-    add_memory_doc(&mut writer, &fields, memory)?;
+    add_memory_doc(writer, fields, memory)?;
+    Ok(())
+}
+
+/// Upsert a batch of memories with a single `IndexWriter` and one commit.
+#[allow(dead_code)]
+pub fn upsert_batch(index_path: &Path, memories: &[IndexedMemory]) -> Result<()> {
+    if memories.is_empty() {
+        return Ok(());
+    }
+    let index = ensure_index(index_path)?;
+    let fields = fields_from_schema(index.schema())?;
+    let mut writer = index.writer(50_000_000)?;
+    for memory in memories {
+        upsert_with_writer(&mut writer, &fields, memory)?;
+    }
     writer.commit()?;
     Ok(())
 }

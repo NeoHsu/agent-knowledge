@@ -31,6 +31,69 @@ pub fn all_memories(conn: &Connection) -> Result<Vec<Memory>> {
         .map_err(Into::into)
 }
 
+/// Query memories with optional filters pushed into the SQL WHERE clause to
+/// avoid a full table scan followed by in-process filtering.
+pub fn list_memories_filtered(
+    conn: &Connection,
+    include_superseded: bool,
+    r#type: Option<&str>,
+    tag: Option<&str>,
+    scopes: Option<&[String]>,
+    expired: bool,
+) -> Result<Vec<Memory>> {
+    let mut conditions: Vec<String> = Vec::new();
+    let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+    if !include_superseded && !expired {
+        conditions.push("valid_until IS NULL".to_string());
+    }
+    if expired {
+        conditions.push("expires_at IS NOT NULL".to_string());
+        conditions.push("datetime(expires_at) < datetime('now')".to_string());
+        conditions.push("valid_until IS NULL".to_string());
+    }
+    if let Some(t) = r#type {
+        conditions.push(format!("type = ?{}", params_vec.len() + 1));
+        params_vec.push(Box::new(t.to_string()));
+    }
+    if let Some(t) = tag {
+        // JSON array membership check using SQLite json_each
+        conditions.push(format!(
+            "EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?{})",
+            params_vec.len() + 1
+        ));
+        params_vec.push(Box::new(t.to_string()));
+    }
+    if let Some(sc) = scopes {
+        if !sc.is_empty() {
+            let placeholders: Vec<String> = sc
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", params_vec.len() + i + 1))
+                .collect();
+            conditions.push(format!("scope IN ({})", placeholders.join(", ")));
+            for s in sc {
+                params_vec.push(Box::new(s.clone()));
+            }
+        }
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
+    };
+
+    let sql = format!("SELECT * FROM memories {} ORDER BY created_at DESC", where_clause);
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(
+        rusqlite::params_from_iter(params_vec.iter().map(|p| p.as_ref())),
+        row_to_memory,
+    )?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
+}
+
 pub fn memory_count(conn: &Connection) -> Result<usize> {
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM memories", [], |row| row.get(0))?;
     Ok(count.max(0) as usize)
