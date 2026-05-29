@@ -48,6 +48,8 @@ Session readers are optional adapters. Retrospectives should use platform-provid
 
 **Stale index tracking**: The index stale state is tracked exclusively in the `metadata` table (`index_dirty` key). There is no longer a `.stale` filesystem marker.
 
+**Index schema versioning**: Tantivy index artifacts carry `index/.agent-knowledge-index-version`, owned by `INDEX_SCHEMA_VERSION` in `crates/mem-core/src/search_index.rs`. Bump it when Tantivy fields, field options, tokenizer behavior, token normalization, indexed document content, or required ranking/filtering fields change. Do not bump it for query-time boosts, fuzzy query construction, SQLite-only filtering, or CLI output changes.
+
 **Bulk operations**: `mem import` (JSON arrays) and `mem merge` use a single Tantivy `IndexWriter` commit for all changes instead of N individual commits.
 
 ## Runtime Model

@@ -7,6 +7,8 @@ mod support;
 
 use support::{mem_bin, temp_path, TestRepo, TestRuntimeStore};
 
+const INDEX_VERSION_MARKER: &str = "index/.agent-knowledge-index-version";
+
 fn mark_index_dirty(repo: &TestRepo) {
     let conn = Connection::open(repo.join("memory.db")).expect("open memory db");
     conn.execute(
@@ -16,6 +18,38 @@ fn mark_index_dirty(repo: &TestRepo) {
         params![],
     )
     .expect("set index_dirty");
+}
+
+fn corrupt_memories_for_reindex(repo: &TestRepo) {
+    let conn = Connection::open(repo.join("memory.db")).expect("open memory db");
+    conn.execute_batch(
+        "DROP TABLE memories;
+        CREATE TABLE memories (
+            id TEXT PRIMARY KEY,
+            type TEXT,
+            name TEXT,
+            description TEXT,
+            content TEXT,
+            tags TEXT,
+            scope TEXT,
+            source TEXT,
+            confidence TEXT,
+            protected TEXT,
+            created_at TEXT,
+            updated_at TEXT,
+            expires_at TEXT,
+            valid_until TEXT,
+            superseded_by TEXT,
+            version TEXT,
+            access_count TEXT,
+            last_accessed_at TEXT
+        );
+        INSERT INTO memories
+        (id, type, name, content, tags, scope, source, confidence, protected, created_at, updated_at, version, access_count)
+        VALUES ('bad_reindex', 'reference', 'bad_reindex', 'bad reindex content', '[]', 'global', 'manual', 'high', 'not-bool', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'not-an-int', '0');
+        PRAGMA user_version = 3;",
+    )
+    .expect("corrupt memories table");
 }
 
 #[test]
@@ -247,6 +281,106 @@ fn query_repairs_stale_index_marker() {
 
     let query = repo.run(&["query", "searchable"]);
     assert!(query.contains("raw_stale"));
+}
+
+#[test]
+fn missing_index_version_marker_triggers_rebuild() {
+    let repo = TestRepo::new("missing-index-version");
+    repo.run(&["init"]);
+    repo.insert_raw_memory(
+        "raw_missing_marker",
+        "raw_missing_marker",
+        "missing marker searchable content",
+    );
+    fs::remove_file(repo.join(INDEX_VERSION_MARKER)).expect("remove index version marker");
+
+    let query = repo.run(&["query", "missing marker searchable"]);
+
+    assert!(query.contains("raw_missing_marker"));
+    assert_eq!(
+        fs::read_to_string(repo.join(INDEX_VERSION_MARKER)).expect("read marker"),
+        "2\n"
+    );
+}
+
+#[test]
+fn old_index_version_marker_triggers_rebuild() {
+    let repo = TestRepo::new("old-index-version");
+    repo.run(&["init"]);
+    repo.insert_raw_memory(
+        "raw_old_marker",
+        "raw_old_marker",
+        "old marker searchable content",
+    );
+    fs::write(repo.join(INDEX_VERSION_MARKER), "1\n").expect("write old marker");
+
+    let query = repo.run(&["query", "old marker searchable"]);
+
+    assert!(query.contains("raw_old_marker"));
+    assert_eq!(
+        fs::read_to_string(repo.join(INDEX_VERSION_MARKER)).expect("read marker"),
+        "2\n"
+    );
+}
+
+#[test]
+fn invalid_index_version_marker_triggers_rebuild() {
+    let repo = TestRepo::new("invalid-index-version");
+    repo.run(&["init"]);
+    repo.insert_raw_memory(
+        "raw_invalid_marker",
+        "raw_invalid_marker",
+        "invalid marker searchable content",
+    );
+    fs::write(repo.join(INDEX_VERSION_MARKER), "not-a-version\n").expect("write invalid marker");
+
+    let query = repo.run(&["query", "invalid marker searchable"]);
+
+    assert!(query.contains("raw_invalid_marker"));
+    assert_eq!(
+        fs::read_to_string(repo.join(INDEX_VERSION_MARKER)).expect("read marker"),
+        "2\n"
+    );
+}
+
+#[test]
+fn matching_index_version_marker_does_not_rebuild() {
+    let repo = TestRepo::new("matching-index-version");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--name",
+        "visible_matching_marker",
+        "--type",
+        "reference",
+        "--content",
+        "matching marker visible content",
+        "--force",
+    ]);
+    repo.insert_raw_memory(
+        "raw_matching_marker",
+        "raw_matching_marker",
+        "matching marker hidden content",
+    );
+
+    let query = repo.run(&["query", "matching marker"]);
+
+    assert!(query.contains("visible_matching_marker"));
+    assert!(!query.contains("raw_matching_marker"));
+}
+
+#[test]
+fn failed_automatic_index_rebuild_returns_actionable_error() {
+    let repo = TestRepo::new("failed-index-rebuild");
+    repo.run(&["init"]);
+    fs::write(repo.join(INDEX_VERSION_MARKER), "1\n").expect("write old marker");
+    corrupt_memories_for_reindex(&repo);
+
+    let output = repo.run_fail(&["query", "bad reindex"]);
+
+    assert!(output.contains("index schema version mismatch"));
+    assert!(output.contains("automatic rebuild failed"));
+    assert!(output.contains("mem reindex"));
 }
 
 #[test]

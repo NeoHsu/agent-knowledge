@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use tantivy::collector::TopDocs;
@@ -13,6 +13,52 @@ use tantivy::schema::{
 use tantivy::{doc, Index, IndexWriter, TantivyDocument, Term};
 
 use crate::search_tokenizer;
+
+pub(crate) const INDEX_SCHEMA_VERSION: i64 = 2;
+const INDEX_VERSION_MARKER: &str = ".agent-knowledge-index-version";
+
+#[derive(Debug)]
+pub(crate) struct IndexCompatibilityError {
+    marker_path: PathBuf,
+    expected: i64,
+    found: IndexVersionFound,
+}
+
+#[derive(Debug)]
+enum IndexVersionFound {
+    Missing,
+    Invalid(String),
+    Different(i64),
+}
+
+impl std::fmt::Display for IndexCompatibilityError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.found {
+            IndexVersionFound::Missing => write!(
+                f,
+                "index schema version mismatch: expected {}, found missing marker at {}",
+                self.expected,
+                self.marker_path.display()
+            ),
+            IndexVersionFound::Invalid(value) => write!(
+                f,
+                "index schema version mismatch: expected {}, found invalid marker {:?} at {}",
+                self.expected,
+                value,
+                self.marker_path.display()
+            ),
+            IndexVersionFound::Different(version) => write!(
+                f,
+                "index schema version mismatch: expected {}, found {} at {}",
+                self.expected,
+                version,
+                self.marker_path.display()
+            ),
+        }
+    }
+}
+
+impl std::error::Error for IndexCompatibilityError {}
 
 #[derive(Debug, Clone)]
 pub struct IndexedMemory {
@@ -48,6 +94,7 @@ pub fn rebuild(index_path: &Path, memories: &[IndexedMemory]) -> Result<()> {
         add_memory_doc(&mut writer, &fields, memory)?;
     }
     writer.commit()?;
+    write_index_version(index_path)?;
     Ok(())
 }
 
@@ -183,6 +230,10 @@ pub fn ensure(index_path: &Path) -> Result<()> {
     ensure_index(index_path).map(|_| ())
 }
 
+pub(crate) fn is_compatibility_error(err: &anyhow::Error) -> bool {
+    err.downcast_ref::<IndexCompatibilityError>().is_some()
+}
+
 fn build_schema() -> (Schema, IndexFields) {
     let mut builder = Schema::builder();
     let id = builder.add_text_field("id", STRING | STORED);
@@ -213,14 +264,61 @@ fn build_schema() -> (Schema, IndexFields) {
 fn ensure_index(path: &Path) -> Result<Index> {
     fs::create_dir_all(path)?;
     let index = match Index::open_in_dir(path) {
-        Ok(index) => Ok(index),
+        Ok(index) => {
+            read_index_version(path)?;
+            index
+        }
         Err(_) => {
             let (schema, _) = build_schema();
-            Index::create_in_dir(path, schema).context("create Tantivy index")
+            let index = Index::create_in_dir(path, schema).context("create Tantivy index")?;
+            write_index_version(path)?;
+            index
         }
-    }?;
+    };
     register_tokenizers(&index)?;
     Ok(index)
+}
+
+fn index_version_marker_path(index_path: &Path) -> PathBuf {
+    index_path.join(INDEX_VERSION_MARKER)
+}
+
+fn read_index_version(index_path: &Path) -> Result<i64, IndexCompatibilityError> {
+    let marker_path = index_version_marker_path(index_path);
+    let contents = fs::read_to_string(&marker_path).map_err(|err| IndexCompatibilityError {
+        marker_path: marker_path.clone(),
+        expected: INDEX_SCHEMA_VERSION,
+        found: if err.kind() == std::io::ErrorKind::NotFound {
+            IndexVersionFound::Missing
+        } else {
+            IndexVersionFound::Invalid(err.to_string())
+        },
+    })?;
+    let trimmed = contents.trim();
+    let version = trimmed
+        .parse::<i64>()
+        .map_err(|_| IndexCompatibilityError {
+            marker_path: marker_path.clone(),
+            expected: INDEX_SCHEMA_VERSION,
+            found: IndexVersionFound::Invalid(trimmed.to_string()),
+        })?;
+    if version == INDEX_SCHEMA_VERSION {
+        Ok(version)
+    } else {
+        Err(IndexCompatibilityError {
+            marker_path,
+            expected: INDEX_SCHEMA_VERSION,
+            found: IndexVersionFound::Different(version),
+        })
+    }
+}
+
+fn write_index_version(index_path: &Path) -> Result<()> {
+    fs::write(
+        index_version_marker_path(index_path),
+        format!("{INDEX_SCHEMA_VERSION}\n"),
+    )
+    .context("write index schema version marker")
 }
 
 fn register_tokenizers(index: &Index) -> Result<()> {

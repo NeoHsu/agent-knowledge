@@ -114,7 +114,7 @@ pub fn search_ids(
     type_filter: Option<&str>,
     scope_filter: Option<&[&str]>,
 ) -> Result<Vec<String>> {
-    search_index::search(
+    match search_index::search(
         &app.index_path,
         query,
         fuzzy,
@@ -122,7 +122,28 @@ pub fn search_ids(
         limit,
         type_filter,
         scope_filter,
-    )
+    ) {
+        Ok(ids) => Ok(ids),
+        Err(err) if search_index::is_compatibility_error(&err) => {
+            mark_stale(app, &format!("index compatibility: {err:#}"))
+                .context("mark index stale")?;
+            reindex(app).map_err(|rebuild_err| {
+                anyhow!(
+                    "index schema version mismatch; automatic rebuild failed; run `mem reindex`: {rebuild_err:#}"
+                )
+            })?;
+            search_index::search(
+                &app.index_path,
+                query,
+                fuzzy,
+                raw_query,
+                limit,
+                type_filter,
+                scope_filter,
+            )
+        }
+        Err(err) => Err(err),
+    }
 }
 
 fn indexed_memory(memory: &Memory) -> IndexedMemory {
