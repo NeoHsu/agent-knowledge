@@ -1,3 +1,8 @@
+---
+name: memory
+description: Persist, recall, audit, and migrate durable agent knowledge through the local `mem` CLI (SQLite + Tantivy at `AGENT_KNOWLEDGE_HOME`). ALWAYS use this skill when the user says "remember this", "記住", "幫我存", "save this", asks to recall prior preferences/decisions, runs a daily or weekly retrospective, mentions workflow runbooks, or asks to query/update/supersede/delete/export/import/merge/audit memory — even if the word "memory" is not explicitly used.
+---
+
 # Memory Skill
 
 Use this skill when the user asks to save, recall, update, clean up, review, or migrate durable knowledge. The active knowledge store is the current `AGENT_KNOWLEDGE_HOME` or repository root; `memory.db` is the runtime source of truth and `index/` is rebuildable.
@@ -14,9 +19,11 @@ Do not store raw secrets, transient chat filler, or one-off facts that will not 
 
 ## Quick Reference
 
-Install the `mem` CLI (see README) so it is on `PATH`, then run commands from the repository root:
+Install the `mem` CLI (see README) so it is on `PATH`. `mem` discovers the active store from the current directory if it contains `schema/memory-schema.sql`, otherwise it walks from the executable location and falls back to `AGENT_KNOWLEDGE_HOME` or `~/.agent-knowledge`. Run from the repo root, from inside a project that defines `AGENT_KNOWLEDGE_HOME`, or anywhere once `AGENT_KNOWLEDGE_HOME` is exported.
 
 ```bash
+mem init
+mem context --detect
 mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
 mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
 mem query "部署" --scope auto
@@ -59,11 +66,11 @@ Keep tags stable, lowercase, and specific. Details: `references/tag-rules.md`.
 2. Choose `type`: `user`, `feedback`, `project`, `reference`, `preference`, or `workflow`.
 3. Choose `scope`: `global` or `project:<owner/repo>`.
 4. Extract tags.
-5. Run `mem save`.
-6. If duplicate/similar/conflict is returned, decide whether to update, supersede, or skip.
+5. Run `mem save`. Defaults: `--type reference`, `--scope global`, `--source agent`, `--tags '[]'`.
+6. If `duplicate_found` or `similar_found` is returned, decide whether to update, supersede, or skip. Use `--force` only when you intend to overwrite an existing same-name memory (subject to the source-trust rule).
 7. Commit and push memory changes when the work unit is complete.
 
-`source=manual` is protected and high confidence. `source=agent` is medium confidence. Retrospective sources are low confidence.
+`source=manual` is protected and high confidence. `source=agent` is medium confidence. `source=daily_retro` and `source=weekly_retro` are low confidence. Confidence can be set explicitly with `--confidence high|medium|low`.
 
 ## Query Workflow
 

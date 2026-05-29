@@ -1,11 +1,23 @@
 # mem CLI Guide
 
+## Setup
+
+```bash
+mem init
+mem context --detect
+```
+
+`init` creates the SQLite store and the Tantivy index inside the active knowledge home, idempotent on re-run. `context --detect` returns the auto-detected scope (`global` or `project:<owner/repo>`) based on the current git remote; `--detect` is required.
+
 ## Write
 
 ```bash
 mem save --type feedback --name pr_small --scope "project:example/ot-product" --source agent --tags '["style:review","decision:pr-size"]' --content "PR 拆小逐個 review"
 mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
+mem save --type project --name q4_freeze --description "Mobile release cut" --tags '["project:example/ot-mobile"]' --content "..." --expires-at 2026-03-05T00:00:00Z --why "freeze for release branch"
 ```
+
+Supported `--type` values: `user`, `feedback`, `project`, `reference` (default), `preference`, `workflow`. Defaults when omitted: `--scope global`, `--source agent`, `--tags '[]'`. Optional metadata fields are `--description`, `--why`, and `--expires-at` (RFC3339).
 
 Confidence is inferred from source unless `--confidence` is provided:
 
@@ -49,11 +61,13 @@ mem update no_emoji --content "不要在回覆中使用 emoji"
 mem update release_runbook --content-file templates/workflow.yaml
 mem update no_emoji --expected-version 2 --content "不要在回覆中使用 emoji"
 mem update no_emoji --add-tags '["style:output"]'
+mem update no_emoji --description "preferred output style"
 mem supersede old_policy new_policy --expected-version 3 --content "新的政策內容"
 mem delete old_policy --expected-version 4
 mem delete old_policy --hard --force
 ```
 
+`update`, `supersede`, and `delete` accept `--source` (default `agent`) so the caller is recorded in the changelog. `update` also accepts `--description` and `--add-tags '["..."]'` (additive merge).
 Soft delete sets `valid_until`. Hard delete removes the row; protected memories require `--force`.
 `--expected-version` returns `version_conflict` if the stored memory changed after the caller read it.
 
@@ -61,12 +75,14 @@ Soft delete sets `valid_until`. Hard delete removes the row; protected memories 
 
 ```bash
 mem workflow list --scope auto
+mem workflow list --scope auto --limit 50 --include-superseded
 mem workflow find release --scope auto
+mem workflow find release --scope auto --limit 5
 mem workflow show release_runbook
 mem workflow validate release_runbook
 ```
 
-Workflow helpers discover, display, and validate workflow memories. They never execute workflow commands. Agents execute runbook steps themselves, verify checkpoints, and ask before risky side effects.
+`workflow find <intent>` searches by intent string (positional). `workflow show <reference>` and `workflow validate <reference>` accept either the workflow name or its memory id. Workflow helpers discover, display, and validate workflow memories; they never execute workflow commands. Agents execute runbook steps themselves, verify checkpoints, and ask before risky side effects.
 
 ## Ambiguity
 
@@ -85,16 +101,19 @@ mem ambiguity resolve 1 --keep pr_small --soft-delete-others
 ```bash
 mem history
 mem history no_emoji
+mem history --action save --limit 50
 mem stats
 mem audit
 mem audit --fix
 mem gc --days 90
 mem reindex
 mem retro daily
+mem retro daily --limit 100
 mem retro weekly --limit 200
 ```
 
-`retro` emits an orchestration bundle for the LLM. It does not read platform logs itself; the active platform or harness should provide conversation history.
+`history` accepts an optional positional `name` plus `--action <save|update|supersede|delete|...>` and `--limit` (default 20). `gc --days` purges soft-deleted memories older than the given window.
+`retro` emits an orchestration bundle for the LLM. It does not read platform logs itself; the active platform or harness should provide conversation history. `retro daily|weekly --limit` controls the bundle size (default 50).
 
 ## Import and Export
 
