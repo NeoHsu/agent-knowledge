@@ -82,6 +82,12 @@ pub fn rank(memory: &Memory, intent: &str, scope_filter: Option<&[String]>) -> i
     if has_intent_tag(memory, intent) {
         score += 50;
     }
+    if name_matches_intent(memory, intent) {
+        score += 35;
+    }
+    if tags_contain_intent_token(memory, intent) {
+        score += 15;
+    }
     score
 }
 
@@ -177,6 +183,22 @@ fn has_intent_tag(memory: &Memory, intent: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn name_matches_intent(memory: &Memory, intent: &str) -> bool {
+    let name_key = intent_key(&memory.name);
+    let intent_key = intent_key(intent);
+    !intent_key.is_empty() && (name_key == intent_key || name_key.contains(&intent_key))
+}
+
+fn tags_contain_intent_token(memory: &Memory, intent: &str) -> bool {
+    let wanted_key = intent_key(intent);
+    if wanted_key.is_empty() {
+        return false;
+    }
+    parse_string_array(&memory.tags)
+        .map(|tags| tags.iter().any(|tag| intent_key(tag).contains(&wanted_key)))
+        .unwrap_or(false)
+}
+
 fn intent_key(input: &str) -> String {
     let mut key = String::new();
     for ch in input.chars() {
@@ -234,5 +256,42 @@ mod tests {
 
         assert!(matches_intent(&memory, "fix ci"));
         assert!(matches_intent(&memory, "ci_triage"));
+    }
+
+    #[test]
+    fn rank_prefers_precise_intent_matches() {
+        let broad = Memory {
+            id: "broad".to_string(),
+            r#type: "workflow".to_string(),
+            name: "maintenance".to_string(),
+            description: None,
+            content: Some("General workflow that mentions deploy in a checklist".to_string()),
+            tags: r#"["workflow:maintenance"]"#.to_string(),
+            scope: "global".to_string(),
+            source: "manual".to_string(),
+            confidence: "high".to_string(),
+            protected: true,
+            created_at: "2026-05-27T00:00:00Z".to_string(),
+            updated_at: "2026-05-27T00:00:00Z".to_string(),
+            expires_at: None,
+            valid_until: None,
+            superseded_by: None,
+            version: 1,
+            access_count: 0,
+            last_accessed_at: None,
+        };
+        let precise = Memory {
+            id: "precise".to_string(),
+            r#type: "workflow".to_string(),
+            name: "deploy_workflow".to_string(),
+            description: None,
+            content: Some("Run deployment steps".to_string()),
+            tags: r#"["workflow:deploy","intent:deploy"]"#.to_string(),
+            source: "agent".to_string(),
+            confidence: "medium".to_string(),
+            ..broad.clone()
+        };
+
+        assert!(rank(&precise, "deploy", None) > rank(&broad, "deploy", None));
     }
 }

@@ -85,6 +85,24 @@ fn raw_query_supports_tantivy_field_syntax() {
 }
 
 #[test]
+fn fuzzy_query_matches_multiple_typo_terms() {
+    let repo = TestRepo::new("fuzzy-multi-term");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--name",
+        "release_runbook",
+        "--content",
+        "release workflow checklist",
+        "--force",
+    ]);
+
+    let query = repo.run(&["query", "releaze workflo", "--fuzzy", "--no-touch"]);
+
+    assert!(query.contains("release_runbook"));
+}
+
+#[test]
 fn query_supports_table_and_compact_formats() {
     let repo = TestRepo::new("query-formats");
     repo.run(&["init"]);

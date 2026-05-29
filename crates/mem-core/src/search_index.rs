@@ -3,7 +3,9 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use tantivy::collector::TopDocs;
-use tantivy::query::{AllQuery, BooleanQuery, FuzzyTermQuery, Occur, QueryParser, TermQuery};
+use tantivy::query::{
+    AllQuery, BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, Query, QueryParser, TermQuery,
+};
 use tantivy::schema::{
     Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, Value as TantivyValue,
     STORED, STRING,
@@ -109,25 +111,10 @@ pub fn search(
     let text_clause: Option<Box<dyn tantivy::query::Query>> = if query_text.is_empty() {
         None
     } else if fuzzy {
-        let terms = [fields.name, fields.description, fields.content, fields.tags]
-            .into_iter()
-            .map(|field| {
-                (
-                    Occur::Should,
-                    Box::new(FuzzyTermQuery::new(
-                        Term::from_field_text(field, &query_text),
-                        1,
-                        true,
-                    )) as Box<dyn tantivy::query::Query>,
-                )
-            })
-            .collect();
-        Some(Box::new(BooleanQuery::new(terms)))
+        build_fuzzy_query(&query_text, &fields)
     } else {
-        let parser = QueryParser::for_index(
-            &index,
-            vec![fields.name, fields.description, fields.content, fields.tags],
-        );
+        let mut parser = QueryParser::for_index(&index, default_search_fields(&fields));
+        apply_field_boosts(&mut parser, &fields);
         Some(Box::new(parser.parse_query(&query_text)?))
     };
 
@@ -255,6 +242,57 @@ fn add_memory_doc(
         fields.r#type => memory.r#type.clone(),
     ))?;
     Ok(())
+}
+
+fn default_search_fields(fields: &IndexFields) -> Vec<Field> {
+    vec![fields.name, fields.description, fields.content, fields.tags]
+}
+
+fn boosted_search_fields(fields: &IndexFields) -> [(Field, f32); 4] {
+    [
+        (fields.name, 4.0),
+        (fields.tags, 3.0),
+        (fields.description, 2.0),
+        (fields.content, 1.0),
+    ]
+}
+
+fn apply_field_boosts(parser: &mut QueryParser, fields: &IndexFields) {
+    for (field, boost) in boosted_search_fields(fields) {
+        parser.set_field_boost(field, boost);
+    }
+}
+
+fn build_fuzzy_query(query_text: &str, fields: &IndexFields) -> Option<Box<dyn Query>> {
+    let token_clauses = query_text
+        .split_whitespace()
+        .map(|token| {
+            let field_clauses = boosted_search_fields(fields)
+                .into_iter()
+                .map(|(field, boost)| {
+                    let query = Box::new(FuzzyTermQuery::new(
+                        Term::from_field_text(field, token),
+                        1,
+                        true,
+                    ));
+                    (
+                        Occur::Should,
+                        Box::new(BoostQuery::new(query, boost)) as Box<dyn Query>,
+                    )
+                })
+                .collect::<Vec<_>>();
+            (
+                Occur::Must,
+                Box::new(BooleanQuery::new(field_clauses)) as Box<dyn Query>,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    if token_clauses.is_empty() {
+        None
+    } else {
+        Some(Box::new(BooleanQuery::new(token_clauses)))
+    }
 }
 
 fn fields_from_schema(schema: Schema) -> Result<IndexFields> {
