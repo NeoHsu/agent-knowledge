@@ -26,7 +26,7 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
         None => None,
     };
 
-    let mut ids = if let Some(query) = args.query.as_deref() {
+    let ids = if let Some(query) = args.query.as_deref() {
         memory_index::repair_stale(app)?;
         let search_limit = memory_count(&conn)?.max(limit).max(DEFAULT_LIMIT);
         memory_index::search_ids(
@@ -44,12 +44,11 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
 
     // P2: when listing (no query), push filters into SQL to avoid a full table scan.
     let mut memories = if args.query.is_some() {
-        let mut rows = Vec::new();
-        for id in ids.drain(..) {
-            if let Some(memory) = memory_by_id(&conn, &id)? {
-                rows.push(memory);
-            }
-        }
+        let mut by_id = memories_by_ids(&conn, &ids)?;
+        let mut rows = ids
+            .iter()
+            .filter_map(|id| by_id.remove(id))
+            .collect::<Vec<_>>();
         // Post-filter search results (IDs come from tantivy which doesn't know about filters).
         rows.retain(|memory| passes_filters(memory, &args, scope_filter.as_deref()));
         rows

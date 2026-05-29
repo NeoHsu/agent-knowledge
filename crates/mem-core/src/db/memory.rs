@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::*;
 
 pub fn memory_by_name(conn: &Connection, name: &str) -> Result<Option<Memory>> {
@@ -12,6 +14,28 @@ pub fn memory_by_id(conn: &Connection, id: &str) -> Result<Option<Memory>> {
     stmt.query_row(params![id], row_to_memory)
         .optional()
         .map_err(Into::into)
+}
+
+pub fn memories_by_ids(conn: &Connection, ids: &[String]) -> Result<HashMap<String, Memory>> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let placeholders = (1..=ids.len())
+        .map(|i| format!("?{i}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!("SELECT * FROM memories WHERE id IN ({placeholders})");
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(
+        rusqlite::params_from_iter(ids.iter().map(String::as_str)),
+        row_to_memory,
+    )?;
+    let memories = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(memories
+        .into_iter()
+        .map(|memory| (memory.id.clone(), memory))
+        .collect())
 }
 
 pub fn resolve_memory_ref(conn: &Connection, reference: &str) -> Result<String> {

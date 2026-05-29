@@ -40,8 +40,8 @@ pub use ambiguity::{add_ambiguity_record, ambiguity_by_id, ambiguity_rows};
 pub use changelog::log_change;
 pub use memory::{
     active_expired_memories, all_memories, all_workflows, gc_candidate_memories,
-    insert_memory_record, list_memories_filtered, memory_by_id, memory_by_name, memory_count,
-    resolve_memory_ref, unique_memory_id, update_memory_from_merge, workflow_by_ref,
+    insert_memory_record, list_memories_filtered, memories_by_ids, memory_by_id, memory_by_name,
+    memory_count, resolve_memory_ref, unique_memory_id, update_memory_from_merge, workflow_by_ref,
 };
 pub use metadata::{index_dirty, set_index_dirty};
 pub use migration::migrate_schema;
@@ -175,6 +175,26 @@ mod tests {
         let id = unique_memory_id(&conn, "release").expect("unique id");
 
         assert_eq!(id, "release_3");
+    }
+
+    #[test]
+    fn memories_by_ids_fetches_batch_for_caller_ordering() {
+        let conn = initialized_conn();
+        insert_memory_record(&conn, &memory("first", "first")).expect("insert first");
+        insert_memory_record(&conn, &memory("second", "second")).expect("insert second");
+
+        let ids = vec![
+            "second".to_string(),
+            "missing".to_string(),
+            "first".to_string(),
+        ];
+        let mut by_id = memories_by_ids(&conn, &ids).expect("memories by ids");
+        let ordered = ids
+            .iter()
+            .filter_map(|id| by_id.remove(id).map(|memory| memory.id))
+            .collect::<Vec<_>>();
+
+        assert_eq!(ordered, vec!["second", "first"]);
     }
 
     #[test]
