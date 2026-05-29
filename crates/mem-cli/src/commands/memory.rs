@@ -293,16 +293,13 @@ pub(crate) fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
         }
     }
     if source_priority(&args.source) < source_priority(&old.source) {
-        println!(
-            "{}",
-            json!({
+        print_json(&json!({
                 "status": "rejected",
                 "reason": "lower_trust_source_cannot_update",
                 "existing_source": old.source,
                 "new_source": args.source,
                 "id": old.id
-            })
-        );
+        }))?;
         return Ok(());
     }
     let new_content = match optional_content(args.content, args.content_file.as_deref())? {
@@ -344,10 +341,7 @@ pub(crate) fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
 
     let updated = memory_by_id(&conn, &old.id)?
         .ok_or_else(|| anyhow!("updated memory missing: {}", old.id))?;
-    println!(
-        "{}",
-        json!({"status": "updated", "id": updated.id, "version": updated.version})
-    );
+    print_json(&json!({"status": "updated", "id": updated.id, "version": updated.version}))?;
     Ok(())
 }
 
@@ -363,16 +357,13 @@ pub(crate) fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
         }
     }
     if source_priority(&args.source) < source_priority(&old.source) {
-        println!(
-            "{}",
-            json!({
+        print_json(&json!({
                 "status": "rejected",
                 "reason": "lower_trust_source_cannot_supersede",
                 "existing_source": old.source,
                 "new_source": args.source,
                 "id": old.id
-            })
-        );
+        }))?;
         return Ok(());
     }
     let new_id = unique_memory_id(&conn, &slugify(&args.new_name))?;
@@ -425,10 +416,7 @@ pub(crate) fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
     memory_index::upsert_or_mark_stale(app, &conn, &new_id)?;
     memory_index::reindex_or_mark_stale(app, "rebuild index after supersede")?;
 
-    println!(
-        "{}",
-        json!({"status": "superseded", "old_id": old.id, "new_id": new_id})
-    );
+    print_json(&json!({"status": "superseded", "old_id": old.id, "new_id": new_id}))?;
     Ok(())
 }
 
@@ -444,10 +432,9 @@ pub(crate) fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
         }
     }
     if old.protected && !args.force {
-        println!(
-            "{}",
-            json!({"status": "rejected", "reason": "protected_memory_requires_force", "id": old.id})
-        );
+        print_json(
+            &json!({"status": "rejected", "reason": "protected_memory_requires_force", "id": old.id}),
+        )?;
         return Ok(());
     }
 
@@ -465,10 +452,7 @@ pub(crate) fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
             Ok(())
         })?;
         memory_index::reindex_or_mark_stale(app, "rebuild index after delete")?;
-        println!(
-            "{}",
-            json!({"status": "deleted", "mode": "hard", "id": old.id})
-        );
+        print_json(&json!({"status": "deleted", "mode": "hard", "id": old.id}))?;
     } else {
         let now = now();
         with_transaction(&conn, |conn| {
@@ -487,10 +471,7 @@ pub(crate) fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
             Ok(())
         })?;
         memory_index::reindex_or_mark_stale(app, "rebuild index after delete")?;
-        println!(
-            "{}",
-            json!({"status": "deleted", "mode": "soft", "id": old.id})
-        );
+        print_json(&json!({"status": "deleted", "mode": "soft", "id": old.id}))?;
     }
     Ok(())
 }

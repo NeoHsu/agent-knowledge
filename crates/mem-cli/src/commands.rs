@@ -15,14 +15,107 @@ use mem_core::scope;
 use mem_core::util::*;
 use mem_core::workflow as workflow_core;
 
+pub(crate) enum Output {
+    Json,
+    Text,
+}
+
+impl Output {
+    pub(crate) fn json<T: Serialize + ?Sized>(self, value: &T) -> Result<()> {
+        match self {
+            Self::Json => {
+                println!("{}", serde_json::to_string(value)?);
+                Ok(())
+            }
+            Self::Text => bail!("cannot render JSON value as text"),
+        }
+    }
+
+    pub(crate) fn json_pretty<T: Serialize + ?Sized>(self, value: &T) -> Result<()> {
+        match self {
+            Self::Json => {
+                println!("{}", serde_json::to_string_pretty(value)?);
+                Ok(())
+            }
+            Self::Text => bail!("cannot render JSON value as text"),
+        }
+    }
+
+    pub(crate) fn text(self, value: impl AsRef<str>) -> Result<()> {
+        match self {
+            Self::Text => {
+                print!("{}", value.as_ref());
+                Ok(())
+            }
+            Self::Json => bail!("cannot render text value as JSON"),
+        }
+    }
+}
+
 pub(crate) fn print_json<T: Serialize + ?Sized>(value: &T) -> Result<()> {
-    println!("{}", serde_json::to_string(value)?);
-    Ok(())
+    Output::Json.json(value)
 }
 
 pub(crate) fn print_json_pretty<T: Serialize + ?Sized>(value: &T) -> Result<()> {
-    println!("{}", serde_json::to_string_pretty(value)?);
-    Ok(())
+    Output::Json.json_pretty(value)
+}
+
+pub(crate) fn print_text(value: impl AsRef<str>) -> Result<()> {
+    Output::Text.text(value)
+}
+
+pub(crate) fn render_table(headers: &[&str], rows: &[Vec<String>]) -> String {
+    let mut widths = headers
+        .iter()
+        .map(|header| header.len())
+        .collect::<Vec<_>>();
+    for row in rows {
+        for (index, value) in row.iter().enumerate() {
+            if let Some(width) = widths.get_mut(index) {
+                *width = (*width).max(value.len());
+            }
+        }
+    }
+
+    let mut output = String::new();
+    push_table_row(&mut output, headers, &widths);
+    let separator = widths
+        .iter()
+        .map(|width| "-".repeat(*width))
+        .collect::<Vec<_>>();
+    push_table_row(&mut output, &separator, &widths);
+    for row in rows {
+        push_table_row(&mut output, row, &widths);
+    }
+    output
+}
+
+pub(crate) fn truncate_text(value: &str, max_chars: usize) -> String {
+    let trimmed = value.replace(['\n', '\r', '\t'], " ");
+    let mut chars = trimmed.chars();
+    let mut output = String::new();
+    for _ in 0..max_chars {
+        let Some(ch) = chars.next() else {
+            return output;
+        };
+        output.push(ch);
+    }
+    if chars.next().is_some() {
+        output.push_str("...");
+    }
+    output
+}
+
+fn push_table_row<T: AsRef<str>>(output: &mut String, row: &[T], widths: &[usize]) {
+    for (index, value) in row.iter().enumerate() {
+        if index > 0 {
+            output.push_str("  ");
+        }
+        let text = value.as_ref();
+        let width = widths.get(index).copied().unwrap_or(text.len());
+        output.push_str(&format!("{text:<width$}"));
+    }
+    output.push('\n');
 }
 
 mod admin;

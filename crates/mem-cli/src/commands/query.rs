@@ -94,7 +94,11 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
         stmt.execute(bind_params.as_slice())?;
     }
 
-    print_json_pretty(&memories)?;
+    match args.format {
+        OutputFormat::Json => print_json_pretty(&memories)?,
+        OutputFormat::Table => print_text(render_memory_table(&memories))?,
+        OutputFormat::Compact => print_text(render_memory_compact(&memories))?,
+    }
     Ok(())
 }
 
@@ -125,4 +129,69 @@ fn passes_filters(
         return is_expired(memory.expires_at.as_deref());
     }
     true
+}
+
+fn render_memory_table(memories: &[mem_core::db::Memory]) -> String {
+    let rows = memories
+        .iter()
+        .map(|memory| {
+            vec![
+                truncate_text(&memory.id, 28),
+                truncate_text(&memory.name, 28),
+                memory.r#type.clone(),
+                truncate_text(&memory.scope, 32),
+                memory.confidence.clone(),
+                truncate_text(&tags_text(&memory.tags), 36),
+                memory.access_count.to_string(),
+                truncate_text(&memory.updated_at, 20),
+            ]
+        })
+        .collect::<Vec<_>>();
+    render_table(
+        &[
+            "id",
+            "name",
+            "type",
+            "scope",
+            "confidence",
+            "tags",
+            "access",
+            "updated",
+        ],
+        &rows,
+    )
+}
+
+fn render_memory_compact(memories: &[mem_core::db::Memory]) -> String {
+    let mut output = String::new();
+    for memory in memories {
+        let tags = tags_text(&memory.tags);
+        let suffix = if tags.is_empty() {
+            String::new()
+        } else {
+            format!(" tags={tags}")
+        };
+        output.push_str(&format!(
+            "{} [{}] scope={} confidence={}{}",
+            memory.name, memory.r#type, memory.scope, memory.confidence, suffix
+        ));
+        output.push('\n');
+        if let Some(description) = memory.description.as_deref() {
+            if !description.trim().is_empty() {
+                output.push_str(&format!("  {}\n", truncate_text(description, 120)));
+            }
+        }
+        if let Some(content) = memory.content.as_deref() {
+            if !content.trim().is_empty() {
+                output.push_str(&format!("  {}\n", truncate_text(content, 160)));
+            }
+        }
+    }
+    output
+}
+
+fn tags_text(tags: &str) -> String {
+    parse_string_array(tags)
+        .map(|tags| tags.join(","))
+        .unwrap_or_else(|_| tags.to_string())
 }

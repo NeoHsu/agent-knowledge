@@ -77,7 +77,7 @@ pub(crate) enum Command {
     #[command(about = "Show memory changelog entries")]
     History(HistoryArgs),
     #[command(about = "Show memory store statistics")]
-    Stats,
+    Stats(StatsArgs),
     #[command(about = "Audit memory health and optional fixes")]
     Audit(AuditArgs),
     #[command(about = "Garbage-collect old soft-deleted memories")]
@@ -167,6 +167,8 @@ pub(crate) struct QueryArgs {
     pub(crate) no_touch: bool,
     #[arg(long, help = "Treat query as Tantivy query syntax")]
     pub(crate) raw_query: bool,
+    #[arg(long, value_enum, default_value_t = OutputFormat::Json, help = "Output format")]
+    pub(crate) format: OutputFormat,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -174,6 +176,13 @@ pub(crate) enum SortMode {
     Relevance,
     Time,
     AccessCount,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum OutputFormat {
+    Json,
+    Table,
+    Compact,
 }
 
 #[derive(Args)]
@@ -239,6 +248,14 @@ pub(crate) struct HistoryArgs {
     pub(crate) action: Option<String>,
     #[arg(long, default_value_t = 20)]
     pub(crate) limit: usize,
+    #[arg(long, value_enum, default_value_t = OutputFormat::Json, help = "Output format")]
+    pub(crate) format: OutputFormat,
+}
+
+#[derive(Args)]
+pub(crate) struct StatsArgs {
+    #[arg(long, value_enum, default_value_t = OutputFormat::Json, help = "Output format")]
+    pub(crate) format: OutputFormat,
 }
 
 #[derive(Args)]

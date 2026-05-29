@@ -85,6 +85,37 @@ fn raw_query_supports_tantivy_field_syntax() {
 }
 
 #[test]
+fn query_supports_table_and_compact_formats() {
+    let repo = TestRepo::new("query-formats");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--name",
+        "human_readable",
+        "--tags",
+        r#"["ui:format"]"#,
+        "--content",
+        "human readable output content",
+        "--force",
+    ]);
+
+    let table = repo.run(&["query", "human readable", "--format", "table", "--no-touch"]);
+    assert!(table.contains("name"));
+    assert!(table.contains("human_readable"));
+    assert!(!table.trim_start().starts_with('['));
+
+    let compact = repo.run(&[
+        "query",
+        "human readable",
+        "--format",
+        "compact",
+        "--no-touch",
+    ]);
+    assert!(compact.contains("human_readable [reference]"));
+    assert!(compact.contains("tags=ui:format"));
+}
+
+#[test]
 fn query_uses_store_config_default_scope() {
     let repo = TestRepo::new("query-config-scope");
     repo.run(&["init"]);

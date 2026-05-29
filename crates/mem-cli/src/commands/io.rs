@@ -10,28 +10,30 @@ pub(crate) fn cmd_export(app: &App, args: ExportArgs) -> Result<()> {
 
     match args.format {
         ExportFormat::Json => print_json_pretty(&memories)?,
-        ExportFormat::Markdown => {
-            for memory in memories {
-                println!("## {}", memory.name);
-                println!();
-                println!("- id: {}", memory.id);
-                println!("- type: {}", memory.r#type);
-                println!("- scope: {}", memory.scope);
-                println!("- confidence: {}", memory.confidence);
-                println!("- tags: {}", memory.tags);
-                println!();
-                if let Some(description) = memory.description {
-                    println!("{}", description);
-                    println!();
-                }
-                if let Some(content) = memory.content {
-                    println!("{}", content);
-                    println!();
-                }
-            }
-        }
+        ExportFormat::Markdown => print_text(render_export_markdown(&memories))?,
     }
     Ok(())
+}
+
+fn render_export_markdown(memories: &[mem_core::db::Memory]) -> String {
+    let mut output = String::new();
+    for memory in memories {
+        output.push_str(&format!("## {}\n\n", memory.name));
+        output.push_str(&format!("- id: {}\n", memory.id));
+        output.push_str(&format!("- type: {}\n", memory.r#type));
+        output.push_str(&format!("- scope: {}\n", memory.scope));
+        output.push_str(&format!("- confidence: {}\n", memory.confidence));
+        output.push_str(&format!("- tags: {}\n\n", memory.tags));
+        if let Some(description) = memory.description.as_deref() {
+            output.push_str(description);
+            output.push_str("\n\n");
+        }
+        if let Some(content) = memory.content.as_deref() {
+            output.push_str(content);
+            output.push_str("\n\n");
+        }
+    }
+    output
 }
 
 fn save_args_from_import_value(

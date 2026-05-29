@@ -34,7 +34,7 @@ fn main() -> Result<()> {
         Command::Context(args) => cmd_context(args)?,
         Command::Config { command } => cmd_config(&app, command)?,
         Command::History(args) => cmd_history(&app, args)?,
-        Command::Stats => cmd_stats(&app)?,
+        Command::Stats(args) => cmd_stats(&app, args)?,
         Command::Audit(args) => with_lock(&app, || cmd_audit(&app, args))?,
         Command::Gc(args) => with_lock(&app, || cmd_gc(&app, args))?,
         Command::Export(args) => cmd_export(&app, args)?,

@@ -172,6 +172,40 @@ fn config_show_reports_effective_paths_and_defaults() {
 }
 
 #[test]
+fn history_and_stats_support_human_formats() {
+    let repo = TestRepo::new("admin-formats");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--name",
+        "format_target",
+        "--type",
+        "feedback",
+        "--content",
+        "format output target",
+        "--force",
+    ]);
+    repo.run(&["query", "format output"]);
+
+    let history_table = repo.run(&["history", "--format", "table"]);
+    assert!(history_table.contains("action"));
+    assert!(history_table.contains("format_target"));
+    assert!(!history_table.trim_start().starts_with('['));
+
+    let history_compact = repo.run(&["history", "--format", "compact"]);
+    assert!(history_compact.contains("format_target"));
+    assert!(history_compact.contains("source=agent"));
+
+    let stats_table = repo.run(&["stats", "--format", "table"]);
+    assert!(stats_table.contains("metric"));
+    assert!(stats_table.contains("type:feedback"));
+
+    let stats_compact = repo.run(&["stats", "--format", "compact"]);
+    assert!(stats_compact.contains("total_active: 1"));
+    assert!(stats_compact.contains("feedback=1"));
+}
+
+#[test]
 fn init_uses_embedded_schema_when_runtime_root_has_no_schema_file() {
     let store = TestRuntimeStore::new("portable-runtime");
 

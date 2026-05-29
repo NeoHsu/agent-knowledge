@@ -8,10 +8,7 @@ pub(crate) fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> 
             validate_tags(&args.memory_ids)?;
             let memory_ids = parse_string_array(&args.memory_ids)?;
             add_ambiguity_record(&conn, &args.query, &memory_ids, args.context.as_deref())?;
-            println!(
-                "{}",
-                json!({"status": "ambiguity_added", "id": conn.last_insert_rowid()})
-            );
+            print_json(&json!({"status": "ambiguity_added", "id": conn.last_insert_rowid()}))?;
         }
         AmbiguityCommand::List(args) => {
             let rows = ambiguity_rows(&conn, args.pending)?;
