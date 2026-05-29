@@ -62,11 +62,11 @@ pub fn list_memories_filtered(
     include_superseded: bool,
     r#type: Option<&str>,
     tag: Option<&str>,
-    scopes: Option<&[String]>,
+    scopes: Option<&[&str]>,
     expired: bool,
 ) -> Result<Vec<Memory>> {
     let mut conditions: Vec<String> = Vec::new();
-    let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    let mut params_vec: Vec<&str> = Vec::new();
 
     if !include_superseded && !expired {
         conditions.push("valid_until IS NULL".to_string());
@@ -78,7 +78,7 @@ pub fn list_memories_filtered(
     }
     if let Some(t) = r#type {
         conditions.push(format!("type = ?{}", params_vec.len() + 1));
-        params_vec.push(Box::new(t.to_string()));
+        params_vec.push(t);
     }
     if let Some(t) = tag {
         // JSON array membership check using SQLite json_each
@@ -86,7 +86,7 @@ pub fn list_memories_filtered(
             "EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?{})",
             params_vec.len() + 1
         ));
-        params_vec.push(Box::new(t.to_string()));
+        params_vec.push(t);
     }
     if let Some(sc) = scopes {
         if !sc.is_empty() {
@@ -97,7 +97,7 @@ pub fn list_memories_filtered(
                 .collect();
             conditions.push(format!("scope IN ({})", placeholders.join(", ")));
             for s in sc {
-                params_vec.push(Box::new(s.clone()));
+                params_vec.push(*s);
             }
         }
     }
@@ -113,10 +113,7 @@ pub fn list_memories_filtered(
         where_clause
     );
     let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(
-        rusqlite::params_from_iter(params_vec.iter().map(|p| p.as_ref())),
-        row_to_memory,
-    )?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(params_vec), row_to_memory)?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
         .map_err(Into::into)
 }

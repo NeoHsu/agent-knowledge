@@ -93,7 +93,7 @@ pub fn search(
     raw_query: bool,
     limit: usize,
     type_filter: Option<&str>,
-    scope_filter: Option<&[String]>,
+    scope_filter: Option<&[&str]>,
 ) -> Result<Vec<String>> {
     let index = ensure_index(index_path)?;
     let fields = fields_from_schema(index.schema())?;

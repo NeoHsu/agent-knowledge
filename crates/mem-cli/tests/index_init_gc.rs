@@ -130,6 +130,16 @@ fn query_help_hides_semantic_until_backend_exists() {
 }
 
 #[test]
+fn context_without_detect_points_to_next_steps() {
+    let repo = TestRepo::new("context-help");
+
+    let output = repo.run_fail(&["context"]);
+
+    assert!(output.contains("mem context --detect"));
+    assert!(output.contains("mem context --help"));
+}
+
+#[test]
 fn config_show_reports_effective_paths_and_defaults() {
     let repo = TestRepo::new("config-show");
     let config_root = temp_path("config-show-root");

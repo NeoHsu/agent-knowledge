@@ -20,9 +20,16 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
         .scope
         .as_deref()
         .or_else(|| app.config.query_default_scope());
+    let detected_scopes = if scope == Some("auto") {
+        Some(scope::detect_scope_set()?)
+    } else {
+        None
+    };
     let scope_filter = match scope {
-        Some("auto") => Some(scope::detect_scope_set()?),
-        Some(scope) => Some(vec!["global".to_string(), scope.to_string()]),
+        Some("auto") => detected_scopes
+            .as_ref()
+            .map(|scopes| scopes.iter().map(String::as_str).collect::<Vec<_>>()),
+        Some(scope) => Some(vec!["global", scope]),
         None => None,
     };
 
@@ -78,13 +85,9 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
     if !args.no_touch && !memories.is_empty() {
         let now = now();
         let ids_list: Vec<&str> = memories.iter().map(|m| m.id.as_str()).collect();
-        // Build WHERE id IN (?2, ?3, ...) — ?1 is reserved for `now`.
+        let placeholders = placeholders(ids_list.len());
         let sql = format!(
-            "UPDATE memories SET access_count = access_count + 1, last_accessed_at = ?1 WHERE id IN ({})",
-            (2..=ids_list.len() + 1)
-                .map(|i| format!("?{i}"))
-                .collect::<Vec<_>>()
-                .join(", ")
+            "UPDATE memories SET access_count = access_count + 1, last_accessed_at = ? WHERE id IN ({placeholders})",
         );
         let mut stmt = conn.prepare(&sql)?;
         let mut bind_params: Vec<&dyn rusqlite::types::ToSql> = vec![&now];
@@ -105,7 +108,7 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
 fn passes_filters(
     memory: &mem_core::db::Memory,
     args: &QueryArgs,
-    scope_filter: Option<&[String]>,
+    scope_filter: Option<&[&str]>,
 ) -> bool {
     if !args.include_superseded && memory.valid_until.is_some() {
         return false;
@@ -121,7 +124,7 @@ fn passes_filters(
         }
     }
     if let Some(scopes) = scope_filter {
-        if !scopes.contains(&memory.scope) {
+        if !scopes.iter().any(|scope| *scope == memory.scope.as_str()) {
             return false;
         }
     }
@@ -129,6 +132,17 @@ fn passes_filters(
         return is_expired(memory.expires_at.as_deref());
     }
     true
+}
+
+fn placeholders(count: usize) -> String {
+    let mut output = String::with_capacity(count.saturating_mul(3));
+    for index in 0..count {
+        if index > 0 {
+            output.push_str(", ");
+        }
+        output.push('?');
+    }
+    output
 }
 
 fn render_memory_table(memories: &[mem_core::db::Memory]) -> String {

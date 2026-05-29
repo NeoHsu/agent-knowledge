@@ -1,4 +1,5 @@
 use super::*;
+use std::fmt::Write as _;
 
 pub(crate) fn cmd_export(app: &App, args: ExportArgs) -> Result<()> {
     app.ensure_schema()?;
@@ -18,12 +19,12 @@ pub(crate) fn cmd_export(app: &App, args: ExportArgs) -> Result<()> {
 fn render_export_markdown(memories: &[mem_core::db::Memory]) -> String {
     let mut output = String::new();
     for memory in memories {
-        output.push_str(&format!("## {}\n\n", memory.name));
-        output.push_str(&format!("- id: {}\n", memory.id));
-        output.push_str(&format!("- type: {}\n", memory.r#type));
-        output.push_str(&format!("- scope: {}\n", memory.scope));
-        output.push_str(&format!("- confidence: {}\n", memory.confidence));
-        output.push_str(&format!("- tags: {}\n\n", memory.tags));
+        writeln!(output, "## {}\n", memory.name).expect("write markdown heading");
+        writeln!(output, "- id: {}", memory.id).expect("write markdown id");
+        writeln!(output, "- type: {}", memory.r#type).expect("write markdown type");
+        writeln!(output, "- scope: {}", memory.scope).expect("write markdown scope");
+        writeln!(output, "- confidence: {}", memory.confidence).expect("write markdown confidence");
+        writeln!(output, "- tags: {}\n", memory.tags).expect("write markdown tags");
         if let Some(description) = memory.description.as_deref() {
             output.push_str(description);
             output.push_str("\n\n");

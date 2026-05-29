@@ -112,7 +112,7 @@ pub fn search_ids(
     raw_query: bool,
     limit: usize,
     type_filter: Option<&str>,
-    scope_filter: Option<&[String]>,
+    scope_filter: Option<&[&str]>,
 ) -> Result<Vec<String>> {
     search_index::search(
         &app.index_path,
