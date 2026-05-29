@@ -124,7 +124,7 @@ fn passes_filters(
         }
     }
     if let Some(scopes) = scope_filter {
-        if !scopes.iter().any(|scope| *scope == memory.scope.as_str()) {
+        if !scopes.contains(&memory.scope.as_str()) {
             return false;
         }
     }
