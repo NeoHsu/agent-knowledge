@@ -173,6 +173,7 @@ Lower-trust incoming same-name memories are rejected. `--prefer-trusted` lets a 
 
 ```bash
 scripts/build-release.sh
+scripts/smoke-release.sh
 ```
 
-After building, install or expose `target/release/mem` on `PATH` (for example via `cargo install --path crates/mem-cli`, or by adding `target/release` to `PATH`). All examples in this guide assume `mem` is on `PATH`.
+After building, `scripts/smoke-release.sh` copies the release binary into an isolated install directory and verifies that `mem init`, `config show`, save/query/reindex/export all work against a runtime-only store with no schema file. Install or expose `target/release/mem` on `PATH` (for example via `cargo install --path crates/mem-cli`, or by adding `target/release` to `PATH`). All examples in this guide assume `mem` is on `PATH`.

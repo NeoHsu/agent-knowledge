@@ -46,33 +46,52 @@ pub(crate) struct Cli {
 
 #[derive(Subcommand)]
 pub(crate) enum Command {
+    #[command(about = "Initialize the active memory store")]
     Init,
+    #[command(about = "Save a durable memory")]
     Save(SaveArgs),
+    #[command(about = "Search or list memories")]
     Query(QueryArgs),
+    #[command(about = "Update an existing memory")]
     Update(UpdateArgs),
+    #[command(about = "Replace a memory while keeping history")]
     Supersede(SupersedeArgs),
+    #[command(about = "Soft-delete or hard-delete a memory")]
     Delete(DeleteArgs),
+    #[command(about = "Rebuild the search index from SQLite")]
     Reindex,
+    #[command(about = "Inspect repository context such as auto-detected scope")]
     Context(ContextArgs),
+    #[command(about = "Inspect CLI configuration and effective defaults")]
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+    #[command(about = "Show memory changelog entries")]
     History(HistoryArgs),
+    #[command(about = "Show memory store statistics")]
     Stats,
+    #[command(about = "Audit memory health and optional fixes")]
     Audit(AuditArgs),
+    #[command(about = "Garbage-collect old soft-deleted memories")]
     Gc(GcArgs),
+    #[command(about = "Export memories as JSON or Markdown")]
     Export(ExportArgs),
+    #[command(about = "Import memories from JSON or a document")]
     Import(ImportArgs),
+    #[command(about = "Merge another memory database into this store")]
     Merge(MergeArgs),
+    #[command(about = "Generate daily or weekly retrospective bundles")]
     Retro {
         #[command(subcommand)]
         command: RetroCommand,
     },
+    #[command(about = "List, find, show, and validate workflow memories")]
     Workflow {
         #[command(subcommand)]
         command: WorkflowCommand,
     },
+    #[command(about = "Record and resolve ambiguous or conflicting memories")]
     Ambiguity {
         #[command(subcommand)]
         command: AmbiguityCommand,
@@ -81,6 +100,7 @@ pub(crate) enum Command {
 
 #[derive(Subcommand)]
 pub(crate) enum ConfigCommand {
+    #[command(about = "Show active store, config paths, environment, and effective defaults")]
     Show,
 }
 
@@ -116,28 +136,29 @@ pub(crate) struct SaveArgs {
 
 #[derive(Args)]
 pub(crate) struct QueryArgs {
+    #[arg(help = "Text to search; omitted lists memories with filters")]
     pub(crate) query: Option<String>,
-    #[arg(long, value_parser = parse_memory_type)]
+    #[arg(long, value_parser = parse_memory_type, help = "Filter by memory type")]
     pub(crate) r#type: Option<String>,
-    #[arg(long)]
+    #[arg(long, help = "Filter by exact tag value")]
     pub(crate) tags: Option<String>,
-    #[arg(long)]
+    #[arg(long, help = "Filter scope; use auto for global plus detected project")]
     pub(crate) scope: Option<String>,
-    #[arg(long)]
+    #[arg(long, help = "Only include expired memories")]
     pub(crate) expired: bool,
-    #[arg(long)]
+    #[arg(long, help = "Include superseded or soft-deleted memories")]
     pub(crate) include_superseded: bool,
-    #[arg(long)]
+    #[arg(long, help = "Maximum rows; defaults to config or 20")]
     pub(crate) limit: Option<usize>,
-    #[arg(long, value_enum, default_value_t = SortMode::Relevance)]
+    #[arg(long, value_enum, default_value_t = SortMode::Relevance, help = "Sort mode")]
     pub(crate) sort: SortMode,
-    #[arg(long)]
+    #[arg(long, help = "Use fuzzy matching across indexed fields")]
     pub(crate) fuzzy: bool,
-    #[arg(long)]
+    #[arg(long, help = "Reserved semantic search interface")]
     pub(crate) semantic: bool,
-    #[arg(long)]
+    #[arg(long, help = "Do not update access counters")]
     pub(crate) no_touch: bool,
-    #[arg(long)]
+    #[arg(long, help = "Treat query as Tantivy query syntax")]
     pub(crate) raw_query: bool,
 }
 
@@ -265,19 +286,23 @@ pub(crate) enum RetroCommand {
 
 #[derive(Subcommand)]
 pub(crate) enum WorkflowCommand {
+    #[command(about = "List workflow memories")]
     List(WorkflowListArgs),
+    #[command(about = "Show a workflow by name or id")]
     Show(WorkflowShowArgs),
+    #[command(about = "Find workflows matching an intent")]
     Find(WorkflowFindArgs),
+    #[command(about = "Validate workflow content and tags")]
     Validate(WorkflowValidateArgs),
 }
 
 #[derive(Args)]
 pub(crate) struct WorkflowListArgs {
-    #[arg(long)]
+    #[arg(long, help = "Filter scope; use auto for global plus detected project")]
     pub(crate) scope: Option<String>,
-    #[arg(long)]
+    #[arg(long, help = "Maximum rows; defaults to config or 20")]
     pub(crate) limit: Option<usize>,
-    #[arg(long)]
+    #[arg(long, help = "Include superseded workflows")]
     pub(crate) include_superseded: bool,
 }
 
@@ -288,10 +313,11 @@ pub(crate) struct WorkflowShowArgs {
 
 #[derive(Args)]
 pub(crate) struct WorkflowFindArgs {
+    #[arg(help = "Intent text such as release, deploy, or fix ci")]
     pub(crate) intent: String,
-    #[arg(long)]
+    #[arg(long, help = "Filter scope; use auto for global plus detected project")]
     pub(crate) scope: Option<String>,
-    #[arg(long)]
+    #[arg(long, help = "Maximum rows; defaults to config or 20")]
     pub(crate) limit: Option<usize>,
 }
 

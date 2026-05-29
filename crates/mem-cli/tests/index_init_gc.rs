@@ -1,20 +1,11 @@
 use std::fs;
 use std::process::{Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection};
 
 mod support;
 
-use support::{mem_bin, TestRepo};
-
-fn temp_path(name: &str) -> std::path::PathBuf {
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time")
-        .as_nanos();
-    std::env::temp_dir().join(format!("agent-knowledge-{name}-{stamp}"))
-}
+use support::{mem_bin, temp_path, TestRepo, TestRuntimeStore};
 
 fn mark_index_dirty(repo: &TestRepo) {
     let conn = Connection::open(repo.join("memory.db")).expect("open memory db");
@@ -62,6 +53,19 @@ fn init_uses_user_config_knowledge_home_when_env_is_absent() {
     assert!(knowledge_home.join("index").exists());
     assert!(!run_dir.join("memory.db").exists());
 
+    let shown_output = Command::new(&installed_mem)
+        .current_dir(&run_dir)
+        .env("XDG_CONFIG_HOME", &config_root)
+        .env_remove("AGENT_KNOWLEDGE_HOME")
+        .args(["config", "show"])
+        .output()
+        .expect("run config show");
+    assert!(shown_output.status.success(), "config show failed");
+    let shown: serde_json::Value =
+        serde_json::from_slice(&shown_output.stdout).expect("config show json");
+    assert_eq!(shown["store_source"], "user_config");
+    assert_eq!(shown["root"], knowledge_home.display().to_string());
+
     fs::remove_dir_all(install_dir).ok();
     fs::remove_dir_all(run_dir).ok();
     fs::remove_dir_all(config_root).ok();
@@ -96,7 +100,9 @@ fn config_show_reports_effective_paths_and_defaults() {
     let shown: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("config show json");
     assert_eq!(shown["root"], repo.path().display().to_string());
+    assert_eq!(shown["store_source"], "current_directory");
     assert_eq!(shown["store_config_exists"], true);
+    assert_eq!(shown["effective"]["schema"], "embedded");
     assert_eq!(shown["effective"]["query_default_scope"], "auto");
     assert_eq!(shown["effective"]["query_default_limit"], 7);
     assert_eq!(
@@ -110,42 +116,25 @@ fn config_show_reports_effective_paths_and_defaults() {
 
 #[test]
 fn init_uses_embedded_schema_when_runtime_root_has_no_schema_file() {
-    let install_dir = temp_path("portable-install");
-    let run_dir = temp_path("portable-run");
-    let home = temp_path("portable-home");
-    fs::create_dir_all(&install_dir).expect("install dir");
-    fs::create_dir_all(&run_dir).expect("run dir");
-    fs::create_dir_all(&home).expect("home dir");
-    let installed_mem = install_dir.join("mem");
-    fs::copy(mem_bin(), &installed_mem).expect("copy mem binary");
+    let store = TestRuntimeStore::new("portable-runtime");
 
-    let output = Command::new(&installed_mem)
-        .current_dir(&run_dir)
-        .env("AGENT_KNOWLEDGE_HOME", &home)
-        .arg("init")
-        .output()
-        .expect("run installed mem init");
-    assert!(
-        output.status.success(),
-        "portable init failed\nstdout={}\nstderr={}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
+    store.run(&["init"]);
 
-    assert!(home.join("memory.db").exists());
-    assert!(home.join("index").exists());
-    assert!(!home.join("schema/memory-schema.sql").exists());
+    assert!(store.home().join("memory.db").exists());
+    assert!(store.home().join("index").exists());
+    assert!(!store.home().join("schema/memory-schema.sql").exists());
+    assert!(!store.run_dir().join("memory.db").exists());
 
-    let conn = Connection::open(home.join("memory.db")).expect("open portable db");
+    let shown: serde_json::Value =
+        serde_json::from_str(&store.run(&["config", "show"])).expect("config json");
+    assert_eq!(shown["store_source"], "environment");
+    assert_eq!(shown["effective"]["schema"], "embedded");
+
+    let conn = Connection::open(store.home().join("memory.db")).expect("open portable db");
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("schema version");
     assert_eq!(version, 3);
-    drop(conn);
-
-    fs::remove_dir_all(install_dir).ok();
-    fs::remove_dir_all(run_dir).ok();
-    fs::remove_dir_all(home).ok();
 }
 
 #[test]

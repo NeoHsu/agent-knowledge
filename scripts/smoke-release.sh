@@ -16,24 +16,33 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$WORKDIR/schema"
-cp "$ROOT/schema/memory-schema.sql" "$WORKDIR/schema/memory-schema.sql"
+INSTALL_DIR="$WORKDIR/install"
+RUN_DIR="$WORKDIR/run"
+HOME_DIR="$WORKDIR/home"
+mkdir -p "$INSTALL_DIR" "$RUN_DIR" "$HOME_DIR"
+cp "$MEM_BIN" "$INSTALL_DIR/mem"
 
 (
-  cd "$WORKDIR"
-  "$MEM_BIN" init >/dev/null
-  "$MEM_BIN" save \
+  cd "$RUN_DIR"
+  AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" init >/dev/null
+  [[ -f "$HOME_DIR/memory.db" ]]
+  [[ -d "$HOME_DIR/index" ]]
+  [[ ! -e "$HOME_DIR/schema/memory-schema.sql" ]]
+  config_output="$(AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" config show)"
+  [[ "$config_output" == *'"store_source": "environment"'* ]]
+  [[ "$config_output" == *'"schema": "embedded"'* ]]
+  AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" save \
     --name smoke_release \
     --source manual \
     --tags '["smoke:test"]' \
     --content "release smoke searchable content" \
     --force >/dev/null
-  query_output="$("$MEM_BIN" query "searchable" --no-touch)"
+  query_output="$(AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" query "searchable" --no-touch)"
   [[ "$query_output" == *smoke_release* ]]
-  "$MEM_BIN" reindex >/dev/null
-  query_output="$("$MEM_BIN" query "release smoke" --no-touch)"
+  AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" reindex >/dev/null
+  query_output="$(AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" query "release smoke" --no-touch)"
   [[ "$query_output" == *smoke_release* ]]
-  export_output="$("$MEM_BIN" export --format json)"
+  export_output="$(AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" export --format json)"
   [[ "$export_output" == *smoke_release* ]]
 )
 

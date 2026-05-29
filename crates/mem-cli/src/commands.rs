@@ -50,7 +50,7 @@ pub(crate) use workflow::cmd_workflow;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mem_core::config::Config;
+    use mem_core::{app::StoreSource, config::Config};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_app(name: &str) -> App {
@@ -70,6 +70,7 @@ mod tests {
             index_path: root.join("index"),
             root,
             config: Config::default(),
+            store_source: StoreSource::CurrentDirectory,
         }
     }
 

@@ -7,6 +7,7 @@ Portable agent memory system. The repository owns the `mem` CLI, schema, skill i
 ```bash
 mise install                       # Rust + Zig toolchain pinned in mise.toml
 scripts/build-release.sh
+scripts/smoke-release.sh
 cargo install --path crates/mem-cli # installs `mem` into ~/.cargo/bin (on PATH)
 
 mem init

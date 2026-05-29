@@ -11,12 +11,34 @@ use crate::{db::migrate_schema, search_index};
 
 const MEMORY_SCHEMA: &str = include_str!("../../../schema/memory-schema.sql");
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StoreSource {
+    CurrentDirectory,
+    ExecutableParent,
+    Environment,
+    UserConfig,
+    Default,
+}
+
+impl StoreSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::CurrentDirectory => "current_directory",
+            Self::ExecutableParent => "executable_parent",
+            Self::Environment => "environment",
+            Self::UserConfig => "user_config",
+            Self::Default => "default",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct App {
     pub root: PathBuf,
     pub db_path: PathBuf,
     pub index_path: PathBuf,
     pub config: Config,
+    pub store_source: StoreSource,
 }
 
 impl App {
@@ -26,10 +48,12 @@ impl App {
             .ok()
             .and_then(|p| p.parent().map(Path::to_path_buf));
         let cwd = env::current_dir().context("read current directory")?;
-        let root = if cwd.join("schema/memory-schema.sql").exists() {
-            cwd
+        let (root, store_source) = if cwd.join("schema/memory-schema.sql").exists() {
+            (cwd, StoreSource::CurrentDirectory)
         } else if let Some(dir) = exe_dir {
-            find_root(&dir).unwrap_or_else(|| default_root(&user_config))
+            find_root(&dir)
+                .map(|root| (root, StoreSource::ExecutableParent))
+                .unwrap_or_else(|| default_root(&user_config))
         } else {
             default_root(&user_config)
         };
@@ -40,6 +64,7 @@ impl App {
             index_path: root.join("index"),
             root,
             config,
+            store_source,
         })
     }
 
@@ -91,12 +116,12 @@ fn find_root(start: &Path) -> Option<PathBuf> {
     None
 }
 
-fn default_root(config: &Config) -> PathBuf {
-    env::var("AGENT_KNOWLEDGE_HOME")
-        .map(|path| expand_home(&path))
-        .unwrap_or_else(|_| {
-            config
-                .knowledge_home_path()
-                .unwrap_or_else(|| expand_home("~/.agent-knowledge"))
-        })
+fn default_root(config: &Config) -> (PathBuf, StoreSource) {
+    if let Ok(path) = env::var("AGENT_KNOWLEDGE_HOME") {
+        return (expand_home(&path), StoreSource::Environment);
+    }
+    if let Some(path) = config.knowledge_home_path() {
+        return (path, StoreSource::UserConfig);
+    }
+    (expand_home("~/.agent-knowledge"), StoreSource::Default)
 }

@@ -11,6 +11,13 @@ pub struct TestRepo {
     path: PathBuf,
 }
 
+pub struct TestRuntimeStore {
+    install_dir: PathBuf,
+    run_dir: PathBuf,
+    home: PathBuf,
+    mem: PathBuf,
+}
+
 impl TestRepo {
     pub fn new(name: &str) -> Self {
         Self {
@@ -41,9 +48,62 @@ impl TestRepo {
     }
 }
 
+impl TestRuntimeStore {
+    pub fn new(name: &str) -> Self {
+        let root = temp_path(name);
+        let install_dir = root.join("install");
+        let run_dir = root.join("run");
+        let home = root.join("home");
+        fs::create_dir_all(&install_dir).expect("install dir");
+        fs::create_dir_all(&run_dir).expect("run dir");
+        fs::create_dir_all(&home).expect("home dir");
+        let mem = install_dir.join("mem");
+        fs::copy(mem_bin(), &mem).expect("copy mem binary");
+        Self {
+            install_dir,
+            run_dir,
+            home,
+            mem,
+        }
+    }
+
+    pub fn home(&self) -> &PathBuf {
+        &self.home
+    }
+
+    pub fn run_dir(&self) -> &PathBuf {
+        &self.run_dir
+    }
+
+    pub fn run(&self, args: &[&str]) -> String {
+        let output = Command::new(&self.mem)
+            .current_dir(&self.run_dir)
+            .env("AGENT_KNOWLEDGE_HOME", &self.home)
+            .args(args)
+            .output()
+            .expect("run installed mem");
+        assert!(
+            output.status.success(),
+            "command failed: {:?}\nstdout={}\nstderr={}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).expect("utf8 stdout")
+    }
+}
+
 impl Drop for TestRepo {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.path).ok();
+    }
+}
+
+impl Drop for TestRuntimeStore {
+    fn drop(&mut self) {
+        if let Some(root) = self.install_dir.parent() {
+            fs::remove_dir_all(root).ok();
+        }
     }
 }
 
@@ -51,12 +111,16 @@ pub fn mem_bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_mem"))
 }
 
-pub fn temp_repo(name: &str) -> PathBuf {
+pub fn temp_path(name: &str) -> PathBuf {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("time")
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!("agent-knowledge-{name}-{stamp}"));
+    std::env::temp_dir().join(format!("agent-knowledge-{name}-{stamp}"))
+}
+
+pub fn temp_repo(name: &str) -> PathBuf {
+    let dir = temp_path(name);
     fs::create_dir_all(dir.join("schema")).expect("schema dir");
     fs::write(
         dir.join("schema/memory-schema.sql"),

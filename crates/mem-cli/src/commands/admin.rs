@@ -14,6 +14,7 @@ pub(crate) fn cmd_config(app: &App, command: ConfigCommand) -> Result<()> {
         ConfigCommand::Show => {
             print_json_pretty(&json!({
                 "root": app.root.display().to_string(),
+                "store_source": app.store_source.as_str(),
                 "db_path": app.db_path.display().to_string(),
                 "index_path": app.index_path.display().to_string(),
                 "user_config_path": user_config_path().display().to_string(),
@@ -26,6 +27,7 @@ pub(crate) fn cmd_config(app: &App, command: ConfigCommand) -> Result<()> {
                 },
                 "effective": {
                     "knowledge_home": app.root.display().to_string(),
+                    "schema": "embedded",
                     "query_default_scope": app.config.query_default_scope(),
                     "query_default_limit": app.config.query_default_limit().unwrap_or(DEFAULT_LIMIT),
                     "workflow_default_scope": app.config.workflow_default_scope(),
