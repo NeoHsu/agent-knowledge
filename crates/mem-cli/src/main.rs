@@ -12,7 +12,7 @@ use mem_core::index as memory_index;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let app = App::discover()?;
+    let app = App::discover_with_home(cli.home.as_deref())?;
 
     match cli.command {
         Command::Init => {

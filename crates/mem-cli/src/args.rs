@@ -40,6 +40,13 @@ fn parse_allowed(value: &str, allowed: &[&str], label: &str) -> Result<String, S
 #[derive(Parser)]
 #[command(name = "mem", version, about = "Portable agent memory CLI")]
 pub(crate) struct Cli {
+    #[arg(
+        long,
+        global = true,
+        value_name = "PATH",
+        help = "Override the active knowledge store root"
+    )]
+    pub(crate) home: Option<String>,
     #[command(subcommand)]
     pub(crate) command: Command,
 }
@@ -154,7 +161,7 @@ pub(crate) struct QueryArgs {
     pub(crate) sort: SortMode,
     #[arg(long, help = "Use fuzzy matching across indexed fields")]
     pub(crate) fuzzy: bool,
-    #[arg(long, help = "Reserved semantic search interface")]
+    #[arg(long, hide = true)]
     pub(crate) semantic: bool,
     #[arg(long, help = "Do not update access counters")]
     pub(crate) no_touch: bool,

@@ -13,6 +13,7 @@ const MEMORY_SCHEMA: &str = include_str!("../../../schema/memory-schema.sql");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StoreSource {
+    CliOverride,
     CurrentDirectory,
     ExecutableParent,
     Environment,
@@ -23,6 +24,7 @@ pub enum StoreSource {
 impl StoreSource {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::CliOverride => "cli",
             Self::CurrentDirectory => "current_directory",
             Self::ExecutableParent => "executable_parent",
             Self::Environment => "environment",
@@ -43,12 +45,18 @@ pub struct App {
 
 impl App {
     pub fn discover() -> Result<Self> {
+        Self::discover_with_home(None)
+    }
+
+    pub fn discover_with_home(home: Option<&str>) -> Result<Self> {
         let user_config = Config::load_user()?;
         let exe_dir = env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(Path::to_path_buf));
         let cwd = env::current_dir().context("read current directory")?;
-        let (root, store_source) = if cwd.join("schema/memory-schema.sql").exists() {
+        let (root, store_source) = if let Some(home) = home {
+            (expand_home(home), StoreSource::CliOverride)
+        } else if cwd.join("schema/memory-schema.sql").exists() {
             (cwd, StoreSource::CurrentDirectory)
         } else if let Some(dir) = exe_dir {
             find_root(&dir)

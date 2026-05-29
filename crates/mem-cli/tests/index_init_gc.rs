@@ -73,6 +73,63 @@ fn init_uses_user_config_knowledge_home_when_env_is_absent() {
 }
 
 #[test]
+fn cli_home_overrides_current_directory_store() {
+    let repo = TestRepo::new("cli-home-repo");
+    let cli_home = temp_path("cli-home-store");
+    let config_root = temp_path("cli-home-config");
+    fs::create_dir_all(&config_root).expect("config root");
+
+    let output = Command::new(mem_bin())
+        .current_dir(repo.path())
+        .env("XDG_CONFIG_HOME", &config_root)
+        .env_remove("AGENT_KNOWLEDGE_HOME")
+        .args(["--home", cli_home.to_str().expect("cli home path"), "init"])
+        .output()
+        .expect("run mem init with cli home");
+    assert!(
+        output.status.success(),
+        "cli home init failed\nstdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert!(cli_home.join("memory.db").exists());
+    assert!(!repo.join("memory.db").exists());
+
+    let shown_output = Command::new(mem_bin())
+        .current_dir(repo.path())
+        .env("XDG_CONFIG_HOME", &config_root)
+        .env_remove("AGENT_KNOWLEDGE_HOME")
+        .args([
+            "--home",
+            cli_home.to_str().expect("cli home path"),
+            "config",
+            "show",
+        ])
+        .output()
+        .expect("run config show with cli home");
+    assert!(shown_output.status.success(), "config show failed");
+    let shown: serde_json::Value =
+        serde_json::from_slice(&shown_output.stdout).expect("config show json");
+    assert_eq!(shown["store_source"], "cli");
+    assert_eq!(shown["root"], cli_home.display().to_string());
+
+    fs::remove_dir_all(cli_home).ok();
+    fs::remove_dir_all(config_root).ok();
+}
+
+#[test]
+fn query_help_hides_semantic_until_backend_exists() {
+    let output = Command::new(mem_bin())
+        .args(["query", "--help"])
+        .output()
+        .expect("run query help");
+    assert!(output.status.success(), "query help failed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("--semantic"));
+}
+
+#[test]
 fn config_show_reports_effective_paths_and_defaults() {
     let repo = TestRepo::new("config-show");
     let config_root = temp_path("config-show-root");

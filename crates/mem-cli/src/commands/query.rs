@@ -2,8 +2,9 @@ use super::*;
 
 pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
     app.ensure_schema()?;
-    // TODO(F2): --semantic is planned but unimplemented; no embedding backend
-    // is configured yet. Return an explicit error rather than silently succeeding.
+    // TODO(F2): --semantic is intentionally hidden until an embedding backend
+    // is planned and configured. Keep the guard so hidden/manual use fails
+    // explicitly instead of silently falling back to full-text search.
     if args.semantic {
         anyhow::bail!(
             "--semantic is not yet implemented; no embedding backend is configured. \

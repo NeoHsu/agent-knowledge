@@ -11,6 +11,7 @@ scripts/smoke-release.sh
 cargo install --path crates/mem-cli # installs `mem` into ~/.cargo/bin (on PATH)
 
 mem init
+mem --home ~/.agent-knowledge config show
 mem config show
 mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
 mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
@@ -62,9 +63,9 @@ docs/                             optional profile/config
 CI/release
 ```
 
-`mem` discovers the active store in this order: current directory with `schema/memory-schema.sql`, a parent of the executable with `schema/memory-schema.sql`, `AGENT_KNOWLEDGE_HOME`, `knowledge_home` in `~/.config/agent-knowledge/config.toml`, then `~/.agent-knowledge`. Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the binary.
+`mem` discovers the active store in this order: explicit `--home <path>`, current directory with `schema/memory-schema.sql`, a parent of the executable with `schema/memory-schema.sql`, `AGENT_KNOWLEDGE_HOME`, `knowledge_home` in `~/.config/agent-knowledge/config.toml`, then `~/.agent-knowledge`. Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the binary.
 
-CLI/tool settings use TOML; workflow runbooks use YAML. Command default priority is: CLI flags, user config at `~/.config/agent-knowledge/config.toml`, store config at `$AGENT_KNOWLEDGE_HOME/config.toml`, then built-in defaults. `AGENT_KNOWLEDGE_HOME` only overrides active store selection. See `templates/config.toml` and `mem config show`.
+CLI/tool settings use TOML; workflow runbooks use YAML. Command default priority is: CLI flags, user config at `~/.config/agent-knowledge/config.toml`, store config at the active store root, then built-in defaults. `--home` and `AGENT_KNOWLEDGE_HOME` only override active store selection. See `templates/config.toml` and `mem config show`.
 
 Writes update SQLite in a transaction, write changelog rows, and then update the Tantivy index. If the index is stale, run `mem reindex`.
 
