@@ -5,10 +5,18 @@ pub(crate) fn cmd_workflow(app: &App, command: WorkflowCommand) -> Result<()> {
     let conn = app.conn()?;
     match command {
         WorkflowCommand::List(args) => {
-            let scope_filter = workflow_scope_filter(args.scope.as_deref())?;
+            let limit = args
+                .limit
+                .or_else(|| app.config.workflow_default_limit())
+                .unwrap_or(DEFAULT_LIMIT);
+            let scope = args
+                .scope
+                .as_deref()
+                .or_else(|| app.config.workflow_default_scope());
+            let scope_filter = workflow_scope_filter(scope)?;
             let mut workflows = all_workflows(&conn, args.include_superseded)?;
             workflow_core::retain_scope(&mut workflows, scope_filter.as_deref());
-            workflows.truncate(args.limit);
+            workflows.truncate(limit);
             print_json_pretty(&workflows)?;
         }
         WorkflowCommand::Show(args) => {
@@ -16,7 +24,15 @@ pub(crate) fn cmd_workflow(app: &App, command: WorkflowCommand) -> Result<()> {
             print_json_pretty(&workflow)?;
         }
         WorkflowCommand::Find(args) => {
-            let scope_filter = workflow_scope_filter(args.scope.as_deref())?;
+            let limit = args
+                .limit
+                .or_else(|| app.config.workflow_default_limit())
+                .unwrap_or(DEFAULT_LIMIT);
+            let scope = args
+                .scope
+                .as_deref()
+                .or_else(|| app.config.workflow_default_scope());
+            let scope_filter = workflow_scope_filter(scope)?;
             let mut workflows = all_workflows(&conn, false)?;
             workflow_core::retain_scope(&mut workflows, scope_filter.as_deref());
             workflows.retain(|memory| workflow_core::matches_intent(memory, &args.intent));
@@ -27,7 +43,7 @@ pub(crate) fn cmd_workflow(app: &App, command: WorkflowCommand) -> Result<()> {
                     scope_filter.as_deref(),
                 ))
             });
-            workflows.truncate(args.limit);
+            workflows.truncate(limit);
             print_json_pretty(&workflows)?;
         }
         WorkflowCommand::Validate(args) => {

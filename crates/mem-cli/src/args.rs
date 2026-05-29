@@ -54,6 +54,10 @@ pub(crate) enum Command {
     Delete(DeleteArgs),
     Reindex,
     Context(ContextArgs),
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
     History(HistoryArgs),
     Stats,
     Audit(AuditArgs),
@@ -73,6 +77,11 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: AmbiguityCommand,
     },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ConfigCommand {
+    Show,
 }
 
 #[derive(Args)]
@@ -118,8 +127,8 @@ pub(crate) struct QueryArgs {
     pub(crate) expired: bool,
     #[arg(long)]
     pub(crate) include_superseded: bool,
-    #[arg(long, default_value_t = DEFAULT_LIMIT)]
-    pub(crate) limit: usize,
+    #[arg(long)]
+    pub(crate) limit: Option<usize>,
     #[arg(long, value_enum, default_value_t = SortMode::Relevance)]
     pub(crate) sort: SortMode,
     #[arg(long)]
@@ -266,8 +275,8 @@ pub(crate) enum WorkflowCommand {
 pub(crate) struct WorkflowListArgs {
     #[arg(long)]
     pub(crate) scope: Option<String>,
-    #[arg(long, default_value_t = DEFAULT_LIMIT)]
-    pub(crate) limit: usize,
+    #[arg(long)]
+    pub(crate) limit: Option<usize>,
     #[arg(long)]
     pub(crate) include_superseded: bool,
 }
@@ -282,8 +291,8 @@ pub(crate) struct WorkflowFindArgs {
     pub(crate) intent: String,
     #[arg(long)]
     pub(crate) scope: Option<String>,
-    #[arg(long, default_value_t = DEFAULT_LIMIT)]
-    pub(crate) limit: usize,
+    #[arg(long)]
+    pub(crate) limit: Option<usize>,
 }
 
 #[derive(Args)]

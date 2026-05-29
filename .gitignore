@@ -3,4 +3,6 @@
 /memory.db
 /memory.db-*
 /.mem.lock
+/.agents/
+/skills-lock.json
 *.tmp

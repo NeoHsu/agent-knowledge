@@ -11,7 +11,15 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
         );
     }
     let conn = app.conn()?;
-    let scope_filter = match args.scope.as_deref() {
+    let limit = args
+        .limit
+        .or_else(|| app.config.query_default_limit())
+        .unwrap_or(DEFAULT_LIMIT);
+    let scope = args
+        .scope
+        .as_deref()
+        .or_else(|| app.config.query_default_scope());
+    let scope_filter = match scope {
         Some("auto") => Some(scope::detect_scope_set()?),
         Some(scope) => Some(vec!["global".to_string(), scope.to_string()]),
         None => None,
@@ -19,7 +27,7 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
 
     let mut ids = if let Some(query) = args.query.as_deref() {
         memory_index::repair_stale(app)?;
-        let search_limit = memory_count(&conn)?.max(args.limit).max(DEFAULT_LIMIT);
+        let search_limit = memory_count(&conn)?.max(limit).max(DEFAULT_LIMIT);
         memory_index::search_ids(
             app,
             query,
@@ -63,7 +71,7 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
             memories.sort_by_key(|memory| std::cmp::Reverse(memory.access_count))
         }
     }
-    memories.truncate(args.limit);
+    memories.truncate(limit);
 
     // P4: wrap all access_count updates in a single transaction instead of
     // individual UPDATE statements in a loop.

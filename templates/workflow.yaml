@@ -4,10 +4,19 @@ triggers:
   - user asks for this recurring task
 preconditions:
   - required repository or system context is available
+reusable_scripts:
+  - path: scripts/example.sh
+    owner: repo
+    required: true
+    purpose: reusable executable logic referenced by this workflow
 steps:
   - id: inspect
     check: confirm the current state and relevant inputs
     verify: the task scope and safety conditions are understood
+  - id: scripted-step
+    run: scripts/example.sh
+    check: scripts/example.sh exists and is executable
+    verify: the script completed as intended
   - id: act
     manual: perform the smallest appropriate action
     verify: the action completed as intended

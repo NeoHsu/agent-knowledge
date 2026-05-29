@@ -35,7 +35,7 @@ mod retro;
 mod workflow;
 
 pub(crate) use admin::{
-    audit_report, cmd_audit, cmd_context, cmd_gc, cmd_history, cmd_stats, stats_report,
+    audit_report, cmd_audit, cmd_config, cmd_context, cmd_gc, cmd_history, cmd_stats, stats_report,
 };
 pub(crate) use ambiguity::cmd_ambiguity;
 pub(crate) use io::{cmd_export, cmd_import};
@@ -50,6 +50,7 @@ pub(crate) use workflow::cmd_workflow;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mem_core::config::Config;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_app(name: &str) -> App {
@@ -67,8 +68,8 @@ mod tests {
         App {
             db_path: root.join("memory.db"),
             index_path: root.join("index"),
-            schema_path: root.join("schema/memory-schema.sql"),
             root,
+            config: Config::default(),
         }
     }
 

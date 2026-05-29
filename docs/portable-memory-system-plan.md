@@ -32,7 +32,7 @@ agent-knowledge/                  (CLI/project repo)
 ├── bin/
 │   └── mem                       Rust CLI
 │
-├── config.yaml                   環境設定
+├── config.toml                   CLI/tool 環境設定
 └── schema/
     └── memory-schema.sql         DB schema
 ```
@@ -42,7 +42,7 @@ runtime/private store             (local 或 private data repo)
 ├── memory.db                     SQLite source of truth
 ├── index/                        Tantivy 搜尋索引（可從 db 重建）
 ├── profile/                      可選：身份/偏好
-└── config.yaml                   可選：環境設定
+└── config.toml                   可選：store-local CLI/tool 設定
 ```
 
 ---
@@ -609,22 +609,23 @@ readers/
 └── discord.sh          # 透過 API 讀訊息歷史
 ```
 
-首次設定時 LLM 探測環境，寫入 config.yaml：
+首次設定時 LLM 探測環境，寫入 config.toml：
 
-```yaml
-# config.yaml
-platforms:
-  claude-code:
-    detected: true
-    session_log_path: ~/.claude/projects/-home-node/sessions/
-    log_format: jsonl
-    reader: readers/claude-code.sh
-  openab-discord:
-    detected: true
-    channel_id: "1428761906880970915"
-    reader: readers/discord.sh
-  hermes:
-    detected: false
+```toml
+# config.toml
+[platforms.claude-code]
+detected = true
+session_log_path = "~/.claude/projects/-home-node/sessions/"
+log_format = "jsonl"
+reader = "readers/claude-code.sh"
+
+[platforms.openab-discord]
+detected = true
+channel_id = "1428761906880970915"
+reader = "readers/discord.sh"
+
+[platforms.hermes]
+detected = false
 ```
 
 之後復盤時直接讀 config，不再探測。
@@ -747,7 +748,7 @@ Agent 帶著正確的 context 開始工作
 ### Phase 1 — 骨架（先能跑）
 
 1. 建立 GitHub private repo `agent-knowledge`
-2. 建立目錄結構 + config.yaml + schema（含 changelog 表）
+2. 建立目錄結構 + config.toml + schema（含 changelog 表）
 3. 實作 `mem` CLI 基本功能（Rust）
    - `mem save` / `mem query` / `mem update` / `mem delete`
    - SQLite（資料儲存）+ Tantivy（搜尋索引）

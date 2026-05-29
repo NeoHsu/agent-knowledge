@@ -120,6 +120,68 @@ fn workflow_find_normalizes_intent_tag_separators() {
 }
 
 #[test]
+fn workflow_find_uses_store_config_defaults() {
+    let repo = TestRepo::new("workflow-config-defaults");
+    repo.run(&["init"]);
+    fs::write(
+        repo.join("config.toml"),
+        "[workflow]\ndefault_scope = \"project:NeoHsu/agent-knowledge\"\ndefault_limit = 1\n",
+    )
+    .expect("write config");
+    let global_content = "schema_version: 1\ngoal: Release global workflow safely.\ntriggers:\n  - release\nsteps:\n  - id: inspect\n    check: global state is known\nstop_conditions:\n  - unsafe state\n";
+    let project_content = "schema_version: 1\ngoal: Release project workflow safely.\ntriggers:\n  - release\nsteps:\n  - id: inspect\n    check: project state is known\nstop_conditions:\n  - unsafe state\n";
+    let other_content = "schema_version: 1\ngoal: Release other project workflow safely.\ntriggers:\n  - release\nsteps:\n  - id: inspect\n    check: other project state is known\nstop_conditions:\n  - unsafe state\n";
+    repo.run(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "release_global_workflow",
+        "--scope",
+        "global",
+        "--tags",
+        r#"["workflow:release","intent:release"]"#,
+        "--content",
+        global_content,
+        "--force",
+    ]);
+    repo.run(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "release_project_workflow",
+        "--scope",
+        "project:NeoHsu/agent-knowledge",
+        "--tags",
+        r#"["workflow:release","intent:release","project:NeoHsu/agent-knowledge"]"#,
+        "--content",
+        project_content,
+        "--force",
+    ]);
+    repo.run(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "release_other_project_workflow",
+        "--scope",
+        "project:Other/repo",
+        "--tags",
+        r#"["workflow:release","intent:release","project:Other/repo"]"#,
+        "--content",
+        other_content,
+        "--force",
+    ]);
+
+    let found = repo.run(&["workflow", "find", "release"]);
+
+    assert!(found.contains("release_project_workflow"));
+    assert!(!found.contains("release_global_workflow"));
+    assert!(!found.contains("release_other_project_workflow"));
+}
+
+#[test]
 fn workflow_validation_rejects_invalid_content_without_bypass() {
     let repo = TestRepo::new("workflow-validation");
     repo.run(&["init"]);

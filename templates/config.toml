@@ -1,0 +1,17 @@
+# User config: ~/.config/agent-knowledge/config.toml
+# Store config: $AGENT_KNOWLEDGE_HOME/config.toml
+
+# User config only: choose the active runtime store when AGENT_KNOWLEDGE_HOME is unset.
+knowledge_home = "~/.agent-knowledge"
+
+# Defaults for query and workflow commands. CLI flags override these values.
+default_scope = "auto"
+default_limit = 20
+
+[query]
+default_scope = "auto"
+default_limit = 20
+
+[workflow]
+default_scope = "auto"
+default_limit = 20

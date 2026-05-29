@@ -10,6 +10,7 @@ scripts/build-release.sh
 cargo install --path crates/mem-cli # installs `mem` into ~/.cargo/bin (on PATH)
 
 mem init
+mem config show
 mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
 mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
 mem query "emoji"
@@ -25,7 +26,7 @@ mem export --format markdown
 
 For source-only development, run commands as `cargo run -p agent-knowledge --bin mem -- <args>`.
 
-`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo or local `AGENT_KNOWLEDGE_HOME`. `index/` is ignored and can be rebuilt with `mem reindex`.
+`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo, a local `AGENT_KNOWLEDGE_HOME`, or a `knowledge_home` configured in `~/.config/agent-knowledge/config.toml`. `index/` is ignored and can be rebuilt with `mem reindex`.
 
 The multilingual tokenizer uses `lindera` with embedded CC-CEDICT for Chinese tokenization and a local Tantivy tokenizer adapter.
 
@@ -50,17 +51,19 @@ Session readers are optional adapters. Retrospectives should use platform-provid
 ## Runtime Model
 
 ```text
-agent-knowledge repo              runtime/private knowledge store
---------------------              -------------------------------
+agent-knowledge repo              installed/runtime state
+--------------------              -----------------------
+schema/memory-schema.sql   --->   mem binary embeds schema
 crates/mem-cli/src/main.rs        memory.db
-schema/memory-schema.sql   --->   index/
-skills/                           optional profile/config
-readers/
-docs/
+skills/                           index/
+readers/                          config.toml
+docs/                             optional profile/config
 CI/release
 ```
 
-`mem` discovers the active store from the current directory when it contains `schema/memory-schema.sql`; otherwise it walks from the executable location and finally falls back to `AGENT_KNOWLEDGE_HOME` or `~/.agent-knowledge`.
+`mem` discovers the active store in this order: current directory with `schema/memory-schema.sql`, a parent of the executable with `schema/memory-schema.sql`, `AGENT_KNOWLEDGE_HOME`, `knowledge_home` in `~/.config/agent-knowledge/config.toml`, then `~/.agent-knowledge`. Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the binary.
+
+CLI/tool settings use TOML; workflow runbooks use YAML. Command default priority is: CLI flags, user config at `~/.config/agent-knowledge/config.toml`, store config at `$AGENT_KNOWLEDGE_HOME/config.toml`, then built-in defaults. `AGENT_KNOWLEDGE_HOME` only overrides active store selection. See `templates/config.toml` and `mem config show`.
 
 Writes update SQLite in a transaction, write changelog rows, and then update the Tantivy index. If the index is stale, run `mem reindex`.
 

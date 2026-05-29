@@ -6,18 +6,22 @@ use anyhow::{Context, Result};
 use fs2::FileExt;
 use rusqlite::Connection;
 
+use crate::config::{expand_home, Config};
 use crate::{db::migrate_schema, search_index};
+
+const MEMORY_SCHEMA: &str = include_str!("../../../schema/memory-schema.sql");
 
 #[derive(Debug)]
 pub struct App {
     pub root: PathBuf,
     pub db_path: PathBuf,
     pub index_path: PathBuf,
-    pub schema_path: PathBuf,
+    pub config: Config,
 }
 
 impl App {
     pub fn discover() -> Result<Self> {
+        let user_config = Config::load_user()?;
         let exe_dir = env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(Path::to_path_buf));
@@ -25,16 +29,17 @@ impl App {
         let root = if cwd.join("schema/memory-schema.sql").exists() {
             cwd
         } else if let Some(dir) = exe_dir {
-            find_root(&dir).unwrap_or_else(default_root)
+            find_root(&dir).unwrap_or_else(|| default_root(&user_config))
         } else {
-            default_root()
+            default_root(&user_config)
         };
+        let config = Config::merged_for_root(&root, &user_config)?;
 
         Ok(Self {
             db_path: root.join("memory.db"),
             index_path: root.join("index"),
-            schema_path: root.join("schema/memory-schema.sql"),
             root,
+            config,
         })
     }
 
@@ -48,9 +53,7 @@ impl App {
     pub fn ensure_schema(&self) -> Result<()> {
         fs::create_dir_all(&self.root).context("create app root")?;
         let conn = self.conn()?;
-        let schema =
-            fs::read_to_string(&self.schema_path).context("read schema/memory-schema.sql")?;
-        conn.execute_batch(&schema)
+        conn.execute_batch(MEMORY_SCHEMA)
             .context("apply database schema")?;
         migrate_schema(&conn)?;
         Ok(())
@@ -88,14 +91,12 @@ fn find_root(start: &Path) -> Option<PathBuf> {
     None
 }
 
-fn default_root() -> PathBuf {
+fn default_root(config: &Config) -> PathBuf {
     env::var("AGENT_KNOWLEDGE_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| home_dir().join(".agent-knowledge"))
-}
-
-fn home_dir() -> PathBuf {
-    env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
+        .map(|path| expand_home(&path))
+        .unwrap_or_else(|_| {
+            config
+                .knowledge_home_path()
+                .unwrap_or_else(|| expand_home("~/.agent-knowledge"))
+        })
 }

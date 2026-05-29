@@ -19,11 +19,12 @@ Do not store raw secrets, transient chat filler, or one-off facts that will not 
 
 ## Quick Reference
 
-Install the `mem` CLI (see README) so it is on `PATH`. `mem` discovers the active store from the current directory if it contains `schema/memory-schema.sql`, otherwise it walks from the executable location and falls back to `AGENT_KNOWLEDGE_HOME` or `~/.agent-knowledge`. Run from the repo root, from inside a project that defines `AGENT_KNOWLEDGE_HOME`, or anywhere once `AGENT_KNOWLEDGE_HOME` is exported.
+Install the `mem` CLI (see README) so it is on `PATH`. `mem` discovers the active store from the current directory if it contains `schema/memory-schema.sql`, otherwise it walks from the executable location and falls back to `AGENT_KNOWLEDGE_HOME`, `knowledge_home` in `~/.config/agent-knowledge/config.toml`, or `~/.agent-knowledge`. Runtime stores do not need schema files because the schema is embedded in the binary. CLI/tool settings use TOML; workflow runbooks use YAML. Use `mem config show` to debug the active root and effective defaults.
 
 ```bash
 mem init
 mem context --detect
+mem config show
 mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
 mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
 mem query "部署" --scope auto

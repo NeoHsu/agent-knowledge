@@ -1,3 +1,5 @@
+use std::fs;
+
 mod support;
 
 use support::TestRepo;
@@ -80,6 +82,81 @@ fn raw_query_supports_tantivy_field_syntax() {
     let query = repo.run(&["query", "name:raw_target", "--raw-query"]);
     assert!(query.contains("raw_target"));
     assert!(!query.contains("raw_other"));
+}
+
+#[test]
+fn query_uses_store_config_default_scope() {
+    let repo = TestRepo::new("query-config-scope");
+    repo.run(&["init"]);
+    fs::write(
+        repo.join("config.toml"),
+        "[query]\ndefault_scope = \"project:NeoHsu/agent-knowledge\"\n",
+    )
+    .expect("write config");
+    repo.run(&[
+        "save",
+        "--name",
+        "config_global",
+        "--scope",
+        "global",
+        "--content",
+        "config scope needle global",
+        "--force",
+    ]);
+    repo.run(&[
+        "save",
+        "--name",
+        "config_project",
+        "--scope",
+        "project:NeoHsu/agent-knowledge",
+        "--content",
+        "config scope needle project",
+        "--force",
+    ]);
+    repo.run(&[
+        "save",
+        "--name",
+        "config_other_project",
+        "--scope",
+        "project:Other/repo",
+        "--content",
+        "config scope needle other",
+        "--force",
+    ]);
+
+    let query = repo.run(&["query", "config scope needle", "--no-touch"]);
+
+    assert!(query.contains("config_global"));
+    assert!(query.contains("config_project"));
+    assert!(!query.contains("config_other_project"));
+}
+
+#[test]
+fn query_uses_store_config_default_limit() {
+    let repo = TestRepo::new("query-config-limit");
+    repo.run(&["init"]);
+    fs::write(repo.join("config.toml"), "[query]\ndefault_limit = 1\n").expect("write config");
+    repo.run(&[
+        "save",
+        "--name",
+        "config_limit_one",
+        "--content",
+        "config limit first",
+        "--force",
+    ]);
+    repo.run(&[
+        "save",
+        "--name",
+        "config_limit_two",
+        "--content",
+        "config limit second",
+        "--force",
+    ]);
+
+    let query = repo.run(&["query"]);
+    let rows: serde_json::Value = serde_json::from_str(&query).expect("query json");
+
+    assert_eq!(rows.as_array().expect("query array").len(), 1);
 }
 
 #[test]
