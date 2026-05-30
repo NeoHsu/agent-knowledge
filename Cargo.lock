@@ -15,10 +15,12 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "flate2",
  "mem-core",
  "rusqlite",
  "serde",
  "serde_json",
+ "tar",
  "uuid",
 ]
 

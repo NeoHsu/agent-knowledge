@@ -1,14 +1,20 @@
 use super::*;
 
 pub(crate) fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
+    let result = merge_database(app, &args.db, args.prefer_trusted)?;
+    print_json_pretty(&result)?;
+    Ok(())
+}
+
+pub(crate) fn merge_database(app: &App, db: &Path, prefer_trusted: bool) -> Result<Value> {
     app.ensure_schema()?;
-    if !args.db.exists() {
-        bail!("merge database not found: {}", args.db.display());
+    if !db.exists() {
+        bail!("merge database not found: {}", db.display());
     }
 
     let conn = app.conn()?;
-    let theirs = Connection::open(&args.db)
-        .with_context(|| format!("open merge database {}", args.db.display()))?;
+    let theirs =
+        Connection::open(db).with_context(|| format!("open merge database {}", db.display()))?;
     let incoming = all_memories(&theirs)?;
     let mut imported = 0;
     let mut identical = 0;
@@ -25,7 +31,7 @@ pub(crate) fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
                 memory.content = Some(strip_secrets(&content)?);
             }
             if let Err(err) = workflow_core::validate_record_content(&memory) {
-                add_workflow_review_record(conn, &args.db, &memory, &err)?;
+                add_workflow_review_record(conn, db, &memory, &err)?;
                 workflow_review_required += 1;
                 continue;
             }
@@ -44,7 +50,7 @@ pub(crate) fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
                     rejected_lower_trust += 1;
                     continue;
                 }
-                if args.prefer_trusted && incoming_priority > existing_priority {
+                if prefer_trusted && incoming_priority > existing_priority {
                     update_memory_from_merge(conn, &existing, &memory)?;
                     changed_index_ids.push(existing.id.clone());
                     trusted_updates += 1;
@@ -53,7 +59,7 @@ pub(crate) fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
 
                 let context = serde_json::to_string(&json!({
                     "kind": "merge_conflict",
-                    "source_db": args.db.display().to_string(),
+                    "source_db": db.display().to_string(),
                     "local": {
                         "id": &existing.id,
                         "name": &existing.name,
@@ -107,7 +113,7 @@ pub(crate) fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
 
     memory_index::upsert_batch_or_mark_stale(app, &conn, &changed_index_ids)?;
 
-    print_json_pretty(&json!({
+    Ok(json!({
         "status": "merged",
         "imported": imported,
         "identical": identical,
@@ -116,8 +122,7 @@ pub(crate) fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
         "rejected_lower_trust": rejected_lower_trust,
         "workflow_review_required": workflow_review_required,
         "regenerated_ids": regenerated_ids
-    }))?;
-    Ok(())
+    }))
 }
 
 fn add_workflow_review_record(

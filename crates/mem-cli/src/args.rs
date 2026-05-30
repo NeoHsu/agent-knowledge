@@ -88,6 +88,11 @@ pub(crate) enum Command {
     Import(ImportArgs),
     #[command(about = "Merge another memory database into this store")]
     Merge(MergeArgs),
+    #[command(about = "Export, inspect, or import portable store bundles")]
+    Bundle {
+        #[command(subcommand)]
+        command: BundleCommand,
+    },
     #[command(about = "Generate daily or weekly retrospective bundles")]
     Retro {
         #[command(subcommand)]
@@ -305,6 +310,39 @@ pub(crate) struct MergeArgs {
     pub(crate) db: PathBuf,
     #[arg(long)]
     pub(crate) prefer_trusted: bool,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum BundleCommand {
+    #[command(about = "Export memory.db, config, manifest, and artifacts as a .tgz bundle")]
+    Export(BundleExportArgs),
+    #[command(about = "Inspect bundle metadata and entries")]
+    Inspect(BundleInspectArgs),
+    #[command(about = "Import a bundle into the active store")]
+    Import(BundleImportArgs),
+}
+
+#[derive(Args)]
+pub(crate) struct BundleExportArgs {
+    pub(crate) file: PathBuf,
+    #[arg(long)]
+    pub(crate) no_config: bool,
+}
+
+#[derive(Args)]
+pub(crate) struct BundleInspectArgs {
+    pub(crate) file: PathBuf,
+}
+
+#[derive(Args)]
+pub(crate) struct BundleImportArgs {
+    pub(crate) file: PathBuf,
+    #[arg(long, conflicts_with = "replace")]
+    pub(crate) merge: bool,
+    #[arg(long, conflicts_with = "merge")]
+    pub(crate) replace: bool,
+    #[arg(long)]
+    pub(crate) force: bool,
 }
 
 #[derive(Subcommand)]

@@ -40,6 +40,10 @@ fn main() -> Result<()> {
         Command::Export(args) => cmd_export(&app, args)?,
         Command::Import(args) => with_lock(&app, || cmd_import(&app, args))?,
         Command::Merge(args) => with_lock(&app, || cmd_merge(&app, args))?,
+        Command::Bundle { command } => match command {
+            BundleCommand::Inspect(args) => cmd_bundle(&app, BundleCommand::Inspect(args))?,
+            other => with_lock(&app, || cmd_bundle(&app, other))?,
+        },
         Command::Retro { command } => cmd_retro(&app, command)?,
         Command::Workflow { command } => cmd_workflow(&app, command)?,
         Command::Artifact { command } => {
