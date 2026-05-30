@@ -42,6 +42,17 @@ fn main() -> Result<()> {
         Command::Merge(args) => with_lock(&app, || cmd_merge(&app, args))?,
         Command::Retro { command } => cmd_retro(&app, command)?,
         Command::Workflow { command } => cmd_workflow(&app, command)?,
+        Command::Artifact { command } => {
+            let writes_manifest = matches!(
+                command,
+                ArtifactCommand::Add(_) | ArtifactCommand::Update(_) | ArtifactCommand::Remove(_)
+            );
+            if writes_manifest {
+                with_lock(&app, || cmd_artifact(&app, command))?;
+            } else {
+                cmd_artifact(&app, command)?;
+            }
+        }
         Command::Ambiguity { command } => with_lock(&app, || cmd_ambiguity(&app, command))?,
     }
 

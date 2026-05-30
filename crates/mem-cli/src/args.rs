@@ -98,6 +98,11 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: WorkflowCommand,
     },
+    #[command(about = "Inspect knowledge-store artifact manifest entries")]
+    Artifact {
+        #[command(subcommand)]
+        command: ArtifactCommand,
+    },
     #[command(about = "Record and resolve ambiguous or conflicting memories")]
     Ambiguity {
         #[command(subcommand)]
@@ -348,6 +353,68 @@ pub(crate) struct WorkflowFindArgs {
 #[derive(Args)]
 pub(crate) struct WorkflowValidateArgs {
     pub(crate) reference: String,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ArtifactCommand {
+    #[command(about = "List artifact manifest entries")]
+    List,
+    #[command(about = "Check artifact paths, checksums, and executable bits")]
+    Check,
+    #[command(about = "Show one artifact manifest entry by name")]
+    Show(ArtifactShowArgs),
+    #[command(about = "Add or replace artifact metadata in manifest.toml")]
+    Add(ArtifactAddArgs),
+    #[command(about = "Update artifact metadata")]
+    Update(ArtifactUpdateArgs),
+    #[command(about = "Remove artifact metadata")]
+    Remove(ArtifactRemoveArgs),
+}
+
+#[derive(Args)]
+pub(crate) struct ArtifactShowArgs {
+    pub(crate) name: String,
+}
+
+#[derive(Args)]
+pub(crate) struct ArtifactAddArgs {
+    pub(crate) path: PathBuf,
+    #[arg(long)]
+    pub(crate) name: Option<String>,
+    #[arg(long, value_enum)]
+    pub(crate) kind: ArtifactKindArg,
+    #[arg(long, default_value = "global")]
+    pub(crate) scope: String,
+    #[arg(long)]
+    pub(crate) description: Option<String>,
+    #[arg(long)]
+    pub(crate) executable: bool,
+    #[arg(long)]
+    pub(crate) tags: Option<String>,
+    #[arg(long)]
+    pub(crate) force: bool,
+}
+
+#[derive(Args)]
+pub(crate) struct ArtifactUpdateArgs {
+    pub(crate) name: String,
+    #[arg(long)]
+    pub(crate) checksum: bool,
+}
+
+#[derive(Args)]
+pub(crate) struct ArtifactRemoveArgs {
+    pub(crate) name: String,
+    #[arg(long)]
+    pub(crate) delete_file: bool,
+}
+
+#[derive(Clone, ValueEnum)]
+pub(crate) enum ArtifactKindArg {
+    Script,
+    Template,
+    Snippet,
+    Reference,
 }
 
 #[derive(Args)]

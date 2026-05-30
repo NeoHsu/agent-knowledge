@@ -120,6 +120,7 @@ fn push_table_row<T: AsRef<str>>(output: &mut String, row: &[T], widths: &[usize
 
 mod admin;
 mod ambiguity;
+mod artifact;
 mod io;
 mod memory;
 mod merge;
@@ -131,6 +132,7 @@ pub(crate) use admin::{
     audit_report, cmd_audit, cmd_config, cmd_context, cmd_gc, cmd_history, cmd_stats, stats_report,
 };
 pub(crate) use ambiguity::cmd_ambiguity;
+pub(crate) use artifact::cmd_artifact;
 pub(crate) use io::{cmd_export, cmd_import};
 pub(crate) use memory::{
     cmd_delete, cmd_save, cmd_supersede, cmd_update, save_memory, save_memory_no_index,
