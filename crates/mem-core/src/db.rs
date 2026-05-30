@@ -156,6 +156,49 @@ mod tests {
     }
 
     #[test]
+    fn migrates_legacy_user_source_to_manual() {
+        let conn = Connection::open_in_memory().expect("open memory db");
+        conn.execute_batch(
+            "CREATE TABLE memories (
+                id TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                name TEXT NOT NULL UNIQUE,
+                description TEXT,
+                content TEXT,
+                tags TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(tags) AND json_type(tags) = 'array'),
+                scope TEXT DEFAULT 'global',
+                source TEXT NOT NULL,
+                confidence TEXT DEFAULT 'medium' CHECK (confidence IN ('high', 'medium', 'low')),
+                protected BOOLEAN DEFAULT FALSE CHECK (protected IN (0, 1)),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                expires_at DATETIME,
+                valid_until DATETIME,
+                superseded_by TEXT,
+                version INTEGER DEFAULT 1 CHECK (version >= 1),
+                access_count INTEGER DEFAULT 0 CHECK (access_count >= 0),
+                last_accessed_at DATETIME
+            );
+            INSERT INTO memories
+            (id, type, name, content, tags, scope, source, confidence, protected, created_at, updated_at)
+            VALUES ('legacy_user', 'preference', 'legacy_user', 'content', '[]', 'global', 'user', 'medium', 0, '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z');
+            PRAGMA user_version = 1;",
+        )
+        .expect("create legacy schema");
+
+        migrate_schema(&conn).expect("migrate schema");
+
+        let source: String = conn
+            .query_row(
+                "SELECT source FROM memories WHERE id = 'legacy_user'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("legacy source");
+        assert_eq!(source, "manual");
+    }
+
+    #[test]
     fn index_dirty_round_trips_through_metadata() {
         let conn = initialized_conn();
 

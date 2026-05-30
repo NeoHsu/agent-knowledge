@@ -38,7 +38,9 @@ fn migrate_memories_type_check_v2(conn: &Connection) -> Result<()> {
             last_accessed_at DATETIME
         );
         INSERT INTO memories_v2
-        SELECT id, type, name, description, content, tags, scope, source, confidence, protected,
+        SELECT id, type, name, description, content, tags, scope,
+               CASE source WHEN 'user' THEN 'manual' ELSE source END,
+               confidence, protected,
                created_at, updated_at, expires_at, valid_until, superseded_by, version,
                access_count, last_accessed_at
         FROM memories;
