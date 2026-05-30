@@ -9,11 +9,12 @@ Goal: extract durable knowledge missed during the day and keep `memory.db` curre
 3. Compare available platform context with existing memory.
 4. Save new facts with `source=daily_retro`.
 5. Detect repeated manual procedures and suggest or save `type=workflow` memories when they are durable.
-6. Update or supersede stale memories when evidence is clear.
-7. Add ambiguity records when two memories conflict or scope is unclear.
-8. Run `mem stats` and `mem audit`.
-9. Report concise counts and unresolved questions.
-10. Commit and push the repository.
+6. Notice repeated shell snippets, pasted scripts, or helper templates that may be artifact candidates.
+7. Update or supersede stale memories when evidence is clear.
+8. Add ambiguity records when two memories conflict or scope is unclear.
+9. Run `mem stats` and `mem audit`.
+10. Report concise counts and unresolved questions.
+11. Commit and push the repository.
 
 ## What to Save
 
@@ -22,6 +23,11 @@ Goal: extract durable knowledge missed during the day and keep `memory.db` curre
 - Project decisions, deadlines, owners, constraints.
 - Stable references to systems, repos, docs, or workflows.
 - Repeated project procedures as `type=workflow` with `workflow:*` and `intent:*` tags.
+- Artifact candidates:
+  - one-off scripts stay local and should not be stored
+  - project-specific reusable scripts belong in the project repo, such as `scripts/`
+  - cross-project reusable helpers belong in `$AGENT_KNOWLEDGE_HOME/artifacts/` with `manifest.toml`
+  - do not move scripts or templates without user approval
 
 ## What Not to Save
 

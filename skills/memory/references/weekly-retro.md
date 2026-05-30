@@ -10,21 +10,26 @@ Goal: improve memory quality. Weekly retro reads `changelog`, `memory.db`, and `
 4. Review `audit` and `stats` sections from the retro bundle.
 5. Identify duplicate or near-duplicate memories.
 6. Identify stale workflow steps, workflows with repeated failures, and repeated manual procedures that should become workflow memory.
-7. Promote stable cross-project execution policy into a skill or reference document when useful.
-8. Calibrate confidence:
+7. Identify repeated ad hoc scripts, shell snippets, templates, or references that should become repository scripts or knowledge-store artifacts.
+8. Promote stable cross-project execution policy into a skill or reference document when useful.
+9. Calibrate confidence:
    - frequently accessed low confidence can become medium after review
    - stale medium confidence can be downgraded or marked for cleanup
-9. Resolve ambiguities when scope or newer evidence makes the answer clear.
-10. Run `mem audit --fix` if deterministic repairs are needed.
-11. Commit and push.
+10. Resolve ambiguities when scope or newer evidence makes the answer clear.
+11. Run `mem audit --fix` if deterministic repairs are needed.
+12. Commit and push.
 
 The promotion direction is:
 
 ```text
 repeated facts/preferences -> memory
 repeated project procedures -> workflow memory
+project-specific reusable scripts -> project repo scripts/
+cross-project reusable helpers -> knowledge-store artifacts/
 stable cross-project execution policy -> skill
 ```
+
+Do not silently move scripts into or out of `$AGENT_KNOWLEDGE_HOME/artifacts/`. Recommend the ownership change, get user approval, then add or update manifest entries with `mem artifact add` or `mem artifact update --checksum`.
 
 ## Output
 
@@ -37,5 +42,6 @@ Weekly memory retro:
 - pending ambiguities: 1
 - cleanup candidates: 4
 - workflow candidates: ...
+- artifact candidates: ...
 - skill candidates: ...
 ```
