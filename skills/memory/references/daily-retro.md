@@ -26,7 +26,7 @@ Goal: extract durable knowledge missed during the day and keep `memory.db` curre
 - Artifact candidates:
   - one-off scripts stay local and should not be stored
   - project-specific reusable scripts belong in the project repo, such as `scripts/`
-  - cross-project reusable helpers belong in `$AGENT_KNOWLEDGE_HOME/artifacts/` with `manifest.toml`
+  - cross-project reusable helpers belong in `artifacts/` under the active knowledge store root with `manifest.toml`
   - do not move scripts or templates without user approval
 
 ## What Not to Save

@@ -25,8 +25,8 @@ If multiple workflows match, prefer project-scoped records, then high confidence
 - Do not execute workflows inside `mem`; the agent executes steps.
 - Reference reusable scripts by path instead of copying script bodies into workflow memory.
 - Keep project-specific executable script logic in version-controlled repository files such as `scripts/build-release.sh`; workflow memory stores when, why, and how to use the script.
-- Keep cross-project reusable helper files in `$AGENT_KNOWLEDGE_HOME/artifacts/` with `manifest.toml` metadata when they belong to the portable knowledge store.
-- Before running a referenced script or inspecting an artifact, verify that the path exists, stays inside its owner root, is executable when required, and matches the checksum or repository state the workflow expects.
+- Keep cross-project reusable helper files in `artifacts/` under the active knowledge store root with `manifest.toml` metadata when they belong to the portable knowledge store.
+- Before running a referenced script or inspecting an artifact, verify that the path exists when required, stays inside its owner root, is executable when required, and matches the checksum or repository state the workflow expects.
 - Verify each checkpoint before continuing.
 - Stop on failed checks, unrelated dirty files, missing auth, or unsafe state.
 - Ask before any step with `confirm: true`.

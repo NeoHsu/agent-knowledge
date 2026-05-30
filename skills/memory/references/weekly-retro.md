@@ -29,7 +29,7 @@ cross-project reusable helpers -> knowledge-store artifacts/
 stable cross-project execution policy -> skill
 ```
 
-Do not silently move scripts into or out of `$AGENT_KNOWLEDGE_HOME/artifacts/`. Recommend the ownership change, get user approval, then add or update manifest entries with `mem artifact add` or `mem artifact update --checksum`.
+Do not silently move scripts into or out of `artifacts/` under the active knowledge store root. Recommend the ownership change, get user approval, then add or update manifest entries with `mem artifact add` or `mem artifact update --checksum`.
 
 ## Output
 
