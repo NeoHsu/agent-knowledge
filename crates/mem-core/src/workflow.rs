@@ -1,7 +1,14 @@
+use std::collections::BTreeSet;
+use std::path::Path;
+
 use anyhow::{anyhow, bail, Context, Result};
+use serde::Serialize;
 use serde_json::Value;
 use serde_yaml::Value as YamlValue;
 
+use crate::artifact::{
+    artifact_file_checksum, artifact_file_is_executable, validate_artifact_path, ArtifactManifest,
+};
 use crate::{db::Memory, util::normalized_text};
 
 pub fn validate_memory(
@@ -35,6 +42,222 @@ pub fn validate_record_content(memory: &Memory) -> Result<()> {
         &memory.scope,
         false,
     )
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkflowArtifactReport {
+    pub checked: usize,
+    pub references: Vec<WorkflowArtifactReference>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkflowArtifactReference {
+    pub path: String,
+    pub owner: String,
+    pub required: bool,
+    pub manifest_entry: Option<String>,
+    pub checksum: Option<String>,
+}
+
+pub fn validate_artifact_references(
+    content: &str,
+    store_root: &Path,
+) -> Result<WorkflowArtifactReport> {
+    let value: YamlValue = serde_yaml::from_str(content).context("parse workflow YAML/JSON")?;
+    let mapping = value
+        .as_mapping()
+        .ok_or_else(|| anyhow!("workflow content must be a YAML/JSON object"))?;
+    let manifest = ArtifactManifest::load(store_root)?;
+    let mut errors = Vec::new();
+    let mut references = Vec::new();
+    let mut declared_knowledge_store_paths = BTreeSet::new();
+
+    if let Some(reusable_scripts) = yaml_get(mapping, "reusable_scripts") {
+        let scripts = reusable_scripts
+            .as_sequence()
+            .ok_or_else(|| anyhow!("workflow reusable_scripts must be an array"))?;
+        for (index, script) in scripts.iter().enumerate() {
+            let Some(script) = script.as_mapping() else {
+                errors.push(format!("reusable_scripts[{index}] must be an object"));
+                continue;
+            };
+            let path = yaml_get(script, "path")
+                .and_then(YamlValue::as_str)
+                .unwrap_or_default();
+            let owner = yaml_get(script, "owner")
+                .and_then(YamlValue::as_str)
+                .unwrap_or_default();
+            let required = match yaml_get(script, "required") {
+                Some(YamlValue::Bool(value)) => *value,
+                Some(_) => {
+                    errors.push(format!(
+                        "reusable_scripts[{index}] required must be boolean"
+                    ));
+                    false
+                }
+                None => false,
+            };
+            if path.trim().is_empty() {
+                errors.push(format!("reusable_scripts[{index}] requires path"));
+                continue;
+            }
+            if !matches!(owner, "repo" | "knowledge_store") {
+                errors.push(format!(
+                    "reusable_scripts[{index}] owner must be repo or knowledge_store"
+                ));
+                continue;
+            }
+            if owner == "repo" {
+                references.push(WorkflowArtifactReference {
+                    path: path.to_string(),
+                    owner: owner.to_string(),
+                    required,
+                    manifest_entry: None,
+                    checksum: None,
+                });
+                continue;
+            }
+
+            declared_knowledge_store_paths.insert(path.to_string());
+            validate_one_artifact_reference(
+                index,
+                script,
+                path,
+                owner,
+                required,
+                store_root,
+                manifest.as_ref(),
+                &mut errors,
+                &mut references,
+            )?;
+        }
+    }
+
+    for (index, path) in step_artifact_runs(mapping)? {
+        if !declared_knowledge_store_paths.contains(&path) {
+            errors.push(format!(
+                "workflow step {index} run references artifact path {path}, but reusable_scripts entry is missing"
+            ));
+        }
+    }
+
+    if !errors.is_empty() {
+        bail!("workflow artifact validation failed: {}", errors.join("; "));
+    }
+    Ok(WorkflowArtifactReport {
+        checked: references
+            .iter()
+            .filter(|reference| reference.owner == "knowledge_store")
+            .count(),
+        references,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_one_artifact_reference(
+    index: usize,
+    script: &serde_yaml::Mapping,
+    path: &str,
+    owner: &str,
+    required: bool,
+    store_root: &Path,
+    manifest: Option<&ArtifactManifest>,
+    errors: &mut Vec<String>,
+    references: &mut Vec<WorkflowArtifactReference>,
+) -> Result<()> {
+    if let Err(reason) = validate_artifact_path(path) {
+        errors.push(format!(
+            "reusable_scripts[{index}] unsafe artifact path: {reason}"
+        ));
+        return Ok(());
+    }
+    let Some(manifest) = manifest else {
+        errors.push(format!(
+            "reusable_scripts[{index}] references {path}, but manifest.toml is missing"
+        ));
+        return Ok(());
+    };
+    let Some(entry) = manifest
+        .entries()
+        .into_iter()
+        .find(|entry| entry.record.path == path)
+    else {
+        errors.push(format!(
+            "reusable_scripts[{index}] references {path}, but manifest entry is missing"
+        ));
+        return Ok(());
+    };
+    let full_path = store_root.join(path);
+    if !full_path.exists() {
+        if required {
+            errors.push(format!(
+                "reusable_scripts[{index}] required artifact is missing: {path}"
+            ));
+        }
+        references.push(WorkflowArtifactReference {
+            path: path.to_string(),
+            owner: owner.to_string(),
+            required,
+            manifest_entry: Some(entry.name),
+            checksum: None,
+        });
+        return Ok(());
+    }
+    let actual_checksum = artifact_file_checksum(&full_path)?;
+    if actual_checksum != entry.record.checksum {
+        errors.push(format!(
+            "reusable_scripts[{index}] checksum mismatch for {path}: expected {}, got {actual_checksum}",
+            entry.record.checksum
+        ));
+    }
+    if let Some(expected) = yaml_get(script, "checksum").and_then(YamlValue::as_str) {
+        if expected != actual_checksum {
+            errors.push(format!(
+                "reusable_scripts[{index}] workflow checksum mismatch for {path}: expected {expected}, got {actual_checksum}"
+            ));
+        }
+    }
+    if entry.record.executable == Some(true) && !artifact_file_is_executable(&full_path)? {
+        errors.push(format!(
+            "reusable_scripts[{index}] artifact is not executable: {path}"
+        ));
+    }
+    references.push(WorkflowArtifactReference {
+        path: path.to_string(),
+        owner: owner.to_string(),
+        required,
+        manifest_entry: Some(entry.name),
+        checksum: Some(actual_checksum),
+    });
+    Ok(())
+}
+
+fn step_artifact_runs(mapping: &serde_yaml::Mapping) -> Result<Vec<(usize, String)>> {
+    let Some(steps) = yaml_get(mapping, "steps").and_then(YamlValue::as_sequence) else {
+        return Ok(Vec::new());
+    };
+    let mut paths = Vec::new();
+    for (index, step) in steps.iter().enumerate() {
+        let Some(step) = step.as_mapping() else {
+            continue;
+        };
+        let Some(run) = yaml_get(step, "run").and_then(YamlValue::as_str) else {
+            continue;
+        };
+        let Some(path) = first_artifact_token(run) else {
+            continue;
+        };
+        if let Err(reason) = validate_artifact_path(&path) {
+            bail!("workflow step {index} run has unsafe artifact path: {reason}");
+        }
+        paths.push((index, path));
+    }
+    Ok(paths)
+}
+
+fn first_artifact_token(run: &str) -> Option<String> {
+    let token = run.split_whitespace().next()?.trim_matches(['"', '\'']);
+    token.starts_with("artifacts/").then(|| token.to_string())
 }
 
 pub fn retain_scope(memories: &mut Vec<Memory>, scope_filter: Option<&[String]>) {

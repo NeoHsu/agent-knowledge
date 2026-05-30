@@ -49,10 +49,19 @@ pub(crate) fn cmd_workflow(app: &App, command: WorkflowCommand) -> Result<()> {
         WorkflowCommand::Validate(args) => {
             let workflow = workflow_by_ref(&conn, &args.reference)?;
             workflow_core::validate_record(&workflow)?;
+            let artifact_report = if args.check_artifacts {
+                Some(workflow_core::validate_artifact_references(
+                    workflow.content.as_deref().unwrap_or_default(),
+                    &app.root,
+                )?)
+            } else {
+                None
+            };
             print_json_pretty(&json!({
                 "status": "valid",
                 "id": workflow.id,
-                "name": workflow.name
+                "name": workflow.name,
+                "artifact_checks": artifact_report
             }))?;
         }
     }

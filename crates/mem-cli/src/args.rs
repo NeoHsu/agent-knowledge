@@ -391,6 +391,8 @@ pub(crate) struct WorkflowFindArgs {
 #[derive(Args)]
 pub(crate) struct WorkflowValidateArgs {
     pub(crate) reference: String,
+    #[arg(long)]
+    pub(crate) check_artifacts: bool,
 }
 
 #[derive(Subcommand)]

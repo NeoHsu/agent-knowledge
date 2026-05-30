@@ -1,8 +1,14 @@
 use std::fs;
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 mod support;
 
 use support::TestRepo;
+
+const HELLO_SHA256: &str =
+    "sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03";
 
 #[test]
 fn workflow_save_query_export_and_import() {
@@ -214,6 +220,99 @@ fn workflow_validation_rejects_invalid_content_without_bypass() {
 }
 
 #[test]
+fn workflow_validate_can_check_knowledge_store_artifacts() {
+    let repo = TestRepo::new("workflow-artifact-validation");
+    repo.run(&["init"]);
+    write_file(repo.join("artifacts/scripts/ci-triage.sh"), "hello\n", true);
+    repo.run(&[
+        "artifact",
+        "add",
+        "artifacts/scripts/ci-triage.sh",
+        "--kind",
+        "script",
+        "--scope",
+        "global",
+        "--executable",
+    ]);
+    repo.run(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "ci_triage_workflow",
+        "--tags",
+        r#"["workflow:ci-triage","intent:ci-triage"]"#,
+        "--content",
+        &format!(
+            "schema_version: 1\ngoal: Triage CI.\ntriggers:\n  - ci fails\nreusable_scripts:\n  - path: artifacts/scripts/ci-triage.sh\n    owner: knowledge_store\n    required: true\n    checksum: {HELLO_SHA256}\nsteps:\n  - id: collect\n    run: artifacts/scripts/ci-triage.sh\n    check: artifact exists\nstop_conditions:\n  - missing artifact\n"
+        ),
+    ]);
+
+    let validated = repo.run(&[
+        "workflow",
+        "validate",
+        "ci_triage_workflow",
+        "--check-artifacts",
+    ]);
+    let output: serde_json::Value = serde_json::from_str(&validated).expect("validate json");
+
+    assert_eq!(output["status"], "valid");
+    assert_eq!(output["artifact_checks"]["checked"], 1);
+}
+
+#[test]
+fn workflow_validate_reports_missing_artifact_manifest() {
+    let repo = TestRepo::new("workflow-artifact-missing-manifest");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "missing_artifact_workflow",
+        "--tags",
+        r#"["workflow:missing-artifact"]"#,
+        "--content",
+        "schema_version: 1\ngoal: Missing artifact.\ntriggers:\n  - check artifact\nreusable_scripts:\n  - path: artifacts/scripts/missing.sh\n    owner: knowledge_store\n    required: true\nsteps:\n  - id: collect\n    check: artifact exists\nstop_conditions:\n  - missing artifact\n",
+    ]);
+
+    let failed = repo.run_fail(&[
+        "workflow",
+        "validate",
+        "missing_artifact_workflow",
+        "--check-artifacts",
+    ]);
+
+    assert!(failed.contains("manifest.toml is missing"));
+}
+
+#[test]
+fn workflow_validate_rejects_step_artifact_run_without_reusable_script_entry() {
+    let repo = TestRepo::new("workflow-artifact-undocumented-step");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "undocumented_artifact_workflow",
+        "--tags",
+        r#"["workflow:undocumented-artifact"]"#,
+        "--content",
+        "schema_version: 1\ngoal: Missing reusable script declaration.\ntriggers:\n  - check artifact\nsteps:\n  - id: collect\n    run: artifacts/scripts/missing.sh\nstop_conditions:\n  - missing artifact\n",
+    ]);
+
+    let failed = repo.run_fail(&[
+        "workflow",
+        "validate",
+        "undocumented_artifact_workflow",
+        "--check-artifacts",
+    ]);
+
+    assert!(failed.contains("reusable_scripts entry is missing"));
+}
+
+#[test]
 fn workflow_project_scope_requires_matching_project_tag() {
     let repo = TestRepo::new("workflow-project-tag");
     repo.run(&["init"]);
@@ -249,4 +348,17 @@ fn workflow_project_scope_requires_matching_project_tag() {
         ],
     );
     assert!(saved.contains(r#""status":"saved""#));
+}
+
+fn write_file(path: std::path::PathBuf, content: &str, executable: bool) {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("artifact dir");
+    }
+    fs::write(&path, content).expect("write artifact");
+    #[cfg(unix)]
+    if executable {
+        let mut permissions = fs::metadata(&path).expect("metadata").permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&path, permissions).expect("chmod artifact");
+    }
 }
