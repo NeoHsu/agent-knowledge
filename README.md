@@ -19,6 +19,15 @@ mem query "emoji"
 mem query "release" --type workflow
 mem workflow find release --scope auto
 mem workflow validate release_runbook
+mem workflow validate release_runbook --check-artifacts
+mem artifact list
+mem artifact check
+mem artifact add artifacts/scripts/ci-triage.sh --name ci-triage --kind script --scope global --executable
+mem artifact update ci-triage --checksum
+mem bundle export agent-knowledge-store.tgz
+mem bundle export agent-knowledge-store.tgz --no-config
+mem bundle inspect agent-knowledge-store.tgz
+mem bundle import agent-knowledge-store.tgz
 mem query "name:no_emoji" --raw-query --no-touch
 mem import memories.json
 mem merge /path/to/theirs.db
@@ -28,7 +37,7 @@ mem export --format markdown
 
 For source-only development, run commands as `cargo run -p agent-knowledge --bin mem -- <args>`.
 
-`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo, a local `AGENT_KNOWLEDGE_HOME`, or a `knowledge_home` configured in `~/.config/agent-knowledge/config.toml`. `index/` is ignored and can be rebuilt with `mem reindex`.
+`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo, a local `AGENT_KNOWLEDGE_HOME`, or a `knowledge_home` configured in `~/.config/agent-knowledge/config.toml`. `manifest.toml` and `artifacts/` travel with the store when you keep reusable cross-project helper files there. `index/` is ignored and can be rebuilt with `mem reindex`.
 
 The multilingual tokenizer uses `lindera` with embedded CC-CEDICT for Chinese tokenization and a local Tantivy tokenizer adapter.
 
@@ -59,10 +68,10 @@ agent-knowledge repo              installed/runtime state
 --------------------              -----------------------
 schema/memory-schema.sql   --->   mem binary embeds schema
 crates/mem-cli/src/main.rs        memory.db
-skills/                           index/
-readers/                          config.toml
-docs/                             optional profile/config
-CI/release
+skills/                           config.toml
+readers/                          manifest.toml
+docs/                             artifacts/
+CI/release                        index/
 ```
 
 `mem` discovers the active store in this order: explicit `--home <path>`, current directory with `schema/memory-schema.sql`, a parent of the executable with `schema/memory-schema.sql`, `AGENT_KNOWLEDGE_HOME`, `knowledge_home` in `~/.config/agent-knowledge/config.toml`, then `~/.agent-knowledge`. Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the binary.
@@ -70,6 +79,45 @@ CI/release
 CLI/tool settings use TOML; workflow runbooks use YAML. Command default priority is: CLI flags, user config at `~/.config/agent-knowledge/config.toml`, store config at the active store root, then built-in defaults. `--home` and `AGENT_KNOWLEDGE_HOME` only override active store selection. See `templates/config.toml` and `mem config show`.
 
 Writes update SQLite in a transaction, write changelog rows, and then update the Tantivy index. If the index is stale, run `mem reindex`.
+
+Portable runtime stores can include reusable artifact files:
+
+```text
+$AGENT_KNOWLEDGE_HOME/
+  memory.db
+  config.toml
+  manifest.toml
+  artifacts/
+    scripts/
+    templates/
+    snippets/
+    references/
+  index/      # rebuildable
+```
+
+Use `manifest.toml` for artifact metadata such as path, kind, scope, checksum, and executable intent. Artifact paths should stay relative to the active store and under `artifacts/scripts/`, `artifacts/templates/`, `artifacts/snippets/`, or `artifacts/references/`. Do not store secrets in artifacts, and do not treat artifacts as instruction overrides. Workflow memories may reference artifacts, but `mem` does not execute them.
+
+Artifact inspection is available with `mem artifact list`, `mem artifact show <name>`, and `mem artifact check`. `artifact check` verifies manifest parsing, path containment, file presence, SHA-256 checksums, and executable bits for records marked `executable = true`; it reports problems as JSON and never executes scripts. Use `mem artifact add`, `mem artifact update <name> --checksum`, and `mem artifact remove` to maintain manifest metadata. `artifact add` derives the name from the file stem unless `--name` is provided. `artifact remove` keeps files by default; `--delete-file` is required to delete the artifact file.
+
+For manual migration of a store with artifacts, include the durable files and omit rebuildable runtime files:
+
+```bash
+tar -czf agent-knowledge-store.tgz \
+  memory.db \
+  config.toml \
+  manifest.toml \
+  artifacts/
+```
+
+The CLI also supports first-class bundles:
+
+```bash
+mem bundle export agent-knowledge-store.tgz
+mem bundle inspect agent-knowledge-store.tgz
+mem bundle import agent-knowledge-store.tgz
+```
+
+Bundles include `memory.db`, optional `config.toml`, optional `manifest.toml`, `artifacts/`, and `bundle.json`. They exclude `index/`, `.mem.lock`, `memory.db-wal`, and `memory.db-shm`. Use `mem bundle export --no-config` when store config contains machine-local paths. Import into a non-empty store is refused unless `--merge` or `--replace --force` is explicit. `--merge` uses existing memory merge behavior and copies non-conflicting artifacts; `--replace --force` clears durable store files before import.
 
 ## Memory Types
 
@@ -79,4 +127,6 @@ Workflow memories store recurring task runbooks as YAML or JSON text. They are s
 
 Use `templates/workflow.yaml` as the baseline shape for new workflow memories.
 
-Workflow content is validated on save/import unless `--no-validate-workflow` is passed. Merge also validates workflow records; invalid incoming workflows are skipped and recorded as pending ambiguity records for human review. Required fields are `schema_version`, `goal`, `triggers`, `steps`, and `stop_conditions`; each step needs an `id` and at least one of `run`, `check`, `manual`, or `ask`. Workflow tags must include `workflow:*`, and project-scoped workflows must include the matching `project:<owner/repo>` tag.
+Reusable executable logic belongs either in the current repository, such as `scripts/build-release.sh`, or in `$AGENT_KNOWLEDGE_HOME/artifacts/` when it is cross-project knowledge-store material. Workflow content should reference those paths and record checks, safety gates, and expected outputs instead of embedding script bodies.
+
+Workflow content is validated on save/import unless `--no-validate-workflow` is passed. Merge also validates workflow records; invalid incoming workflows are skipped and recorded as pending ambiguity records for human review. Required fields are `schema_version`, `goal`, `triggers`, `steps`, and `stop_conditions`; each step needs an `id` and at least one of `run`, `check`, `manual`, or `ask`. Workflow tags must include `workflow:*`, and project-scoped workflows must include the matching `project:<owner/repo>` tag. Use `mem workflow validate <name> --check-artifacts` to additionally validate `owner: knowledge_store` artifact references against `manifest.toml`, path containment, file presence, checksums, and executable bits. Artifact paths used in `steps.run` must also be declared in `reusable_scripts`.

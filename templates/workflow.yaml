@@ -8,7 +8,12 @@ reusable_scripts:
   - path: scripts/example.sh
     owner: repo
     required: true
-    purpose: reusable executable logic referenced by this workflow
+    purpose: project-owned executable logic referenced by this workflow
+  - path: artifacts/scripts/example-helper.sh
+    owner: knowledge_store
+    required: true
+    checksum: sha256:<hex>
+    purpose: cross-project helper owned by the active knowledge store
 steps:
   - id: inspect
     check: confirm the current state and relevant inputs
@@ -17,6 +22,10 @@ steps:
     run: scripts/example.sh
     check: scripts/example.sh exists and is executable
     verify: the script completed as intended
+  - id: artifact-assisted-step
+    run: artifacts/scripts/example-helper.sh
+    check: artifact exists under the active knowledge store, checksum matches manifest.toml, and script is executable
+    verify: the helper produced the expected context
   - id: act
     manual: perform the smallest appropriate action
     verify: the action completed as intended

@@ -1,0 +1,17 @@
+version = 1
+
+[artifacts.scripts.example-helper]
+path = "artifacts/scripts/example-helper.sh"
+kind = "script"
+scope = "global"
+checksum = "sha256:<hex>"
+description = "Reusable cross-project helper script."
+executable = true
+tags = ["workflow:example", "tool:shell"]
+
+[artifacts.templates.release-note]
+path = "artifacts/templates/release-note.md"
+kind = "template"
+scope = "global"
+checksum = "sha256:<hex>"
+description = "Reusable release note template."

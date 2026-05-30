@@ -97,9 +97,40 @@ mem workflow find release --scope auto
 mem workflow find release --scope auto --limit 5
 mem workflow show release_runbook
 mem workflow validate release_runbook
+mem workflow validate release_runbook --check-artifacts
 ```
 
-`workflow find <intent>` searches by intent string (positional). `workflow show <reference>` and `workflow validate <reference>` accept either the workflow name or its memory id. Workflow helpers discover, display, and validate workflow memories; they never execute workflow commands. Agents execute runbook steps themselves, verify checkpoints, and ask before risky side effects. Reference reusable scripts by path in workflow content; keep executable script bodies in version-controlled repository files to avoid drift.
+`workflow find <intent>` searches by intent string (positional). `workflow show <reference>` and `workflow validate <reference>` accept either the workflow name or its memory id. Workflow helpers discover, display, and validate workflow memories; they never execute workflow commands. Agents execute runbook steps themselves, verify checkpoints, and ask before risky side effects. Reference reusable scripts or artifacts by path in workflow content; keep executable script bodies in version-controlled repository files for project-specific logic or in `$AGENT_KNOWLEDGE_HOME/artifacts/` for cross-project knowledge-store helpers. `workflow validate --check-artifacts` additionally checks `owner: knowledge_store` entries against `manifest.toml`, path containment, file presence, checksums, and executable bits. Artifact paths used in `steps.run` must be declared in `reusable_scripts`.
+
+## Artifacts
+
+```bash
+mem artifact list
+mem artifact show ci-triage
+mem artifact show scripts.ci-triage
+mem artifact check
+mem artifact add artifacts/scripts/ci-triage.sh --name ci-triage --kind script --scope global --description "Collect CI failure context" --executable
+mem artifact update ci-triage --checksum
+mem artifact remove ci-triage
+mem artifact remove ci-triage --delete-file
+```
+
+Artifact commands inspect `$AGENT_KNOWLEDGE_HOME/manifest.toml` and files under `$AGENT_KNOWLEDGE_HOME/artifacts/`. `artifact list` prints manifest entries as JSON. `artifact show <name>` accepts a short name when it is unique or a qualified name such as `scripts.ci-triage`. `artifact check` verifies manifest parsing, path containment, file presence, SHA-256 checksums, and executable bits for records marked `executable = true`; it reports missing files, checksum mismatches, unsafe paths, invalid checksums, invalid scopes, and non-executable scripts as JSON. Artifact commands never execute scripts.
+
+`artifact add` derives the manifest name from the file stem unless `--name` is provided, computes `sha256:<hex>`, and writes deterministic TOML. Existing name or path conflicts require `--force`. `artifact update <name> --checksum` refreshes the checksum after manual file edits. `artifact remove <name>` removes the manifest entry only; deleting the file requires `--delete-file`.
+
+## Bundles
+
+```bash
+mem bundle export agent-knowledge-store.tgz
+mem bundle export agent-knowledge-store.tgz --no-config
+mem bundle inspect agent-knowledge-store.tgz
+mem bundle import agent-knowledge-store.tgz
+mem bundle import agent-knowledge-store.tgz --merge
+mem bundle import agent-knowledge-store.tgz --replace --force
+```
+
+Bundles include durable portable store files: `memory.db`, optional `config.toml`, optional `manifest.toml`, `artifacts/`, and `bundle.json`. They exclude rebuildable or transient files such as `index/`, `.mem.lock`, `memory.db-wal`, and `memory.db-shm`. Use `bundle export --no-config` when store config contains machine-local paths. `bundle inspect` lists archive entries and `bundle.json` metadata without importing. `bundle import` initializes a clean store by default and runs `mem reindex` behavior after import. Import into a non-empty store is refused unless `--merge` or `--replace --force` is explicit. `--merge` imports memories through existing merge logic and copies non-conflicting artifacts; `--replace --force` clears durable store files before import.
 
 ## Ambiguity
 
