@@ -10,7 +10,7 @@ mem config show
 
 `init` creates the SQLite store and the Tantivy index inside the active knowledge home, idempotent on re-run. Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the `mem` binary. `context --detect` returns the auto-detected scope (`global` or `project:<owner/repo>`) based on the current git remote; `--detect` is required. `config show` prints the active root, db/index paths, config paths, environment overrides, and effective command defaults.
 
-CLI configuration uses TOML. User config lives at `~/.config/agent-knowledge/config.toml` and can set `knowledge_home` plus command defaults. Store config lives at `$AGENT_KNOWLEDGE_HOME/config.toml` and can set store-local defaults. Active store discovery order is: current repo root, executable-near repo root, `AGENT_KNOWLEDGE_HOME`, user-configured `knowledge_home`, then `~/.agent-knowledge`. Command default priority is: CLI flags, user config, store config, then built-in defaults.
+CLI configuration uses TOML. User config lives at `~/.config/agent-knowledge/config.toml` and can set `knowledge_home` plus command defaults. Store config lives at `<active-store-root>/config.toml` and can set store-local defaults; `$AGENT_KNOWLEDGE_HOME` is one way to choose that active store root. Active store discovery order is: current repo root, executable-near repo root, `AGENT_KNOWLEDGE_HOME`, user-configured `knowledge_home`, then `~/.agent-knowledge`. Command default priority is: CLI flags, user config, store config, then built-in defaults.
 
 ```toml
 knowledge_home = "~/.agent-knowledge"

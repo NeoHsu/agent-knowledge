@@ -1,6 +1,6 @@
 ---
 name: memory
-description: Persist, recall, audit, and migrate durable agent knowledge through the local `mem` CLI (SQLite + Tantivy at `AGENT_KNOWLEDGE_HOME`). ALWAYS use this skill when the user says "remember this", "記住", "幫我存", "save this", asks to recall prior preferences/decisions, runs a daily or weekly retrospective, mentions workflow runbooks, or asks to query/update/supersede/delete/export/import/merge/audit memory — even if the word "memory" is not explicitly used.
+description: Persist, recall, audit, and migrate durable agent knowledge through the local `mem` CLI and its active SQLite + Tantivy knowledge store. ALWAYS use this skill when the user says "remember this", "記住", "幫我存", "save this", asks to recall prior preferences/decisions, runs a daily or weekly retrospective, mentions workflow runbooks, or asks to query/update/supersede/delete/export/import/merge/audit memory — even if the word "memory" is not explicitly used.
 ---
 
 # Memory Skill

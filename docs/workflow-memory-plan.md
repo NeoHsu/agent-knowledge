@@ -1,5 +1,7 @@
 # Workflow Memory Plan
 
+> Status: implemented as of v0.2.0. This document is retained as design history. For current CLI usage, see `README.md`, `skills/memory/SKILL.md`, and `skills/memory/references/cli-guide.md`.
+
 > Goal: make agent-knowledge support portable, searchable, auditable workflows without turning every workflow into a separate skill.
 
 ## Problem
@@ -87,18 +89,10 @@ feedback
 project
 reference
 preference
+workflow
 ```
 
-The public docs and skill text mostly describe:
-
-```text
-user
-feedback
-project
-reference
-```
-
-Workflow is not yet a first-class type. Workflows can be stored today as `project` or `reference` records with tags like `workflow:release`, but that is a workaround. A first-class workflow type is needed for reliable lookup, validation, documentation, and agent behavior.
+Workflow is a first-class type. `mem save`, `mem query`, `mem import`, `mem export`, `mem merge`, and the `mem workflow` helper commands all understand `type=workflow`. Workflow content is validated on save/import unless `--no-validate-workflow` is passed, and invalid incoming workflow records from merge are recorded as pending ambiguity records for human review.
 
 ## Proposed Model
 
@@ -248,7 +242,7 @@ If multiple workflow records match:
 - prefer exact `workflow:<name>` or `intent:<intent>` tag match
 - if still ambiguous, record ambiguity and ask the user
 
-## CLI Plan
+## Implemented CLI Plan
 
 ### Phase 1: First-Class Workflow Type
 
@@ -416,10 +410,10 @@ Migration command can be manual at first:
 
 ```bash
 mem query "workflow:" --raw-query
-mem update <name> --type workflow
+mem supersede <old_name> <new_workflow_name> --content-file workflow.yaml
 ```
 
-If `update --type` is not available, add it before migration.
+`mem update` does not currently change memory type. To migrate an old `project` or `reference` workflow workaround, create a new `workflow` memory with `mem save --type workflow` or supersede the old record with validated workflow content.
 
 ## Open Design Questions
 
@@ -431,14 +425,10 @@ If `update --type` is not available, add it before migration.
 
 ## Recommended Next Step
 
-Implement Phase 1 first:
+The original Phase 1 through Phase 5 work is complete. Current follow-up options are:
 
 ```text
-1. Add workflow to schema CHECK constraint.
-2. Add tests for save/query/import/export workflow records.
-3. Update README and memory skill docs.
-4. Add workflow tag rules.
-5. Keep execution in the agent, not in mem.
+1. Keep current usage docs aligned with implemented CLI behavior.
+2. Add mem update --type only if direct type migration becomes necessary.
+3. Consider the optional execution report format without turning mem into a task runner.
 ```
-
-This gives immediate value without turning the CLI into an unsafe automation runner.

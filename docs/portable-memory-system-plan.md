@@ -256,7 +256,7 @@ mem query --type feedback                # 精確篩選（Tantivy filter）
 mem query --tags "deploy"                # 按 tag 篩選
 mem query --scope auto                   # global + 當前專案
 mem query --expired                      # 已過期記憶
-mem query --sort access_count            # 按存取頻率排序
+mem query --sort access-count            # 按存取頻率排序
 mem query --sort time                    # 按時間排序（新的優先）
 
 # 查詢時自動更新 access_count + last_accessed_at
@@ -265,7 +265,7 @@ mem query --sort time                    # 按時間排序（新的優先）
 更新
 ────
 mem update <name> --content "新內容"      # version +1, 記錄 changelog
-mem update <name> --add-tags "new_tag"
+mem update <name> --add-tags '["new_tag"]'
 mem supersede <old_name> <new_name>      # 舊記憶 valid_until=now + superseded_by=new
                                          # 新記憶繼承舊的 tags 和 scope
 
