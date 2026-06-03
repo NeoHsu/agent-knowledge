@@ -40,6 +40,22 @@ mem export --format markdown
 
 For source-only development, run commands as `cargo run -p mnemark --bin mem -- <args>`.
 
+## Agent Skill
+
+This repository also ships an agent memory skill at `skills/memory`. Install the `mem` CLI first, then install the skill with the open agent skills CLI:
+
+```bash
+npx skills add https://github.com/NeoHsu/mnemark/tree/main/skills/memory
+```
+
+For a local checkout during development:
+
+```bash
+npx skills add ./skills/memory
+```
+
+Use `--global` to install for all projects, or `--agent <name>` when you want to target a specific supported agent. After installation, agents can use the skill to save, query, audit, merge, bundle, and run retrospectives through the local `mem` CLI.
+
 `memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo, a local `MNEMARK_HOME`, or a `knowledge_home` configured in `~/.config/mnemark/config.toml`. `manifest.toml` and `artifacts/` travel with the store when you keep reusable cross-project helper files there. `index/` is ignored and can be rebuilt with `mem reindex`.
 
 The multilingual tokenizer uses `lindera` with embedded CC-CEDICT for Chinese tokenization and a local Tantivy tokenizer adapter.
