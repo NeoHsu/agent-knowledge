@@ -330,5 +330,5 @@ fn temp_bundle_dir(label: &str) -> Result<PathBuf> {
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_nanos();
-    Ok(std::env::temp_dir().join(format!("agent-knowledge-bundle-{label}-{stamp}")))
+    Ok(std::env::temp_dir().join(format!("mnemark-bundle-{label}-{stamp}")))
 }

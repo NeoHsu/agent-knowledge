@@ -78,7 +78,7 @@ impl TestRuntimeStore {
     pub fn run(&self, args: &[&str]) -> String {
         let output = Command::new(&self.mem)
             .current_dir(&self.run_dir)
-            .env("AGENT_KNOWLEDGE_HOME", &self.home)
+            .env("MNEMARK_HOME", &self.home)
             .args(args)
             .output()
             .expect("run installed mem");
@@ -116,7 +116,7 @@ pub fn temp_path(name: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("time")
         .as_nanos();
-    std::env::temp_dir().join(format!("agent-knowledge-{name}-{stamp}"))
+    std::env::temp_dir().join(format!("mnemark-{name}-{stamp}"))
 }
 
 pub fn temp_repo(name: &str) -> PathBuf {

@@ -22,7 +22,7 @@ pub(crate) fn cmd_config(app: &App, command: ConfigCommand) -> Result<()> {
                 "store_config_path": app.root.join("config.toml").display().to_string(),
                 "store_config_exists": app.root.join("config.toml").exists(),
                 "env": {
-                    "AGENT_KNOWLEDGE_HOME": std::env::var("AGENT_KNOWLEDGE_HOME").ok(),
+                    "MNEMARK_HOME": std::env::var("MNEMARK_HOME").ok(),
                     "XDG_CONFIG_HOME": std::env::var("XDG_CONFIG_HOME").ok()
                 },
                 "effective": {

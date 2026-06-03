@@ -15,7 +15,7 @@ use tantivy::{doc, Index, IndexWriter, TantivyDocument, Term};
 use crate::search_tokenizer;
 
 pub(crate) const INDEX_SCHEMA_VERSION: i64 = 2;
-const INDEX_VERSION_MARKER: &str = ".agent-knowledge-index-version";
+const INDEX_VERSION_MARKER: &str = ".mnemark-index-version";
 
 #[derive(Debug)]
 pub(crate) struct IndexCompatibilityError {

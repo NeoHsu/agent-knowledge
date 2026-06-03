@@ -125,11 +125,11 @@ fn find_root(start: &Path) -> Option<PathBuf> {
 }
 
 fn default_root(config: &Config) -> (PathBuf, StoreSource) {
-    if let Ok(path) = env::var("AGENT_KNOWLEDGE_HOME") {
+    if let Ok(path) = env::var("MNEMARK_HOME") {
         return (expand_home(&path), StoreSource::Environment);
     }
     if let Some(path) = config.knowledge_home_path() {
         return (path, StoreSource::UserConfig);
     }
-    (expand_home("~/.agent-knowledge"), StoreSource::Default)
+    (expand_home("~/.mnemark"), StoreSource::Default)
 }

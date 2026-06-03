@@ -155,7 +155,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("agent-knowledge-main-{name}-{stamp}"));
+        let root = std::env::temp_dir().join(format!("mnemark-main-{name}-{stamp}"));
         fs::create_dir_all(root.join("schema")).expect("schema dir");
         fs::write(
             root.join("schema/memory-schema.sql"),

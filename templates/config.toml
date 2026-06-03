@@ -1,8 +1,8 @@
-# User config: ~/.config/agent-knowledge/config.toml
-# Store config: $AGENT_KNOWLEDGE_HOME/config.toml
+# User config: ~/.config/mnemark/config.toml
+# Store config: $MNEMARK_HOME/config.toml
 
-# User config only: choose the active runtime store when AGENT_KNOWLEDGE_HOME is unset.
-knowledge_home = "~/.agent-knowledge"
+# User config only: choose the active runtime store when MNEMARK_HOME is unset.
+knowledge_home = "~/.mnemark"
 
 # Defaults for query and workflow commands. CLI flags override these values.
 default_scope = "auto"

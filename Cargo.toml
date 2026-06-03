@@ -6,8 +6,8 @@ resolver = "2"
 version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/NeoHsu/agent-knowledge"
-homepage = "https://github.com/NeoHsu/agent-knowledge"
+repository = "https://github.com/NeoHsu/mnemark"
+homepage = "https://github.com/NeoHsu/mnemark"
 rust-version = "1.88"
 
 [workspace.dependencies]

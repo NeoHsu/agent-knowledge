@@ -112,7 +112,7 @@ pub fn user_config_path() -> PathBuf {
     env::var("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| home_dir().join(".config"))
-        .join("agent-knowledge")
+        .join("mnemark")
         .join("config.toml")
 }
 

@@ -44,7 +44,7 @@ mod tests {
 
     #[test]
     fn mark_stale_is_noop() {
-        let index = std::env::temp_dir().join("agent-knowledge-index-state-noop");
+        let index = std::env::temp_dir().join("mnemark-index-state-noop");
         mark_stale(&index, "index writer failed", "2026-05-27T00:00:00Z").expect("mark stale");
         // File-based marker is no longer written; is_stale always returns false.
         assert!(!is_stale(&index));
@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn clear_stale_is_idempotent() {
-        let index = std::env::temp_dir().join("agent-knowledge-index-state-noop2");
+        let index = std::env::temp_dir().join("mnemark-index-state-noop2");
         mark_stale(&index, "stale", "2026-05-27T00:00:00Z").expect("mark stale");
         clear_stale(&index).expect("clear stale");
         clear_stale(&index).expect("clear missing stale marker");

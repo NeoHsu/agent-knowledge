@@ -2,7 +2,7 @@
 
 > Status: implemented as of v0.2.0. This document is retained as design history. For current CLI usage, see `README.md`, `skills/memory/SKILL.md`, and `skills/memory/references/cli-guide.md`.
 
-> Goal: make agent-knowledge support portable, searchable, auditable workflows without turning every workflow into a separate skill.
+> Goal: make mnemark support portable, searchable, auditable workflows without turning every workflow into a separate skill.
 
 ## Problem
 
@@ -14,14 +14,14 @@ Many agent systems put recurring workflows directly into skills. That works for 
 - User preferences, project facts, and workflow steps drift apart.
 - A workflow learned during a task is hard to save back into a reusable place.
 
-agent-knowledge should solve this by treating workflows as durable knowledge. Skills remain thin execution policies, while the memory store owns workflow runbooks and project-specific variants.
+mnemark should solve this by treating workflows as durable knowledge. Skills remain thin execution policies, while the memory store owns workflow runbooks and project-specific variants.
 
 ## Positioning
 
-agent-knowledge should become:
+mnemark should become:
 
 ```text
-portable agent knowledge + workflow runbook system
+portable agent memory + workflow runbook system
 ```
 
 The split should be:
@@ -125,11 +125,11 @@ Example:
 ```bash
 mem save \
   --type workflow \
-  --name release_agent_knowledge \
-  --scope project:NeoHsu/agent-knowledge \
+  --name release_mnemark \
+  --scope project:NeoHsu/mnemark \
   --source manual \
-  --tags '["workflow:release","intent:release","tool:cargo","tool:gh","risk:high","project:NeoHsu/agent-knowledge"]' \
-  --content-file workflows/release-agent-knowledge.yaml
+  --tags '["workflow:release","intent:release","tool:cargo","tool:gh","risk:high","project:NeoHsu/mnemark"]' \
+  --content-file workflows/release-mnemark.yaml
 ```
 
 ## Workflow Content Format
@@ -140,7 +140,7 @@ Recommended YAML shape:
 
 ```yaml
 schema_version: 1
-goal: Release agent-knowledge safely.
+goal: Release mnemark safely.
 triggers:
   - user asks to release
   - user asks to publish a new version
@@ -277,8 +277,8 @@ Acceptance criteria:
 
 ```text
 mem workflow find release --scope auto
-mem workflow show release_agent_knowledge
-mem workflow validate release_agent_knowledge
+mem workflow show release_mnemark
+mem workflow validate release_mnemark
 ```
 
 ### Phase 3: Workflow Validation
@@ -366,17 +366,17 @@ mem save \
 ```bash
 mem save \
   --type workflow \
-  --name ci_failure_triage_agent_knowledge \
-  --scope project:NeoHsu/agent-knowledge \
+  --name ci_failure_triage_mnemark \
+  --scope project:NeoHsu/mnemark \
   --source manual \
-  --tags '["workflow:ci-triage","intent:fix-ci","tool:gh","tool:cargo","project:NeoHsu/agent-knowledge"]' \
+  --tags '["workflow:ci-triage","intent:fix-ci","tool:gh","tool:cargo","project:NeoHsu/mnemark"]' \
   --content 'schema_version: 1
 goal: Triage GitHub Actions CI failures.
 triggers:
   - user shares a GitHub Actions failed run
 steps:
   - id: inspect-run
-    run: gh run view <run-id> --repo NeoHsu/agent-knowledge --log-failed
+    run: gh run view <run-id> --repo NeoHsu/mnemark --log-failed
     verify: failure step and error are identified
   - id: reproduce-locally
     run: cargo test --workspace --locked

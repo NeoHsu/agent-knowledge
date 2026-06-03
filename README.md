@@ -1,6 +1,8 @@
-# Agent Knowledge
+# mnemark
 
-Portable agent memory system. The repository owns the `mem` CLI, schema, skill instructions, deterministic session readers, and rebuildable Tantivy index logic. Runtime memory data lives in a local or private data checkout.
+Portable agent memory system, exposed through the `mem` CLI.
+
+The repository owns the `mem` CLI, schema, skill instructions, deterministic session readers, and rebuildable Tantivy index logic. Runtime memory data lives in a local or private data checkout.
 
 ## Quick Start
 
@@ -11,7 +13,7 @@ scripts/smoke-release.sh
 cargo install --path crates/mem-cli # installs `mem` into ~/.cargo/bin (on PATH)
 
 mem init
-mem --home ~/.agent-knowledge config show
+mem --home ~/.mnemark config show
 mem config show
 mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
 mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
@@ -26,9 +28,9 @@ printf '#!/usr/bin/env sh\nprintf "collect ci context\\n"\n' > artifacts/scripts
 chmod +x artifacts/scripts/ci-triage.sh
 mem artifact add artifacts/scripts/ci-triage.sh --name ci-triage --kind script --scope global --executable
 mem artifact update ci-triage --checksum
-mem bundle export agent-knowledge-store.tgz
-mem bundle export agent-knowledge-store.tgz --no-config
-mem bundle inspect agent-knowledge-store.tgz
+mem bundle export mnemark-store.tgz
+mem bundle export mnemark-store.tgz --no-config
+mem bundle inspect mnemark-store.tgz
 mem query "name:no_emoji" --raw-query --no-touch
 mem import memories.json
 mem merge /path/to/theirs.db
@@ -36,9 +38,9 @@ mem retro daily
 mem export --format markdown
 ```
 
-For source-only development, run commands as `cargo run -p agent-knowledge --bin mem -- <args>`.
+For source-only development, run commands as `cargo run -p mnemark --bin mem -- <args>`.
 
-`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo, a local `AGENT_KNOWLEDGE_HOME`, or a `knowledge_home` configured in `~/.config/agent-knowledge/config.toml`. `manifest.toml` and `artifacts/` travel with the store when you keep reusable cross-project helper files there. `index/` is ignored and can be rebuilt with `mem reindex`.
+`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo, a local `MNEMARK_HOME`, or a `knowledge_home` configured in `~/.config/mnemark/config.toml`. `manifest.toml` and `artifacts/` travel with the store when you keep reusable cross-project helper files there. `index/` is ignored and can be rebuilt with `mem reindex`.
 
 The multilingual tokenizer uses `lindera` with embedded CC-CEDICT for Chinese tokenization and a local Tantivy tokenizer adapter.
 
@@ -58,15 +60,15 @@ Session readers are optional adapters. Retrospectives should use platform-provid
 
 **Stale index tracking**: The index stale state is tracked exclusively in the `metadata` table (`index_dirty` key). There is no longer a `.stale` filesystem marker.
 
-**Index schema versioning**: Tantivy index artifacts carry `index/.agent-knowledge-index-version`, owned by `INDEX_SCHEMA_VERSION` in `crates/mem-core/src/search_index.rs`. Bump it when Tantivy fields, field options, tokenizer behavior, token normalization, indexed document content, or required ranking/filtering fields change. Do not bump it for query-time boosts, fuzzy query construction, SQLite-only filtering, or CLI output changes.
+**Index schema versioning**: Tantivy index artifacts carry `index/.mnemark-index-version`, owned by `INDEX_SCHEMA_VERSION` in `crates/mem-core/src/search_index.rs`. Bump it when Tantivy fields, field options, tokenizer behavior, token normalization, indexed document content, or required ranking/filtering fields change. Do not bump it for query-time boosts, fuzzy query construction, SQLite-only filtering, or CLI output changes.
 
 **Bulk operations**: `mem import` (JSON arrays) and `mem merge` use a single Tantivy `IndexWriter` commit for all changes instead of N individual commits.
 
 ## Runtime Model
 
 ```text
-agent-knowledge repo              installed/runtime state
---------------------              -----------------------
+mnemark repo                      installed/runtime state
+------------                      -----------------------
 schema/memory-schema.sql   --->   mem binary embeds schema
 crates/mem-cli/src/main.rs        memory.db
 skills/                           config.toml
@@ -75,16 +77,16 @@ docs/                             artifacts/
 CI/release                        index/
 ```
 
-`mem` discovers the active store in this order: explicit `--home <path>`, current directory with `schema/memory-schema.sql`, a parent of the executable with `schema/memory-schema.sql`, `AGENT_KNOWLEDGE_HOME`, `knowledge_home` in `~/.config/agent-knowledge/config.toml`, then `~/.agent-knowledge`. Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the binary.
+`mem` discovers the active store in this order: explicit `--home <path>`, current directory with `schema/memory-schema.sql`, a parent of the executable with `schema/memory-schema.sql`, `MNEMARK_HOME`, `knowledge_home` in `~/.config/mnemark/config.toml`, then `~/.mnemark`. Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the binary.
 
-CLI/tool settings use TOML; workflow runbooks use YAML. Command default priority is: CLI flags, user config at `~/.config/agent-knowledge/config.toml`, store config at the active store root, then built-in defaults. `--home` and `AGENT_KNOWLEDGE_HOME` only override active store selection. See `templates/config.toml` and `mem config show`.
+CLI/tool settings use TOML; workflow runbooks use YAML. Command default priority is: CLI flags, user config at `~/.config/mnemark/config.toml`, store config at the active store root, then built-in defaults. `--home` and `MNEMARK_HOME` only override active store selection. See `templates/config.toml` and `mem config show`.
 
 Writes update SQLite in a transaction, write changelog rows, and then update the Tantivy index. If the index is stale, run `mem reindex`.
 
 Portable runtime stores can include reusable artifact files under the active knowledge store root:
 
 ```text
-$AGENT_KNOWLEDGE_HOME/
+$MNEMARK_HOME/
   memory.db
   config.toml
   manifest.toml
@@ -103,7 +105,7 @@ Artifact inspection is available with `mem artifact list`, `mem artifact show <n
 For manual migration of a store with artifacts, include the durable files and omit rebuildable runtime files:
 
 ```bash
-tar -czf agent-knowledge-store.tgz \
+tar -czf mnemark-store.tgz \
   memory.db \
   config.toml \
   manifest.toml \
@@ -113,11 +115,11 @@ tar -czf agent-knowledge-store.tgz \
 The CLI also supports first-class bundles:
 
 ```bash
-mem bundle export agent-knowledge-store.tgz
-mem bundle inspect agent-knowledge-store.tgz
-mem bundle import agent-knowledge-store.tgz          # clean store only
-mem bundle import agent-knowledge-store.tgz --merge
-mem bundle import agent-knowledge-store.tgz --replace --force
+mem bundle export mnemark-store.tgz
+mem bundle inspect mnemark-store.tgz
+mem bundle import mnemark-store.tgz          # clean store only
+mem bundle import mnemark-store.tgz --merge
+mem bundle import mnemark-store.tgz --replace --force
 ```
 
 Bundles include `memory.db`, optional `config.toml`, optional `manifest.toml`, `artifacts/`, and `bundle.json`. They exclude `index/`, `.mem.lock`, `memory.db-wal`, and `memory.db-shm`. Use `mem bundle export --no-config` when store config contains machine-local paths. Import into a non-empty store is refused unless `--merge` or `--replace --force` is explicit. `--merge` uses existing memory merge behavior and copies non-conflicting artifacts; `--replace --force` clears durable store files before import.

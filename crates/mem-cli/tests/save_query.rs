@@ -50,11 +50,11 @@ fn query_treats_punctuation_as_literal_text() {
         "--name",
         "project_scope",
         "--content",
-        "Use project:NeoHsu/agent-knowledge as the portable memory scope",
+        "Use project:NeoHsu/mnemark as the portable memory scope",
         "--force",
     ]);
 
-    let query = repo.run(&["query", "project:NeoHsu/agent-knowledge"]);
+    let query = repo.run(&["query", "project:NeoHsu/mnemark"]);
     assert!(query.contains("project_scope"));
 }
 
@@ -139,7 +139,7 @@ fn query_uses_store_config_default_scope() {
     repo.run(&["init"]);
     fs::write(
         repo.join("config.toml"),
-        "[query]\ndefault_scope = \"project:NeoHsu/agent-knowledge\"\n",
+        "[query]\ndefault_scope = \"project:NeoHsu/mnemark\"\n",
     )
     .expect("write config");
     repo.run(&[
@@ -157,7 +157,7 @@ fn query_uses_store_config_default_scope() {
         "--name",
         "config_project",
         "--scope",
-        "project:NeoHsu/agent-knowledge",
+        "project:NeoHsu/mnemark",
         "--content",
         "config scope needle project",
         "--force",

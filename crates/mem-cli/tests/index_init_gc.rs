@@ -7,7 +7,7 @@ mod support;
 
 use support::{mem_bin, temp_path, TestRepo, TestRuntimeStore};
 
-const INDEX_VERSION_MARKER: &str = "index/.agent-knowledge-index-version";
+const INDEX_VERSION_MARKER: &str = "index/.mnemark-index-version";
 
 fn mark_index_dirty(repo: &TestRepo) {
     let conn = Connection::open(repo.join("memory.db")).expect("open memory db");
@@ -60,11 +60,11 @@ fn init_uses_user_config_knowledge_home_when_env_is_absent() {
     let knowledge_home = temp_path("config-home");
     fs::create_dir_all(&install_dir).expect("install dir");
     fs::create_dir_all(&run_dir).expect("run dir");
-    fs::create_dir_all(config_root.join("agent-knowledge")).expect("config dir");
+    fs::create_dir_all(config_root.join("mnemark")).expect("config dir");
     let installed_mem = install_dir.join("mem");
     fs::copy(mem_bin(), &installed_mem).expect("copy mem binary");
     fs::write(
-        config_root.join("agent-knowledge/config.toml"),
+        config_root.join("mnemark/config.toml"),
         format!("knowledge_home = \"{}\"\n", knowledge_home.display()),
     )
     .expect("write config");
@@ -72,7 +72,7 @@ fn init_uses_user_config_knowledge_home_when_env_is_absent() {
     let output = Command::new(&installed_mem)
         .current_dir(&run_dir)
         .env("XDG_CONFIG_HOME", &config_root)
-        .env_remove("AGENT_KNOWLEDGE_HOME")
+        .env_remove("MNEMARK_HOME")
         .arg("init")
         .output()
         .expect("run installed mem init");
@@ -90,7 +90,7 @@ fn init_uses_user_config_knowledge_home_when_env_is_absent() {
     let shown_output = Command::new(&installed_mem)
         .current_dir(&run_dir)
         .env("XDG_CONFIG_HOME", &config_root)
-        .env_remove("AGENT_KNOWLEDGE_HOME")
+        .env_remove("MNEMARK_HOME")
         .args(["config", "show"])
         .output()
         .expect("run config show");
@@ -116,7 +116,7 @@ fn cli_home_overrides_current_directory_store() {
     let output = Command::new(mem_bin())
         .current_dir(repo.path())
         .env("XDG_CONFIG_HOME", &config_root)
-        .env_remove("AGENT_KNOWLEDGE_HOME")
+        .env_remove("MNEMARK_HOME")
         .args(["--home", cli_home.to_str().expect("cli home path"), "init"])
         .output()
         .expect("run mem init with cli home");
@@ -133,7 +133,7 @@ fn cli_home_overrides_current_directory_store() {
     let shown_output = Command::new(mem_bin())
         .current_dir(repo.path())
         .env("XDG_CONFIG_HOME", &config_root)
-        .env_remove("AGENT_KNOWLEDGE_HOME")
+        .env_remove("MNEMARK_HOME")
         .args([
             "--home",
             cli_home.to_str().expect("cli home path"),
@@ -180,14 +180,14 @@ fn config_show_reports_effective_paths_and_defaults() {
     fs::create_dir_all(&config_root).expect("config root");
     fs::write(
         repo.join("config.toml"),
-        "[query]\ndefault_scope = \"auto\"\ndefault_limit = 7\n[workflow]\ndefault_scope = \"project:NeoHsu/agent-knowledge\"\ndefault_limit = 3\n",
+        "[query]\ndefault_scope = \"auto\"\ndefault_limit = 7\n[workflow]\ndefault_scope = \"project:NeoHsu/mnemark\"\ndefault_limit = 3\n",
     )
     .expect("write store config");
 
     let output = Command::new(mem_bin())
         .current_dir(repo.path())
         .env("XDG_CONFIG_HOME", &config_root)
-        .env_remove("AGENT_KNOWLEDGE_HOME")
+        .env_remove("MNEMARK_HOME")
         .args(["config", "show"])
         .output()
         .expect("run config show");
@@ -208,7 +208,7 @@ fn config_show_reports_effective_paths_and_defaults() {
     assert_eq!(shown["effective"]["query_default_limit"], 7);
     assert_eq!(
         shown["effective"]["workflow_default_scope"],
-        "project:NeoHsu/agent-knowledge"
+        "project:NeoHsu/mnemark"
     );
     assert_eq!(shown["effective"]["workflow_default_limit"], 3);
 

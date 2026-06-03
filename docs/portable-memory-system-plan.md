@@ -15,11 +15,11 @@
 
 本專案分成兩層：
 
-- `agent-knowledge` repo：CLI、schema、skills、readers、docs、CI/release。這層可以發布，不追蹤私人 `memory.db`。
-- runtime/private knowledge store：實際的 `memory.db`、`index/`、可選 profile/config。這層由 `AGENT_KNOWLEDGE_HOME` 或當前 repo root 決定。
+- `mnemark` repo：CLI、schema、skills、readers、docs、CI/release。這層可以發布，不追蹤私人 `memory.db`。
+- runtime/private knowledge store：實際的 `memory.db`、`index/`、可選 profile/config。這層由 `MNEMARK_HOME` 或當前 repo root 決定。
 
 ```
-agent-knowledge/                  (CLI/project repo)
+mnemark/                          (CLI/project repo)
 ├── skills/
 │   └── memory/SKILL.md           唯一的 memory skill
 │                                 (CLI 操作 + 復盤 workflow)
@@ -653,11 +653,11 @@ Hermes:       config 指向 skills/memory/SKILL.md
 
 ```
 # 新環境
-git clone git@github.com:you/private-memory-store.git ~/.agent-knowledge-data
-export AGENT_KNOWLEDGE_HOME=~/.agent-knowledge-data
+git clone git@github.com:you/private-memory-store.git ~/.mnemark-data
+export MNEMARK_HOME=~/.mnemark-data
 
 # 日常
-cd ~/.agent-knowledge-data && git pull  # 取得其他平台存的記憶
+cd ~/.mnemark-data && git pull  # 取得其他平台存的記憶
 # ... 工作 ...
 git add -A && git commit && git push  # 推送新記憶
 ```
@@ -747,7 +747,7 @@ Agent 帶著正確的 context 開始工作
 
 ### Phase 1 — 骨架（先能跑）
 
-1. 建立 GitHub private repo `agent-knowledge`
+1. 建立 GitHub private repo `mnemark-memory`
 2. 建立目錄結構 + config.toml + schema（含 changelog 表）
 3. 實作 `mem` CLI 基本功能（Rust）
    - `mem save` / `mem query` / `mem update` / `mem delete`

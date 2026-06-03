@@ -59,12 +59,12 @@ mod tests {
     #[test]
     fn remote_scope_supports_ssh_and_https() {
         assert_eq!(
-            remote_to_scope("git@github.com:NeoHsu/agent-knowledge.git"),
-            "project:NeoHsu/agent-knowledge"
+            remote_to_scope("git@github.com:NeoHsu/mnemark.git"),
+            "project:NeoHsu/mnemark"
         );
         assert_eq!(
-            remote_to_scope("https://github.com/NeoHsu/agent-knowledge.git"),
-            "project:NeoHsu/agent-knowledge"
+            remote_to_scope("https://github.com/NeoHsu/mnemark.git"),
+            "project:NeoHsu/mnemark"
         );
     }
 }

@@ -12,7 +12,7 @@ targets = [
     "x86_64-pc-windows-msvc",
     "x86_64-unknown-linux-gnu",
 ]
-packages = ["agent-knowledge"]
+packages = ["mnemark"]
 hosting = "github"
 pr-run-mode = "plan"
 install-path = "CARGO_HOME"

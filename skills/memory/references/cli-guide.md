@@ -10,10 +10,10 @@ mem config show
 
 `init` creates the SQLite store and the Tantivy index inside the active knowledge home, idempotent on re-run. Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the `mem` binary. `context --detect` returns the auto-detected scope (`global` or `project:<owner/repo>`) based on the current git remote; `--detect` is required. `config show` prints the active root, db/index paths, config paths, environment overrides, and effective command defaults.
 
-CLI configuration uses TOML. User config lives at `~/.config/agent-knowledge/config.toml` and can set `knowledge_home` plus command defaults. Store config lives at `<active-store-root>/config.toml` and can set store-local defaults; `$AGENT_KNOWLEDGE_HOME` is one way to choose that active store root. Active store discovery order is: current repo root, executable-near repo root, `AGENT_KNOWLEDGE_HOME`, user-configured `knowledge_home`, then `~/.agent-knowledge`. Command default priority is: CLI flags, user config, store config, then built-in defaults.
+CLI configuration uses TOML. User config lives at `~/.config/mnemark/config.toml` and can set `knowledge_home` plus command defaults. Store config lives at `<active-store-root>/config.toml` and can set store-local defaults; `$MNEMARK_HOME` is one way to choose that active store root. Active store discovery order is: current repo root, executable-near repo root, `MNEMARK_HOME`, user-configured `knowledge_home`, then `~/.mnemark`. Command default priority is: CLI flags, user config, store config, then built-in defaults.
 
 ```toml
-knowledge_home = "~/.agent-knowledge"
+knowledge_home = "~/.mnemark"
 default_scope = "auto"
 default_limit = 20
 
@@ -118,19 +118,19 @@ mem artifact remove ci-triage
 mem artifact remove ci-triage --delete-file
 ```
 
-Artifact commands inspect `manifest.toml` and files under `artifacts/` in the active knowledge store root. `$AGENT_KNOWLEDGE_HOME` is one way to choose that root, but `--home`, repository discovery, or user config may choose a different active store. `artifact list` prints manifest entries as JSON. `artifact show <name>` accepts a short name when it is unique or a qualified name such as `scripts.ci-triage`. `artifact check` verifies manifest parsing, path containment, file presence, SHA-256 checksums, and executable bits for records marked `executable = true`; it reports missing files, checksum mismatches, unsafe paths, invalid checksums, invalid scopes, and non-executable scripts as JSON. Artifact commands never execute scripts.
+Artifact commands inspect `manifest.toml` and files under `artifacts/` in the active knowledge store root. `$MNEMARK_HOME` is one way to choose that root, but `--home`, repository discovery, or user config may choose a different active store. `artifact list` prints manifest entries as JSON. `artifact show <name>` accepts a short name when it is unique or a qualified name such as `scripts.ci-triage`. `artifact check` verifies manifest parsing, path containment, file presence, SHA-256 checksums, and executable bits for records marked `executable = true`; it reports missing files, checksum mismatches, unsafe paths, invalid checksums, invalid scopes, and non-executable scripts as JSON. Artifact commands never execute scripts.
 
 `artifact add` derives the manifest name from the file stem unless `--name` is provided, requires the artifact file to already exist under the active store, computes `sha256:<hex>`, and writes deterministic TOML. Existing name or path conflicts require `--force`. `artifact update <name> --checksum` refreshes the checksum after manual file edits. `artifact remove <name>` removes the manifest entry only; deleting the file requires `--delete-file`.
 
 ## Bundles
 
 ```bash
-mem bundle export agent-knowledge-store.tgz
-mem bundle export agent-knowledge-store.tgz --no-config
-mem bundle inspect agent-knowledge-store.tgz
-mem bundle import agent-knowledge-store.tgz          # clean store only
-mem bundle import agent-knowledge-store.tgz --merge
-mem bundle import agent-knowledge-store.tgz --replace --force
+mem bundle export mnemark-store.tgz
+mem bundle export mnemark-store.tgz --no-config
+mem bundle inspect mnemark-store.tgz
+mem bundle import mnemark-store.tgz          # clean store only
+mem bundle import mnemark-store.tgz --merge
+mem bundle import mnemark-store.tgz --replace --force
 ```
 
 Bundles include durable portable store files: `memory.db`, optional `config.toml`, optional `manifest.toml`, `artifacts/`, and `bundle.json`. They exclude rebuildable or transient files such as `index/`, `.mem.lock`, `memory.db-wal`, and `memory.db-shm`. Use `bundle export --no-config` when store config contains machine-local paths. `bundle inspect` lists archive entries and `bundle.json` metadata without importing. `bundle import` initializes a clean store by default and runs `mem reindex` behavior after import. Import into a non-empty store is refused unless `--merge` or `--replace --force` is explicit. `--merge` imports memories through existing merge logic and copies non-conflicting artifacts; `--replace --force` clears durable store files before import.

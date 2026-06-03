@@ -10,7 +10,7 @@ if [[ ! -x "$MEM_BIN" ]]; then
   exit 1
 fi
 
-WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/agent-knowledge-smoke.XXXXXX")"
+WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/mnemark-smoke.XXXXXX")"
 cleanup() {
   rm -rf "$WORKDIR"
 }
@@ -24,25 +24,25 @@ cp "$MEM_BIN" "$INSTALL_DIR/mem"
 
 (
   cd "$RUN_DIR"
-  AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" init >/dev/null
+  MNEMARK_HOME="$HOME_DIR" "$INSTALL_DIR/mem" init >/dev/null
   [[ -f "$HOME_DIR/memory.db" ]]
   [[ -d "$HOME_DIR/index" ]]
   [[ ! -e "$HOME_DIR/schema/memory-schema.sql" ]]
-  config_output="$(AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" config show)"
+  config_output="$(MNEMARK_HOME="$HOME_DIR" "$INSTALL_DIR/mem" config show)"
   [[ "$config_output" == *'"store_source": "environment"'* ]]
   [[ "$config_output" == *'"schema": "embedded"'* ]]
-  AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" save \
+  MNEMARK_HOME="$HOME_DIR" "$INSTALL_DIR/mem" save \
     --name smoke_release \
     --source manual \
     --tags '["smoke:test"]' \
     --content "release smoke searchable content" \
     --force >/dev/null
-  query_output="$(AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" query "searchable" --no-touch)"
+  query_output="$(MNEMARK_HOME="$HOME_DIR" "$INSTALL_DIR/mem" query "searchable" --no-touch)"
   [[ "$query_output" == *smoke_release* ]]
-  AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" reindex >/dev/null
-  query_output="$(AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" query "release smoke" --no-touch)"
+  MNEMARK_HOME="$HOME_DIR" "$INSTALL_DIR/mem" reindex >/dev/null
+  query_output="$(MNEMARK_HOME="$HOME_DIR" "$INSTALL_DIR/mem" query "release smoke" --no-touch)"
   [[ "$query_output" == *smoke_release* ]]
-  export_output="$(AGENT_KNOWLEDGE_HOME="$HOME_DIR" "$INSTALL_DIR/mem" export --format json)"
+  export_output="$(MNEMARK_HOME="$HOME_DIR" "$INSTALL_DIR/mem" export --format json)"
   [[ "$export_output" == *smoke_release* ]]
 )
 

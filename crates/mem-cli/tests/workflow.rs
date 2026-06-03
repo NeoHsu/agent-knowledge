@@ -35,33 +35,32 @@ stop_conditions:
     .expect("write workflow");
 
     let saved = repo.run(&[
-            "save",
-            "--type",
-            "workflow",
-            "--name",
-            "release_agent_knowledge",
-            "--scope",
-            "project:NeoHsu/agent-knowledge",
-            "--source",
-            "manual",
-            "--tags",
-            r#"["workflow:release","intent:release","tool:git","risk:high","project:NeoHsu/agent-knowledge"]"#,
-            "--content-file",
-            workflow_file.to_str().expect("workflow path"),
-        ],
-    );
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "release_mnemark",
+        "--scope",
+        "project:NeoHsu/mnemark",
+        "--source",
+        "manual",
+        "--tags",
+        r#"["workflow:release","intent:release","tool:git","risk:high","project:NeoHsu/mnemark"]"#,
+        "--content-file",
+        workflow_file.to_str().expect("workflow path"),
+    ]);
     assert!(saved.contains(r#""status":"saved""#));
 
     let query = repo.run(&["query", "release", "--type", "workflow"]);
-    assert!(query.contains("release_agent_knowledge"));
+    assert!(query.contains("release_mnemark"));
 
     let found = repo.run(&["workflow", "find", "release"]);
-    assert!(found.contains("release_agent_knowledge"));
+    assert!(found.contains("release_mnemark"));
 
-    let shown = repo.run(&["workflow", "show", "release_agent_knowledge"]);
+    let shown = repo.run(&["workflow", "show", "release_mnemark"]);
     assert!(shown.contains(r#""type": "workflow""#));
 
-    let validated = repo.run(&["workflow", "validate", "release_agent_knowledge"]);
+    let validated = repo.run(&["workflow", "validate", "release_mnemark"]);
     assert!(validated.contains(r#""status": "valid""#));
 
     let exported = repo.run(&["export", "--format", "json"]);
@@ -74,7 +73,7 @@ stop_conditions:
     let imported = imported_repo.run(&["import", import_file.to_str().expect("import path")]);
     assert!(imported.contains(r#""saved": 1"#));
     let imported_query = imported_repo.run(&["query", "--type", "workflow"]);
-    assert!(imported_query.contains("release_agent_knowledge"));
+    assert!(imported_query.contains("release_mnemark"));
 }
 
 #[test]
@@ -131,7 +130,7 @@ fn workflow_find_uses_store_config_defaults() {
     repo.run(&["init"]);
     fs::write(
         repo.join("config.toml"),
-        "[workflow]\ndefault_scope = \"project:NeoHsu/agent-knowledge\"\ndefault_limit = 1\n",
+        "[workflow]\ndefault_scope = \"project:NeoHsu/mnemark\"\ndefault_limit = 1\n",
     )
     .expect("write config");
     let global_content = "schema_version: 1\ngoal: Release global workflow safely.\ntriggers:\n  - release\nsteps:\n  - id: inspect\n    check: global state is known\nstop_conditions:\n  - unsafe state\n";
@@ -158,9 +157,9 @@ fn workflow_find_uses_store_config_defaults() {
         "--name",
         "release_project_workflow",
         "--scope",
-        "project:NeoHsu/agent-knowledge",
+        "project:NeoHsu/mnemark",
         "--tags",
-        r#"["workflow:release","intent:release","project:NeoHsu/agent-knowledge"]"#,
+        r#"["workflow:release","intent:release","project:NeoHsu/mnemark"]"#,
         "--content",
         project_content,
         "--force",
@@ -324,7 +323,7 @@ fn workflow_project_scope_requires_matching_project_tag() {
             "--name",
             "project_workflow_missing_tag",
             "--scope",
-            "project:NeoHsu/agent-knowledge",
+            "project:NeoHsu/mnemark",
             "--tags",
             r#"["workflow:project"]"#,
             "--content",
@@ -340,9 +339,9 @@ fn workflow_project_scope_requires_matching_project_tag() {
             "--name",
             "project_workflow",
             "--scope",
-            "project:NeoHsu/agent-knowledge",
+            "project:NeoHsu/mnemark",
             "--tags",
-            r#"["workflow:project","project:NeoHsu/agent-knowledge"]"#,
+            r#"["workflow:project","project:NeoHsu/mnemark"]"#,
             "--content",
             "schema_version: 1\ngoal: Project workflow.\ntriggers:\n  - project task\nsteps:\n  - id: inspect\n    check: project state is known\nstop_conditions:\n  - missing context\n",
         ],
