@@ -84,6 +84,13 @@ jobs:
             echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           fi
 
+      - name: Install Rust 1.96
+        shell: bash
+        run: |
+          rustup toolchain install 1.96.0 --profile minimal
+          rustup default 1.96.0
+          rustc --version
+
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
 
