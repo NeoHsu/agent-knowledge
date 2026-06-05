@@ -30,7 +30,7 @@ pub(crate) fn cmd_retro(app: &App, command: RetroCommand) -> Result<()> {
     )?;
     let instructions = match kind {
         "daily" => vec![
-            "Use platform-provided conversation context; repo readers are optional adapters.",
+            "Use platform-provided conversation context.",
             "Compare today's conversation facts against active_memories.",
             "Persist durable new facts with source=daily_retro.",
             "Detect repeated manual procedures and suggest type=workflow memories.",

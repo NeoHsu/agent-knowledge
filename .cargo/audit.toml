@@ -1,6 +1,0 @@
-[advisories]
-ignore = [
-    # Transitive through lindera-dictionary. Keep this narrow so new advisories
-    # still fail CI, and revisit when Lindera removes the dependency.
-    "RUSTSEC-2021-0153",
-]

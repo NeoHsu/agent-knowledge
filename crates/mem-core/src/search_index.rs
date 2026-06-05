@@ -14,7 +14,7 @@ use tantivy::{doc, Index, IndexWriter, TantivyDocument, Term};
 
 use crate::search_tokenizer;
 
-pub(crate) const INDEX_SCHEMA_VERSION: i64 = 2;
+pub(crate) const INDEX_SCHEMA_VERSION: i64 = 3;
 const INDEX_VERSION_MARKER: &str = ".mnemark-index-version";
 
 #[derive(Debug)]

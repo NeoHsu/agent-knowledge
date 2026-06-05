@@ -22,7 +22,6 @@ This is the canonical guidance for agents working in this repository. Read this 
 - `schema/memory-schema.sql` — embedded SQLite schema source.
 - `skills/mnemark/` — installable mnemark agent skill and progressive references.
 - `templates/` — example config, manifest, and workflow files.
-- `readers/` — optional deterministic session readers/stubs.
 - `scripts/` — release build and smoke-test scripts.
 
 ## Common Tasks

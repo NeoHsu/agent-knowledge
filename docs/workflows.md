@@ -103,6 +103,6 @@ mem retro weekly
 
 `mem retro` emits an orchestration bundle for the LLM. It does not read platform logs itself; the active platform or harness should provide conversation history.
 
-Session readers are optional adapters. Retrospectives should use platform-provided conversation history when available, then use `mem retro daily|weekly` for repository state.
+Retrospectives should use platform-provided conversation history when available, then use `mem retro daily|weekly` for repository state.
 
 Daily retro focuses on missed durable knowledge, stale memories, ambiguities, and repeated manual procedures that may become workflow memories. Weekly retro focuses on memory quality: duplicate cleanup, confidence calibration, unresolved ambiguities, workflow candidates, and skill candidates.

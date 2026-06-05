@@ -310,7 +310,7 @@ fn missing_index_version_marker_triggers_rebuild() {
     assert!(query.contains("raw_missing_marker"));
     assert_eq!(
         fs::read_to_string(repo.join(INDEX_VERSION_MARKER)).expect("read marker"),
-        "2\n"
+        "3\n"
     );
 }
 
@@ -330,7 +330,7 @@ fn old_index_version_marker_triggers_rebuild() {
     assert!(query.contains("raw_old_marker"));
     assert_eq!(
         fs::read_to_string(repo.join(INDEX_VERSION_MARKER)).expect("read marker"),
-        "2\n"
+        "3\n"
     );
 }
 
@@ -350,7 +350,7 @@ fn invalid_index_version_marker_triggers_rebuild() {
     assert!(query.contains("raw_invalid_marker"));
     assert_eq!(
         fs::read_to_string(repo.join(INDEX_VERSION_MARKER)).expect("read marker"),
-        "2\n"
+        "3\n"
     );
 }
 

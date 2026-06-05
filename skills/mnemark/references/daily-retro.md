@@ -4,7 +4,7 @@ Goal: extract durable knowledge missed during the day and keep `memory.db` curre
 
 ## Steps
 
-1. Use the active platform's available conversation context or history. Repository readers are optional adapters for platforms that cannot expose logs directly.
+1. Use the active platform's available conversation context or history.
 2. Run `mem retro daily` to get active memories, recent changelog, pending ambiguities, stats, and audit context.
 3. Compare available platform context with existing memory.
 4. Save new facts with `source=daily_retro`.

@@ -114,7 +114,7 @@ Use `mem bundle export`, `mem bundle inspect`, and `mem bundle import` to move `
 
 Use `references/daily-retro.md` when the user asks for daily review. The short flow is:
 
-1. Use platform-provided conversation context or logs; repo readers are optional adapters.
+1. Use platform-provided conversation context or logs.
 2. Run `mem retro daily` for current memory, changelog, ambiguity, and audit context.
 3. Compare available platform context against existing memory.
 4. Save new durable knowledge, update stale knowledge, detect repeated manual procedures that should become workflow memories, and record ambiguities.

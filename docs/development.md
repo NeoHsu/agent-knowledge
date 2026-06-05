@@ -43,10 +43,6 @@ Queries with `--no-touch` skip the `access_count` update and do not acquire the 
 
 The original `serde_yaml` crate was abandoned; the workspace uses `serde_yaml_ng` (the maintained fork) aliased as `serde_yaml` in `Cargo.toml` for drop-in compatibility.
 
-### Audit advisory suppression
-
-`.cargo/audit.toml` suppresses `RUSTSEC-2021-0153` (a transitive from `lindera-dictionary`). Revisit when Lindera removes the dependency.
-
 ### Stale index tracking
 
 The index stale state is tracked exclusively in the `metadata` table (`index_dirty` key). There is no longer a `.stale` filesystem marker.

@@ -8,8 +8,8 @@ mnemark repo                      installed/runtime state
 schema/memory-schema.sql   --->   mem binary embeds schema
 crates/mem-cli/src/main.rs        memory.db
 skills/mnemark/                   config.toml
-readers/                          manifest.toml
-docs/                             artifacts/
+docs/                             manifest.toml
+templates/                        artifacts/
 CI/release                        index/
 ```
 
