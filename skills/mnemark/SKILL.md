@@ -1,11 +1,11 @@
 ---
-name: memory
-description: Persist, recall, audit, and migrate durable agent memory through the local `mem` CLI and its active SQLite + Tantivy knowledge store. ALWAYS use this skill when the user says "remember this", "記住", "幫我存", "save this", asks to recall prior preferences/decisions, runs a daily or weekly retrospective, mentions workflow runbooks, or asks to query/update/supersede/delete/export/import/merge/audit memory — even if the word "memory" is not explicitly used.
+name: mnemark
+description: Use mnemark to persist, recall, audit, migrate, and retrospect durable agent memory through the local `mem` CLI and its active SQLite + Tantivy knowledge store. ALWAYS use this skill when the user says "remember this", "記住", "幫我存", "save this", asks to recall prior preferences/decisions, runs a daily or weekly retrospective, mentions workflow runbooks, or asks to query/update/supersede/delete/export/import/merge/audit memory — even if the word "memory" is not explicitly used.
 ---
 
-# Memory Skill
+# mnemark Skill
 
-Use this skill when the user asks to save, recall, update, clean up, review, or migrate durable knowledge. The active knowledge store is discovered from `--home`, a repository root, `MNEMARK_HOME`, user config, or the default root; `memory.db` is the runtime source of truth, `manifest.toml` and `artifacts/` hold portable helper-file metadata and files, and `index/` is rebuildable.
+Use this skill when the user asks to save, recall, update, clean up, review, or migrate durable knowledge through mnemark. The active knowledge store is discovered from `--home`, the current directory when it contains `schema/memory-schema.sql`, an executable-near repo root, `MNEMARK_HOME`, user config, or the default root; `memory.db` is the runtime source of truth, `manifest.toml` and `artifacts/` hold portable helper-file metadata and files, and `index/` is rebuildable.
 
 ## When to Use
 

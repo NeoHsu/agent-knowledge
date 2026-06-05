@@ -6,11 +6,12 @@
 mem init
 mem context --detect
 mem config show
+mem setup agent-policy
 ```
 
 `init` creates the SQLite store and the Tantivy index inside the active knowledge home, idempotent on re-run. Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the `mem` binary. `context --detect` returns the auto-detected scope (`global` or `project:<owner/repo>`) based on the current git remote; `--detect` is required. `config show` prints the active root, db/index paths, config paths, environment overrides, and effective command defaults.
 
-CLI configuration uses TOML. User config lives at `~/.config/mnemark/config.toml` and can set `knowledge_home` plus command defaults. Store config lives at `<active-store-root>/config.toml` and can set store-local defaults; `$MNEMARK_HOME` is one way to choose that active store root. Active store discovery order is: current repo root, executable-near repo root, `MNEMARK_HOME`, user-configured `knowledge_home`, then `~/.mnemark`. Command default priority is: CLI flags, user config, store config, then built-in defaults.
+CLI configuration uses TOML. User config lives at `~/.config/mnemark/config.toml` and can set `knowledge_home` plus command defaults. Store config lives at `<active-store-root>/config.toml` and can set store-local defaults; `$MNEMARK_HOME` is one way to choose that active store root. Active store discovery order is: explicit `--home`, current directory when it contains `schema/memory-schema.sql`, an executable-near repo root, `MNEMARK_HOME`, user-configured `knowledge_home`, then `~/.mnemark`. Command default priority is: CLI flags, user config, store config, then built-in defaults.
 
 ```toml
 knowledge_home = "~/.mnemark"
@@ -25,6 +26,16 @@ default_limit = 20
 default_scope = "auto"
 default_limit = 20
 ```
+
+## Setup helpers
+
+```bash
+mem setup agent-policy
+mem setup agent-policy --target CLAUDE.md
+mem setup agent-policy --target AGENTS.md --dry-run
+```
+
+`setup agent-policy` prepends a mnemark memory policy to the coding-agent entrypoint in the current project. It prefers an existing `CLAUDE.md`, otherwise it creates or updates `AGENTS.md`. Use `--target <FILE>` to choose a specific file. The command is idempotent and does not duplicate the policy block when it already exists.
 
 ## Write
 
@@ -62,14 +73,13 @@ mem query --sort access-count
 mem query "deplpy" --fuzzy
 mem query "name:pr_small" --raw-query
 mem query "security review" --no-touch
-mem query "deploy" --semantic
 ```
 
 By default, query treats punctuation as literal text so searches like `project:owner/repo` do not require Tantivy syntax escaping. Use `--raw-query` when you intentionally want Tantivy query syntax such as `name:pr_small`.
 
 Query updates `access_count` and `last_accessed_at`; use `--no-touch` for read-only context loading. Superseded memories are hidden unless `--include-superseded` is used.
 
-`--tags` matches exact JSON-array membership, not substrings. `--fuzzy` searches across `name`, `description`, `content`, and `tags`. `--semantic` is a reserved interface and returns `unsupported` until an embedding backend is configured.
+`--tags` matches exact JSON-array membership, not substrings. `--fuzzy` searches across `name`, `description`, `content`, and `tags`. `--semantic` is hidden and not implemented until an embedding backend is planned; manual use fails with an explicit error.
 
 ## Update and Lifecycle
 
@@ -187,7 +197,13 @@ mem import workflows.json --no-validate-workflow
     "duplicate_found": 1,
     "failed": 1
   },
-  "results": []
+  "results": [
+    {
+      "index": 0,
+      "status": "saved",
+      "result": {"status": "saved", "id": "example", "version": 1}
+    }
+  ]
 }
 ```
 
@@ -203,11 +219,25 @@ mem merge /path/to/theirs.db --prefer-trusted
 Merge strips common secrets from incoming content, imports memories with new names, skips identical same-name memories, and records same-name content conflicts in `ambiguities` instead of overwriting automatically. Merge conflict ambiguity records include a structured incoming snapshot in `context`.
 Lower-trust incoming same-name memories are rejected. `--prefer-trusted` lets a higher-trust incoming memory update a lower-trust local memory; equal-trust differences still become ambiguities.
 
-## Release Build
+## Install or Build
+
+Install release binaries instead of building from Rust source:
+
+```bash
+# macOS / Linux
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/NeoHsu/mnemark/releases/latest/download/mnemark-installer.sh | sh
+
+# Windows PowerShell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/NeoHsu/mnemark/releases/latest/download/mnemark-installer.ps1 | iex"
+```
+
+Manual archives are available on the [latest release page](https://github.com/NeoHsu/mnemark/releases/latest).
+
+For repository development or release verification:
 
 ```bash
 scripts/build-release.sh
 scripts/smoke-release.sh
 ```
 
-After building, `scripts/smoke-release.sh` copies the release binary into an isolated install directory and verifies that `mem init`, `config show`, save/query/reindex/export all work against a runtime-only store with no schema file. Install or expose `target/release/mem` on `PATH` (for example via `cargo install --path crates/mem-cli`, or by adding `target/release` to `PATH`). All examples in this guide assume `mem` is on `PATH`.
+After building, `scripts/smoke-release.sh` copies the release binary into an isolated install directory and verifies that `mem init`, `config show`, save/query/reindex/export all work against a runtime-only store with no schema file. For source-only development, expose `target/release/mem` on `PATH` or run via Cargo as documented in `docs/development.md`. All examples in this guide assume `mem` is on `PATH`.

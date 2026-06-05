@@ -33,6 +33,7 @@ fn main() -> Result<()> {
         })?,
         Command::Context(args) => cmd_context(args)?,
         Command::Config { command } => cmd_config(&app, command)?,
+        Command::Setup { command } => cmd_setup(command)?,
         Command::History(args) => cmd_history(&app, args)?,
         Command::Stats(args) => cmd_stats(&app, args)?,
         Command::Audit(args) => with_lock(&app, || cmd_audit(&app, args))?,

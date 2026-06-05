@@ -9,6 +9,17 @@ use support::{mem_bin, temp_path, TestRepo, TestRuntimeStore};
 
 const INDEX_VERSION_MARKER: &str = "index/.mnemark-index-version";
 
+fn canonical_display(path: impl AsRef<std::path::Path>) -> String {
+    fs::canonicalize(path)
+        .expect("canonical path")
+        .display()
+        .to_string()
+}
+
+fn shown_root(shown: &serde_json::Value) -> String {
+    canonical_display(shown["root"].as_str().expect("root string"))
+}
+
 fn mark_index_dirty(repo: &TestRepo) {
     let conn = Connection::open(repo.join("memory.db")).expect("open memory db");
     conn.execute(
@@ -98,7 +109,7 @@ fn init_uses_user_config_knowledge_home_when_env_is_absent() {
     let shown: serde_json::Value =
         serde_json::from_slice(&shown_output.stdout).expect("config show json");
     assert_eq!(shown["store_source"], "user_config");
-    assert_eq!(shown["root"], knowledge_home.display().to_string());
+    assert_eq!(shown_root(&shown), canonical_display(&knowledge_home));
 
     fs::remove_dir_all(install_dir).ok();
     fs::remove_dir_all(run_dir).ok();
@@ -146,7 +157,7 @@ fn cli_home_overrides_current_directory_store() {
     let shown: serde_json::Value =
         serde_json::from_slice(&shown_output.stdout).expect("config show json");
     assert_eq!(shown["store_source"], "cli");
-    assert_eq!(shown["root"], cli_home.display().to_string());
+    assert_eq!(shown_root(&shown), canonical_display(&cli_home));
 
     fs::remove_dir_all(cli_home).ok();
     fs::remove_dir_all(config_root).ok();
@@ -200,7 +211,7 @@ fn config_show_reports_effective_paths_and_defaults() {
 
     let shown: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("config show json");
-    assert_eq!(shown["root"], repo.path().display().to_string());
+    assert_eq!(shown_root(&shown), canonical_display(repo.path()));
     assert_eq!(shown["store_source"], "current_directory");
     assert_eq!(shown["store_config_exists"], true);
     assert_eq!(shown["effective"]["schema"], "embedded");

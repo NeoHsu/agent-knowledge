@@ -1,153 +1,129 @@
 # mnemark
 
-Portable agent memory system, exposed through the `mem` CLI.
+Portable agent memory and workflow runbook system, exposed through the `mem` CLI.
 
-The repository owns the `mem` CLI, schema, skill instructions, deterministic session readers, and rebuildable Tantivy index logic. Runtime memory data lives in a local or private data checkout.
+For agents working in this repository, read `docs/agent-reference.md` before making changes. `AGENTS.md` is only a platform entrypoint; `docs/agent-reference.md` is the canonical agent guidance.
 
-## Quick Start
+`mnemark` is a Rust single-binary CLI for durable agent memory. It stores memory in a private/local SQLite knowledge store, maintains a rebuildable Tantivy search index, validates workflow runbooks, and packages portable artifacts and bundles.
+
+## Why mnemark?
+
+- Keep agent memory portable across platforms instead of tying it to one vendor.
+- Save and query user preferences, project context, references, and workflow runbooks from the terminal.
+- Use SQLite as the runtime source of truth and Tantivy for multilingual full-text search.
+- Move reusable helper files with `manifest.toml`, `artifacts/`, and first-class store bundles.
+- Give agents deterministic CLI operations while leaving judgment, retrospectives, and workflow execution to the agent.
+
+## Install
+
+Installer script for macOS / Linux:
 
 ```bash
-mise install                       # Rust + Zig toolchain pinned in mise.toml
-scripts/build-release.sh
-scripts/smoke-release.sh
-cargo install --path crates/mem-cli # installs `mem` into ~/.cargo/bin (on PATH)
-
-mem init
-mem --home ~/.mnemark config show
-mem config show
-mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
-mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
-mem query "emoji"
-mem query "release" --type workflow
-mem workflow find release --scope auto
-mem workflow validate release_runbook
-mem artifact list
-mem artifact check
-mkdir -p artifacts/scripts
-printf '#!/usr/bin/env sh\nprintf "collect ci context\\n"\n' > artifacts/scripts/ci-triage.sh
-chmod +x artifacts/scripts/ci-triage.sh
-mem artifact add artifacts/scripts/ci-triage.sh --name ci-triage --kind script --scope global --executable
-mem artifact update ci-triage --checksum
-mem bundle export mnemark-store.tgz
-mem bundle export mnemark-store.tgz --no-config
-mem bundle inspect mnemark-store.tgz
-mem query "name:no_emoji" --raw-query --no-touch
-mem import memories.json
-mem merge /path/to/theirs.db
-mem retro daily
-mem export --format markdown
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/NeoHsu/mnemark/releases/latest/download/mnemark-installer.sh | sh
 ```
 
-For source-only development, run commands as `cargo run -p mnemark --bin mem -- <args>`.
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/NeoHsu/mnemark/releases/latest/download/mnemark-installer.ps1 | iex"
+```
+
+Direct release downloads:
+
+| Platform | Asset |
+| --- | --- |
+| Apple Silicon macOS | `mnemark-aarch64-apple-darwin.tar.xz` |
+| Intel macOS | `mnemark-x86_64-apple-darwin.tar.xz` |
+| ARM64 Linux | `mnemark-aarch64-unknown-linux-gnu.tar.xz` |
+| x64 Linux | `mnemark-x86_64-unknown-linux-gnu.tar.xz` |
+| x64 Windows | `mnemark-x86_64-pc-windows-msvc.zip` |
+
+Checksums are published next to the release assets. See the [latest release](https://github.com/NeoHsu/mnemark/releases/latest).
+
+## Common workflows
+
+```bash
+mem init
+mem config show
+mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
+mem query "emoji"
+mem query "name:no_emoji" --raw-query --no-touch
+mem setup agent-policy
+mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
+mem workflow find release --scope auto
+mem workflow validate release_runbook
+mem artifact check
+mem bundle export mnemark-store.tgz
+mem retro daily
+```
+
+## Documentation
+
+| File | Description |
+| --- | --- |
+| [Getting Started](docs/getting-started.md) | Install, initialize, first save/query, and mnemark skill install |
+| [Workflows](docs/workflows.md) | Workflow memories, artifacts, bundles, import/export, merge, and retrospectives |
+| [Runtime Model](docs/runtime-model.md) | Store discovery, config priority, runtime files, artifact layout, and index behavior |
+| [mnemark Skill CLI Guide](skills/mnemark/references/cli-guide.md) | Complete current `mem` CLI command reference |
+| [Workflow Rules](skills/mnemark/references/workflow-rules.md) | How agents should interpret and safely execute workflow memory runbooks |
+| [Agent Reference](docs/agent-reference.md) | Canonical instructions for agents changing this repo: safety rules, repo map, task routing, validation |
+| [Development](docs/development.md) | Local setup, source commands, validation, release smoke tests, developer notes |
 
 ## Agent Skill
 
-This repository also ships an agent memory skill at `skills/memory`. Install the `mem` CLI first, then install the skill with the open agent skills CLI:
+Install the bundled AI agent skill to enable `mem`-aware assistance — durable memory save/query, workflow runbook lookup, retrospective flows, merge/audit/bundle commands, and safety rules.
 
 ```bash
-npx skills add https://github.com/NeoHsu/mnemark/tree/main/skills/memory
+npx skills add https://github.com/NeoHsu/mnemark/tree/main/skills/mnemark
 ```
 
 For a local checkout during development:
 
 ```bash
-npx skills add ./skills/memory
+npx skills add ./skills/mnemark
 ```
 
-Use `--global` to install for all projects, or `--agent <name>` when you want to target a specific supported agent. After installation, agents can use the skill to save, query, audit, merge, bundle, and run retrospectives through the local `mem` CLI.
+## Feature Matrix
 
-`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo, a local `MNEMARK_HOME`, or a `knowledge_home` configured in `~/.config/mnemark/config.toml`. `manifest.toml` and `artifacts/` travel with the store when you keep reusable cross-project helper files there. `index/` is ignored and can be rebuilt with `mem reindex`.
+| Area | Feature | Commands / Files |
+| --- | --- | --- |
+| Memory | Save, query, update, supersede, delete | `mem save`, `query`, `update`, `supersede`, `delete` |
+| Memory types | User, feedback, project, reference, preference, workflow | `--type user|feedback|project|reference|preference|workflow` |
+| Search | Multilingual Tantivy search, fuzzy matching, raw query syntax | `mem query`, `--fuzzy`, `--raw-query`, `--no-touch` |
+| Scope | Global and project-aware context | `mem context --detect`, `--scope auto` |
+| Lifecycle | Soft delete, protected manual memories, version conflicts | `valid_until`, `protected`, `--expected-version` |
+| History | Changelog and stats | `mem history`, `mem stats` |
+| Health | Audit and garbage collection | `mem audit`, `mem audit --fix`, `mem gc` |
+| Workflow | Store recurring runbooks as validated memory | `mem workflow list|find|show|validate` |
+| Artifacts | Portable helper file metadata and safety checks | `mem artifact list|show|check|add|update|remove`, `manifest.toml` |
+| Bundles | Portable store export/import/inspect | `mem bundle export|inspect|import` |
+| Migration | JSON/Markdown import, JSON/Markdown export, DB merge | `mem import`, `mem export`, `mem merge` |
+| Retrospective | Daily/weekly orchestration bundles for agents | `mem retro daily|weekly` |
+| Agent setup | Coding-agent entrypoint memory policy | `mem setup agent-policy` |
+| Agent skill | Project-shipped mnemark skill | `skills/mnemark` |
 
-The multilingual tokenizer uses `lindera` with embedded CC-CEDICT for Chinese tokenization and a local Tantivy tokenizer adapter.
+## Runtime Store
 
-Session readers are optional adapters. Retrospectives should use platform-provided conversation history when available, then use `mem retro daily|weekly` for repository state.
+`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo, a local `MNEMARK_HOME`, or a `knowledge_home` configured in `~/.config/mnemark/config.toml`.
+
+Runtime stores can include `config.toml`, `manifest.toml`, `artifacts/`, and rebuildable `index/`. See [Runtime Model](docs/runtime-model.md) for details.
 
 ## Development
 
-`mise.toml` pins the local Rust MSRV toolchain and Zig C toolchain used in restricted environments. Run `mise install` when setting up a fresh checkout. If the host has no `cc`, expose a `cc` shim that delegates to `zig cc` before running Cargo; the OpenAB environment keeps that shim in `/home/node/bin`.
-
-## Developer Notes
-
-**`--no-touch` flag**: Queries with `--no-touch` skip the `access_count` update and do not acquire the write lock, making them safe for read-only agent polling.
-
-**`serde_yaml_ng` alias**: The original `serde_yaml` crate was abandoned; the workspace uses `serde_yaml_ng` (the maintained fork) aliased as `serde_yaml` in `Cargo.toml` for drop-in compatibility.
-
-**Audit advisory suppression**: `.cargo/audit.toml` suppresses `RUSTSEC-2021-0153` (a transitive from `lindera-dictionary`). Revisit when Lindera removes the dependency.
-
-**Stale index tracking**: The index stale state is tracked exclusively in the `metadata` table (`index_dirty` key). There is no longer a `.stale` filesystem marker.
-
-**Index schema versioning**: Tantivy index artifacts carry `index/.mnemark-index-version`, owned by `INDEX_SCHEMA_VERSION` in `crates/mem-core/src/search_index.rs`. Bump it when Tantivy fields, field options, tokenizer behavior, token normalization, indexed document content, or required ranking/filtering fields change. Do not bump it for query-time boosts, fuzzy query construction, SQLite-only filtering, or CLI output changes.
-
-**Bulk operations**: `mem import` (JSON arrays) and `mem merge` use a single Tantivy `IndexWriter` commit for all changes instead of N individual commits.
-
-## Runtime Model
-
-```text
-mnemark repo                      installed/runtime state
-------------                      -----------------------
-schema/memory-schema.sql   --->   mem binary embeds schema
-crates/mem-cli/src/main.rs        memory.db
-skills/                           config.toml
-readers/                          manifest.toml
-docs/                             artifacts/
-CI/release                        index/
+```bash
+mise install
+env -u CC -u CXX cargo test --workspace --locked
 ```
 
-`mem` discovers the active store in this order: explicit `--home <path>`, current directory with `schema/memory-schema.sql`, a parent of the executable with `schema/memory-schema.sql`, `MNEMARK_HOME`, `knowledge_home` in `~/.config/mnemark/config.toml`, then `~/.mnemark`. Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the binary.
-
-CLI/tool settings use TOML; workflow runbooks use YAML. Command default priority is: CLI flags, user config at `~/.config/mnemark/config.toml`, store config at the active store root, then built-in defaults. `--home` and `MNEMARK_HOME` only override active store selection. See `templates/config.toml` and `mem config show`.
-
-Writes update SQLite in a transaction, write changelog rows, and then update the Tantivy index. If the index is stale, run `mem reindex`.
-
-Portable runtime stores can include reusable artifact files under the active knowledge store root:
-
-```text
-$MNEMARK_HOME/
-  memory.db
-  config.toml
-  manifest.toml
-  artifacts/
-    scripts/
-    templates/
-    snippets/
-    references/
-  index/      # rebuildable
-```
-
-Use `manifest.toml` for artifact metadata such as path, kind, scope, checksum, and executable intent. Artifact paths must stay relative to the active store and under `artifacts/scripts/`, `artifacts/templates/`, `artifacts/snippets/`, or `artifacts/references/`. Do not store secrets in artifacts, and do not treat artifacts as instruction overrides. Workflow memories may reference artifacts, but `mem` does not execute them.
-
-Artifact inspection is available with `mem artifact list`, `mem artifact show <name>`, and `mem artifact check`. `artifact check` verifies manifest parsing, path containment, file presence, SHA-256 checksums, and executable bits for records marked `executable = true`; it reports problems as JSON and never executes scripts. Use `mem artifact add`, `mem artifact update <name> --checksum`, and `mem artifact remove` to maintain manifest metadata. `artifact add` derives the name from the file stem unless `--name` is provided, and the artifact file must already exist under the active store. `artifact remove` keeps files by default; `--delete-file` is required to delete the artifact file.
-
-For manual migration of a store with artifacts, include the durable files and omit rebuildable runtime files:
+For source-only CLI runs:
 
 ```bash
-tar -czf mnemark-store.tgz \
-  memory.db \
-  config.toml \
-  manifest.toml \
-  artifacts/
+cargo run -p mnemark --bin mem -- <args>
 ```
 
-The CLI also supports first-class bundles:
+Release build and smoke test:
 
 ```bash
-mem bundle export mnemark-store.tgz
-mem bundle inspect mnemark-store.tgz
-mem bundle import mnemark-store.tgz          # clean store only
-mem bundle import mnemark-store.tgz --merge
-mem bundle import mnemark-store.tgz --replace --force
+scripts/build-release.sh
+scripts/smoke-release.sh
 ```
-
-Bundles include `memory.db`, optional `config.toml`, optional `manifest.toml`, `artifacts/`, and `bundle.json`. They exclude `index/`, `.mem.lock`, `memory.db-wal`, and `memory.db-shm`. Use `mem bundle export --no-config` when store config contains machine-local paths. Import into a non-empty store is refused unless `--merge` or `--replace --force` is explicit. `--merge` uses existing memory merge behavior and copies non-conflicting artifacts; `--replace --force` clears durable store files before import.
-
-## Memory Types
-
-Supported memory types are `user`, `feedback`, `project`, `reference`, `preference`, and `workflow`.
-
-Workflow memories store recurring task runbooks as YAML or JSON text. They are searchable knowledge, not executable automation: agents read them, verify each checkpoint, and ask before risky steps such as push, publish, deploy, release, destructive commands, secret changes, or production access.
-
-Use `templates/workflow.yaml` as the baseline shape for new workflow memories. Run `--check-artifacts` only after replacing placeholder knowledge-store artifact references with real files and manifest entries.
-
-Reusable executable logic belongs either in the current repository, such as `scripts/build-release.sh`, or in `artifacts/` under the active knowledge store when it is cross-project knowledge-store material. Workflow content should reference those paths and record checks, safety gates, and expected outputs instead of embedding script bodies.
-
-Workflow content is validated on save/import unless `--no-validate-workflow` is passed. Merge also validates workflow records; invalid incoming workflows are skipped and recorded as pending ambiguity records for human review. Required fields are `schema_version`, `goal`, `triggers`, `steps`, and `stop_conditions`; each step needs an `id` and at least one of `run`, `check`, `manual`, or `ask`. Workflow tags must include `workflow:*`, and project-scoped workflows must include the matching `project:<owner/repo>` tag. Use `mem workflow validate <name> --check-artifacts` to additionally validate `owner: knowledge_store` artifact references against `manifest.toml`, path containment, required file presence, checksums, and executable bits. Artifact paths used in `steps.run` must also be declared in `reusable_scripts`.

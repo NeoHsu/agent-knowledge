@@ -74,6 +74,11 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+    #[command(about = "Install mnemark setup helpers such as coding-agent memory policy")]
+    Setup {
+        #[command(subcommand)]
+        command: SetupCommand,
+    },
     #[command(about = "Show memory changelog entries")]
     History(HistoryArgs),
     #[command(about = "Show memory store statistics")]
@@ -119,6 +124,24 @@ pub(crate) enum Command {
 pub(crate) enum ConfigCommand {
     #[command(about = "Show active store, config paths, environment, and effective defaults")]
     Show,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum SetupCommand {
+    #[command(about = "Prepend the mnemark memory policy to CLAUDE.md or AGENTS.md")]
+    AgentPolicy(SetupAgentPolicyArgs),
+}
+
+#[derive(Args)]
+pub(crate) struct SetupAgentPolicyArgs {
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Entry file to update; defaults to CLAUDE.md if present, otherwise AGENTS.md"
+    )]
+    pub(crate) target: Option<PathBuf>,
+    #[arg(long, help = "Print the selected target and policy without writing")]
+    pub(crate) dry_run: bool,
 }
 
 #[derive(Args)]

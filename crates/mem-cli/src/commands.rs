@@ -127,6 +127,7 @@ mod memory;
 mod merge;
 mod query;
 mod retro;
+mod setup;
 mod workflow;
 
 pub(crate) use admin::{
@@ -142,6 +143,7 @@ pub(crate) use memory::{
 pub(crate) use merge::{cmd_merge, merge_database};
 pub(crate) use query::cmd_query;
 pub(crate) use retro::cmd_retro;
+pub(crate) use setup::cmd_setup;
 pub(crate) use workflow::cmd_workflow;
 
 #[cfg(test)]
