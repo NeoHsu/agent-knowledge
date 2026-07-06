@@ -12,7 +12,14 @@ use mem_core::index as memory_index;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let app = App::discover_with_home(cli.home.as_deref())?;
+    // prime/doctor/sync always target the runtime store; everything else uses
+    // full discovery (which includes source checkouts for development).
+    let app = match &cli.command {
+        Command::Prime(_) | Command::Doctor(_) | Command::Sync(_) => {
+            App::discover_runtime_with_home(cli.home.as_deref())?
+        }
+        _ => App::discover_with_home(cli.home.as_deref())?,
+    };
 
     match cli.command {
         Command::Init => {
@@ -22,6 +29,9 @@ fn main() -> Result<()> {
         Command::Save(args) => with_lock(&app, || cmd_save(&app, args))?,
         Command::Query(args) if args.no_touch => cmd_query(&app, args)?,
         Command::Query(args) => with_lock(&app, || cmd_query(&app, args))?,
+        Command::Prime(args) => cmd_prime(&app, args)?,
+        Command::Doctor(args) => cmd_doctor(&app, args)?,
+        Command::Sync(args) => with_lock(&app, || cmd_sync(&app, args))?,
         Command::Update(args) => with_lock(&app, || cmd_update(&app, args))?,
         Command::Supersede(args) => with_lock(&app, || cmd_supersede(&app, args))?,
         Command::Delete(args) => with_lock(&app, || cmd_delete(&app, args))?,

@@ -122,12 +122,15 @@ mod admin;
 mod ambiguity;
 mod artifact;
 mod bundle;
+mod doctor;
 mod io;
 mod memory;
 mod merge;
+mod prime;
 mod query;
 mod retro;
 mod setup;
+mod sync;
 mod workflow;
 
 pub(crate) use admin::{
@@ -140,10 +143,13 @@ pub(crate) use io::{cmd_export, cmd_import};
 pub(crate) use memory::{
     cmd_delete, cmd_save, cmd_supersede, cmd_update, save_memory, save_memory_no_index,
 };
+pub(crate) use doctor::cmd_doctor;
 pub(crate) use merge::{cmd_merge, merge_database};
+pub(crate) use prime::cmd_prime;
 pub(crate) use query::cmd_query;
 pub(crate) use retro::cmd_retro;
 pub(crate) use setup::cmd_setup;
+pub(crate) use sync::cmd_sync;
 pub(crate) use workflow::cmd_workflow;
 
 #[cfg(test)]

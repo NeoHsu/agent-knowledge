@@ -91,6 +91,27 @@ impl TestRuntimeStore {
         );
         String::from_utf8(output.stdout).expect("utf8 stdout")
     }
+
+    pub fn run_fail(&self, args: &[&str]) -> String {
+        let output = Command::new(&self.mem)
+            .current_dir(&self.run_dir)
+            .env("MNEMARK_HOME", &self.home)
+            .args(args)
+            .output()
+            .expect("run installed mem");
+        assert!(
+            !output.status.success(),
+            "command unexpectedly succeeded: {:?}\nstdout={}\nstderr={}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
+    }
 }
 
 impl Drop for TestRepo {

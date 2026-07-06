@@ -59,6 +59,14 @@ pub(crate) enum Command {
     Save(SaveArgs),
     #[command(about = "Search or list memories")]
     Query(QueryArgs),
+    #[command(
+        about = "Emit a compact session-priming context block for agents (runtime store only)"
+    )]
+    Prime(PrimeArgs),
+    #[command(about = "Check mnemark wiring: store, index, platform policy, skill, hooks")]
+    Doctor(DoctorArgs),
+    #[command(about = "Commit, merge, and push the runtime store through its git repository")]
+    Sync(SyncArgs),
     #[command(about = "Update an existing memory")]
     Update(UpdateArgs),
     #[command(about = "Replace a memory while keeping history")]
@@ -130,6 +138,93 @@ pub(crate) enum ConfigCommand {
 pub(crate) enum SetupCommand {
     #[command(about = "Prepend the mnemark memory policy to CLAUDE.md or AGENTS.md")]
     AgentPolicy(SetupAgentPolicyArgs),
+    #[command(about = "List supported coding-agent platforms and their default wiring paths")]
+    List,
+    #[command(about = "Wire mnemark into Claude Code: policy, skill files, SessionStart hook")]
+    ClaudeCode(SetupPlatformArgs),
+    #[command(about = "Wire mnemark into OpenAI Codex CLI: policy and skill files")]
+    Codex(SetupPlatformArgs),
+    #[command(about = "Wire mnemark into Gemini CLI: policy block")]
+    GeminiCli(SetupPlatformArgs),
+    #[command(about = "Wire mnemark into opencode: policy block")]
+    Opencode(SetupPlatformArgs),
+}
+
+#[derive(Args)]
+pub(crate) struct SetupPlatformArgs {
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Base directory treated as the user home; defaults to ~"
+    )]
+    pub(crate) base_dir: Option<PathBuf>,
+    #[arg(long, value_name = "FILE", help = "Override the instructions file path")]
+    pub(crate) instructions: Option<PathBuf>,
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Override the skills parent directory"
+    )]
+    pub(crate) skills_dir: Option<PathBuf>,
+    #[arg(long, help = "Skip installing bundled skill files")]
+    pub(crate) no_skill: bool,
+    #[arg(long, help = "Skip session-start hook wiring")]
+    pub(crate) no_hook: bool,
+    #[arg(long, help = "Report planned changes without writing")]
+    pub(crate) dry_run: bool,
+}
+
+#[derive(Args)]
+pub(crate) struct PrimeArgs {
+    #[arg(
+        long,
+        default_value = "auto",
+        help = "Scope; auto = global plus detected project"
+    )]
+    pub(crate) scope: String,
+    #[arg(
+        long,
+        default_value_t = 4000,
+        help = "Approximate output budget in characters"
+    )]
+    pub(crate) budget: usize,
+    #[arg(long, default_value_t = 8, help = "Maximum entries per section")]
+    pub(crate) per_section: usize,
+    #[arg(long, value_enum, default_value_t = PrimeFormat::Text, help = "Output format")]
+    pub(crate) format: PrimeFormat,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum PrimeFormat {
+    Text,
+    Json,
+}
+
+#[derive(Args)]
+pub(crate) struct DoctorArgs {
+    #[arg(
+        long,
+        help = "Only check one platform: claude-code, codex, gemini-cli, or opencode"
+    )]
+    pub(crate) platform: Option<String>,
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Base directory treated as the user home; defaults to ~"
+    )]
+    pub(crate) base_dir: Option<PathBuf>,
+}
+
+#[derive(Args)]
+pub(crate) struct SyncArgs {
+    #[arg(long, default_value = "origin", help = "Git remote name")]
+    pub(crate) remote: String,
+    #[arg(long, help = "Commit message; defaults to a timestamped message")]
+    pub(crate) message: Option<String>,
+    #[arg(long, help = "Commit and merge but do not push")]
+    pub(crate) no_push: bool,
+    #[arg(long, help = "Report pending changes and divergence without writing")]
+    pub(crate) dry_run: bool,
 }
 
 #[derive(Args)]
