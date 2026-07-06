@@ -14,7 +14,7 @@ Goal: extract durable knowledge missed during the day and keep `memory.db` curre
 8. Add ambiguity records when two memories conflict or scope is unclear.
 9. Run `mem stats` and `mem audit`.
 10. Report concise counts and unresolved questions.
-11. Commit and push the repository.
+11. Run `mem sync` to commit and push the store (falls back to a local commit when no remote is configured).
 
 ## What to Save
 

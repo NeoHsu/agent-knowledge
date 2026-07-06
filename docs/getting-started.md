@@ -60,9 +60,33 @@ Supported memory types are:
 
 `--no-touch` skips `access_count` and `last_accessed_at` updates, so it is safe for read-only agent context loading.
 
-## Install the mnemark skill
+## Wire mnemark into your coding agents
 
-This repository ships an mnemark agent skill at `skills/mnemark`. Install the `mem` CLI first, then install the skill with the open agent skills CLI:
+One command per agent platform wires the whole institution — policy block, bundled skill files, and (where the platform supports it) a session-start hook running `mem prime`:
+
+```bash
+mem setup list
+mem setup claude-code
+mem setup codex
+mem setup gemini-cli
+mem setup opencode
+mem doctor
+```
+
+`mem doctor` verifies every layer afterwards and prints a fix hint for anything missing. All setup commands are idempotent; use `--dry-run` to preview. See the capability matrix and overrides in `skills/mnemark/references/cli-guide.md`.
+
+For multi-machine durability, make the store its own git repository and use `mem sync`:
+
+```bash
+cd ~/.mnemark
+git init -b main
+git remote add origin <private-repo-url>
+mem sync
+```
+
+## Install the mnemark skill manually
+
+`mem setup <platform>` already installs the bundled skill for platforms with a skill directory. Alternatively, install from the repository with the open agent skills CLI:
 
 ```bash
 npx skills add https://github.com/NeoHsu/mnemark/tree/main/skills/mnemark

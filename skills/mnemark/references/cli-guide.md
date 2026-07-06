@@ -7,6 +7,7 @@ mem init
 mem context --detect
 mem config show
 mem setup agent-policy
+mem doctor
 ```
 
 `init` creates the SQLite store and the Tantivy index inside the active knowledge home, idempotent on re-run. Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the `mem` binary. `context --detect` returns the auto-detected scope (`global` or `project:<owner/repo>`) based on the current git remote; `--detect` is required. `config show` prints the active root, db/index paths, config paths, environment overrides, and effective command defaults.
@@ -33,9 +34,44 @@ default_limit = 20
 mem setup agent-policy
 mem setup agent-policy --target CLAUDE.md
 mem setup agent-policy --target AGENTS.md --dry-run
+mem setup list
+mem setup claude-code
+mem setup claude-code --dry-run
+mem setup codex
+mem setup gemini-cli
+mem setup opencode
+mem setup claude-code --base-dir /tmp/sandbox --no-hook
 ```
 
-`setup agent-policy` prepends a mnemark memory policy to the coding-agent entrypoint in the current project. It prefers an existing `CLAUDE.md`, otherwise it creates or updates `AGENTS.md`. Use `--target <FILE>` to choose a specific file. The command is idempotent and does not duplicate the policy block when it already exists.
+`setup agent-policy` prepends the mnemark memory policy (v2) to the coding-agent entrypoint in the current project. It prefers an existing `CLAUDE.md`, otherwise it creates or updates `AGENTS.md`. Use `--target <FILE>` to choose a specific file. The command is idempotent, upgrades the legacy v1 block in place, and does not duplicate the v2 block when it already exists.
+
+`setup <platform>` wires mnemark into one coding agent for the whole user account. It installs three layers, each idempotent:
+
+1. Policy: prepends the v2 policy block to the platform's global instructions file (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.gemini/GEMINI.md`, or `~/.config/opencode/AGENTS.md`).
+2. Skill: writes the bundled mnemark skill files (embedded in the binary, always version-matched) into the platform skill directory when the platform has one (`~/.claude/skills/mnemark`, `~/.codex/skills/mnemark`).
+3. Session start: on Claude Code, adds a `SessionStart` hook running `mem prime` to `~/.claude/settings.json` while preserving all existing settings. Platforms without a hook mechanism rely on the policy block's "run `mem prime` at session start" instruction instead.
+
+Use `--base-dir <DIR>` to target a different home directory, `--instructions`/`--skills-dir` to override paths for platform versions with different layouts, `--no-skill`/`--no-hook` to skip layers, and `--dry-run` to preview. `setup list` prints the capability matrix with resolved paths.
+
+## Doctor
+
+```bash
+mem doctor
+mem doctor --platform claude-code
+mem doctor --base-dir /tmp/sandbox
+```
+
+`doctor` verifies the whole institution: binary version, runtime store presence, index freshness, store git versioning, and per-platform wiring (policy block version, skill files, session hook). Output is JSON with per-check `status` (`ok`, `warn`, `missing`, `error`) and a `fix` hint for anything not ok. `doctor` always resolves the runtime store (`--home`, `MNEMARK_HOME`, user config, `~/.mnemark`) and never treats a source checkout as the store.
+
+## Session priming
+
+```bash
+mem prime
+mem prime --scope auto --budget 4000
+mem prime --per-section 5 --format json
+```
+
+`prime` emits one compact context block for agent session starts: user, feedback, preference, and project memories plus workflow names for the detected scope, followed by the save-before-finishing protocol. It is read-only (never touches access counters), fits output inside `--budget` characters by truncating and then dropping the lowest-priority entries, and primes workflows with their `goal` line only — load full runbooks with `mem workflow show`. Like `doctor`, it always targets the runtime store, so it is safe to run from any directory including a mnemark source checkout.
 
 ## Write
 
@@ -73,11 +109,13 @@ mem query --sort access-count
 mem query "deplpy" --fuzzy
 mem query "name:pr_small" --raw-query
 mem query "security review" --no-touch
+mem query --type feedback --format compact
+mem query --type project --format table
 ```
 
 By default, query treats punctuation as literal text so searches like `project:owner/repo` do not require Tantivy syntax escaping. Use `--raw-query` when you intentionally want Tantivy query syntax such as `name:pr_small`.
 
-Query updates `access_count` and `last_accessed_at`; use `--no-touch` for read-only context loading. Superseded memories are hidden unless `--include-superseded` is used.
+Query updates `access_count` and `last_accessed_at`; use `--no-touch` for read-only context loading. Superseded memories are hidden unless `--include-superseded` is used. `--format json|table|compact` controls output; prefer `compact` when loading results into an agent context window.
 
 `--tags` matches exact JSON-array membership, not substrings. `--fuzzy` searches across `name`, `description`, `content`, and `tags`. `--semantic` is hidden and not implemented until an embedding backend is planned; manual use fails with an explicit error.
 
@@ -106,11 +144,15 @@ mem workflow list --scope auto --limit 50 --include-superseded
 mem workflow find release --scope auto
 mem workflow find release --scope auto --limit 5
 mem workflow show release_runbook
+mem workflow show release_runbook --checklist
 mem workflow validate release_runbook
 mem workflow validate release_runbook --check-artifacts
+mem workflow new triage_ci
+mem workflow record release_runbook --result success --note "clean run"
+mem workflow record release_runbook --result failure --note "push rejected at step publish"
 ```
 
-`workflow find <intent>` searches by intent string (positional). `workflow show <reference>` and `workflow validate <reference>` accept either the workflow name or its memory id. Workflow helpers discover, display, and validate workflow memories; they never execute workflow commands. Agents execute runbook steps themselves, verify checkpoints, and ask before risky side effects. Reference reusable scripts or artifacts by path in workflow content; keep executable script bodies in version-controlled repository files for project-specific logic or in `artifacts/` under the active knowledge store for cross-project helpers. `workflow validate --check-artifacts` additionally checks `owner: knowledge_store` entries against `manifest.toml`, path containment, required file presence, checksums, and executable bits. Use it after placeholder artifact references have been replaced with real files and manifest entries. Artifact paths used in `steps.run` must be declared in `reusable_scripts`.
+`workflow find <intent>` searches by intent string (positional). `workflow show <reference>` and `workflow validate <reference>` accept either the workflow name or its memory id. `workflow show --checklist` renders the runbook as an ordered execution checklist (checkbox per step, `confirm: true` steps flagged, run-record step appended) — prefer it over raw JSON when you are about to execute. `workflow new <name>` scaffolds a YAML file from the embedded baseline template (default `<name>.yaml`, `--output`/`--force` available) so new runbooks start structurally valid. `workflow record <reference> --result success|failure --note "<one line>"` logs one execution into the store's `workflow_runs` telemetry; record every run — `mem retro daily|weekly` bundles per-workflow run stats so retros can spot repeatedly failing or stale runbooks with data instead of impressions. Workflow helpers discover, display, and validate workflow memories; they never execute workflow commands. Agents execute runbook steps themselves, verify checkpoints, and ask before risky side effects. Reference reusable scripts or artifacts by path in workflow content; keep executable script bodies in version-controlled repository files for project-specific logic or in `artifacts/` under the active knowledge store for cross-project helpers. `workflow validate --check-artifacts` additionally checks `owner: knowledge_store` entries against `manifest.toml`, path containment, required file presence, checksums, and executable bits. Use it after placeholder artifact references have been replaced with real files and manifest entries. Artifact paths used in `steps.run` must be declared in `reusable_scripts`.
 
 ## Artifacts
 
@@ -218,6 +260,17 @@ mem merge /path/to/theirs.db --prefer-trusted
 
 Merge strips common secrets from incoming content, imports memories with new names, skips identical same-name memories, and records same-name content conflicts in `ambiguities` instead of overwriting automatically. Merge conflict ambiguity records include a structured incoming snapshot in `context`.
 Lower-trust incoming same-name memories are rejected. `--prefer-trusted` lets a higher-trust incoming memory update a lower-trust local memory; equal-trust differences still become ambiguities.
+
+## Sync
+
+```bash
+mem sync
+mem sync --dry-run
+mem sync --no-push
+mem sync --remote origin --message "weekly retro updates"
+```
+
+`sync` moves the runtime store through its own git repository: it checkpoints the SQLite WAL, maintains `.gitignore` for rebuildable files, commits local changes, fetches and merges the remote, and pushes. Git moves bytes; `mem` resolves meaning — when both machines changed `memory.db`, the binary conflict is resolved by keeping the local database and merging the remote copy through the same logic as `mem merge`, so same-name conflicts become pending ambiguity records instead of lost rows. `sync` requires the store root to be its own git repository (it refuses to commit into an enclosing repo), stops on conflicts outside `memory.db`, and reports every action as JSON. Without a configured remote it commits locally and reports `local_only`.
 
 ## Install or Build
 

@@ -23,6 +23,9 @@ Install the `mem` CLI (see README) so it is on `PATH`. `mem` discovers the activ
 
 ```bash
 mem init
+mem setup claude-code
+mem doctor
+mem prime
 mem context --detect
 mem config show
 mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
@@ -30,8 +33,10 @@ mem save --type workflow --name release_runbook --scope global --source manual -
 mem query "部署" --scope auto
 mem query "release" --scope auto --type workflow
 mem workflow find release --scope auto
-mem workflow show release_runbook
+mem workflow show release_runbook --checklist
 mem workflow validate release_runbook
+mem workflow new triage_ci
+mem workflow record release_runbook --result success --note "clean run"
 mem artifact list
 mem artifact check
 mkdir -p artifacts/scripts
@@ -51,6 +56,7 @@ mem audit
 mem retro daily
 mem retro weekly
 mem reindex
+mem sync
 ```
 
 Full CLI details: `references/cli-guide.md`.
@@ -73,26 +79,31 @@ Keep tags stable, lowercase, and specific. Details: `references/tag-rules.md`.
 
 ## Save Workflow
 
+Write memory content in the trigger/action/why shape from `references/memory-quality.md` so weaker models can apply it mechanically.
+
 1. Decide if the knowledge is durable.
 2. Choose `type`: `user`, `feedback`, `project`, `reference`, `preference`, or `workflow`.
 3. Choose `scope`: `global` or `project:<owner/repo>`.
 4. Extract tags.
 5. Run `mem save`. Defaults: `--type reference`, `--scope global`, `--source agent`, `--tags '[]'`.
 6. If `duplicate_found` or `similar_found` is returned, decide whether to update, supersede, or skip. Use `--force` only when you intend to overwrite an existing same-name memory (subject to the source-trust rule).
-7. Commit and push memory changes when the work unit is complete.
+7. If the result carries `warnings` (missing tags, relative dates, vague name, over-long content), fix the memory with `mem update` instead of leaving it degraded.
+8. Run `mem sync` when the work unit is complete to commit and push the store through its git repository.
 
 `source=manual` is protected and high confidence. `source=agent` is medium confidence. `source=daily_retro` and `source=weekly_retro` are low confidence. Confidence can be set explicitly with `--confidence high|medium|low`.
 
 ## Query Workflow
 
-At task start:
+At session or task start, one command loads the durable context:
 
 ```bash
-mem context --detect
-mem query --scope auto --type feedback
-mem query --scope auto --type preference
-mem query --scope auto --type project
-mem query "<task keywords>" --scope auto
+mem prime
+```
+
+`prime` is read-only, budget-capped, and always targets the runtime store. If a session-start hook already injected the mnemark context block, do not run it again. For task-specific lookups beyond the primed block:
+
+```bash
+mem query "<task keywords>" --scope auto --format compact
 mem query "<task intent>" --scope auto --type workflow
 ```
 

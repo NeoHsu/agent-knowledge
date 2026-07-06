@@ -30,6 +30,8 @@ CI/release                        index/
 
 Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the binary.
 
+Exception: `mem prime`, `mem doctor`, and `mem sync` skip steps 2 and 3 and resolve only `--home`, `MNEMARK_HOME`, user config, then `~/.mnemark`. These commands target the runtime store by definition, so a mnemark source checkout in the current directory is never mistaken for the active store.
+
 ## Configuration
 
 CLI/tool settings use TOML; workflow runbooks use YAML. Command default priority is:

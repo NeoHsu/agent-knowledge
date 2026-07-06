@@ -17,7 +17,7 @@ Goal: improve memory quality. Weekly retro reads `changelog`, `memory.db`, and `
    - stale medium confidence can be downgraded or marked for cleanup
 10. Resolve ambiguities when scope or newer evidence makes the answer clear.
 11. Run `mem audit --fix` if deterministic repairs are needed.
-12. Commit and push.
+12. Run `mem sync` to commit and push the store.
 
 The promotion direction is:
 
