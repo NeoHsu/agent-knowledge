@@ -11,7 +11,12 @@ pub fn migrate_schema(conn: &Connection) -> Result<()> {
     if version < 3 {
         migrate_metadata_v3(conn)?;
     }
-    conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    // Setting user_version rewrites the database header even when the value
+    // is unchanged, which dirties memory.db byte-wise on every command and
+    // would turn each `mem sync` into a spurious commit. Only write on upgrade.
+    if version < SCHEMA_VERSION {
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    }
     Ok(())
 }
 
