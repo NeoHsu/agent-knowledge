@@ -18,6 +18,7 @@ pub(crate) fn cmd_retro(app: &App, command: RetroCommand) -> Result<()> {
         ),
     )?;
     let pending_ambiguities = ambiguity_rows(&conn, true)?;
+    let workflow_runs = workflow_run_stats(&conn, limit)?;
     let active_memories = query_json_rows(
         &conn,
         &format!(
@@ -40,7 +41,7 @@ pub(crate) fn cmd_retro(app: &App, command: RetroCommand) -> Result<()> {
         _ => vec![
             "Review memory quality from changelog, audit, and pending ambiguities.",
             "Merge duplicates, resolve ambiguities, and identify workflow/profile/skill candidates.",
-            "Detect stale workflow steps and workflows with repeated failures.",
+            "Use workflow_runs stats to detect stale workflow steps and workflows with repeated failures; propose runbook updates for any workflow whose failures exceed successes.",
             "Prefer repeated project procedures as workflow memory; reserve skills for stable cross-project execution policy.",
             "Calibrate low-confidence high-access memories after review.",
             "Use audit --fix only for deterministic repairs.",
@@ -55,6 +56,7 @@ pub(crate) fn cmd_retro(app: &App, command: RetroCommand) -> Result<()> {
         "stats": stats_report(&conn)?,
         "audit": audit_report(&conn, app, false)?,
         "pending_ambiguities": pending_ambiguities,
+        "workflow_runs": workflow_runs,
         "recent_history": recent_history,
         "active_memories": active_memories
     }))?;

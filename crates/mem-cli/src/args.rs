@@ -479,6 +479,10 @@ pub(crate) enum WorkflowCommand {
     Find(WorkflowFindArgs),
     #[command(about = "Validate workflow content and tags")]
     Validate(WorkflowValidateArgs),
+    #[command(about = "Scaffold a new workflow YAML file from the baseline template")]
+    New(WorkflowNewArgs),
+    #[command(about = "Record one workflow execution result for retro quality loops")]
+    Record(WorkflowRecordArgs),
 }
 
 #[derive(Args)]
@@ -494,6 +498,35 @@ pub(crate) struct WorkflowListArgs {
 #[derive(Args)]
 pub(crate) struct WorkflowShowArgs {
     pub(crate) reference: String,
+    #[arg(
+        long,
+        help = "Render the runbook as an ordered execution checklist instead of JSON"
+    )]
+    pub(crate) checklist: bool,
+}
+
+#[derive(Args)]
+pub(crate) struct WorkflowNewArgs {
+    pub(crate) name: String,
+    #[arg(long, value_name = "FILE", help = "Output path; defaults to <name>.yaml")]
+    pub(crate) output: Option<PathBuf>,
+    #[arg(long, help = "Overwrite an existing file")]
+    pub(crate) force: bool,
+}
+
+fn parse_run_result(value: &str) -> Result<String, String> {
+    parse_allowed(value, &["success", "failure"], "run result")
+}
+
+#[derive(Args)]
+pub(crate) struct WorkflowRecordArgs {
+    pub(crate) reference: String,
+    #[arg(long, value_parser = parse_run_result, help = "success or failure")]
+    pub(crate) result: String,
+    #[arg(long, help = "One-line note about what happened")]
+    pub(crate) note: Option<String>,
+    #[arg(long, default_value = "agent", value_parser = parse_memory_source)]
+    pub(crate) source: String,
 }
 
 #[derive(Args)]

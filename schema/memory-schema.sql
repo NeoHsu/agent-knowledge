@@ -39,6 +39,15 @@ CREATE TABLE IF NOT EXISTS changelog (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS workflow_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    memory_id TEXT NOT NULL,
+    result TEXT NOT NULL CHECK (result IN ('success', 'failure')),
+    note TEXT,
+    source TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -54,3 +63,4 @@ CREATE INDEX IF NOT EXISTS idx_access ON memories(access_count);
 CREATE INDEX IF NOT EXISTS idx_confidence ON memories(confidence);
 CREATE INDEX IF NOT EXISTS idx_changelog_memory ON changelog(memory_id);
 CREATE INDEX IF NOT EXISTS idx_changelog_action ON changelog(action);
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_memory ON workflow_runs(memory_id);

@@ -56,7 +56,12 @@ fn main() -> Result<()> {
             other => with_lock(&app, || cmd_bundle(&app, other))?,
         },
         Command::Retro { command } => cmd_retro(&app, command)?,
-        Command::Workflow { command } => cmd_workflow(&app, command)?,
+        Command::Workflow { command } => match command {
+            WorkflowCommand::Record(args) => {
+                with_lock(&app, || cmd_workflow(&app, WorkflowCommand::Record(args)))?
+            }
+            other => cmd_workflow(&app, other)?,
+        },
         Command::Artifact { command } => {
             let writes_manifest = matches!(
                 command,

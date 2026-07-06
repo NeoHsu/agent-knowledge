@@ -361,3 +361,167 @@ fn write_file(path: std::path::PathBuf, content: &str, executable: bool) {
         fs::set_permissions(&path, permissions).expect("chmod artifact");
     }
 }
+
+fn save_checklist_workflow(repo: &TestRepo, name: &str) {
+    let workflow_file = repo.join(format!("{name}.yaml"));
+    fs::write(
+        &workflow_file,
+        r#"schema_version: 1
+goal: Ship a release safely.
+triggers:
+  - release
+preconditions:
+  - working tree is clean
+steps:
+  - id: build
+    run: scripts/build-release.sh
+    check: script exists and is executable
+    verify: artifacts are produced
+  - id: publish
+    run: git push origin main
+    confirm: true
+    verify: remote is updated
+stop_conditions:
+  - tests fail
+post_run_memory:
+  - save durable lessons from this run
+"#,
+    )
+    .expect("write workflow");
+    repo.run(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        name,
+        "--tags",
+        &format!("[\"workflow:{name}\",\"intent:release\"]"),
+        "--content-file",
+        workflow_file.to_str().expect("workflow path"),
+    ]);
+}
+
+#[test]
+fn workflow_show_checklist_renders_ordered_steps() {
+    let repo = TestRepo::new("workflow-checklist");
+    repo.run(&["init"]);
+    save_checklist_workflow(&repo, "checklist_release");
+
+    let output = repo.run(&["workflow", "show", "checklist_release", "--checklist"]);
+    assert!(
+        output.starts_with("# checklist_release — Ship a release safely."),
+        "header: {output}"
+    );
+    assert!(output.contains("Preconditions:\n  [ ] working tree is clean"), "{output}");
+    assert!(output.contains("1. [ ] build"), "{output}");
+    assert!(
+        output.contains("2. [ ] publish  !! CONFIRM WITH USER BEFORE RUNNING"),
+        "{output}"
+    );
+    assert!(output.contains("run: scripts/build-release.sh"), "{output}");
+    assert!(output.contains("Stop immediately when:\n  - tests fail"), "{output}");
+    assert!(
+        output.contains("mem workflow record checklist_release --result success|failure"),
+        "{output}"
+    );
+    assert!(output.contains("[ ] save durable lessons from this run"), "{output}");
+}
+
+#[test]
+fn workflow_record_tracks_runs_and_feeds_retro() {
+    let repo = TestRepo::new("workflow-record");
+    repo.run(&["init"]);
+    save_checklist_workflow(&repo, "recorded_release");
+
+    let output = repo.run(&[
+        "workflow",
+        "record",
+        "recorded_release",
+        "--result",
+        "success",
+        "--note",
+        "clean run",
+    ]);
+    let result: serde_json::Value = serde_json::from_str(&output).expect("record json");
+    assert_eq!(result["status"], "recorded");
+    assert_eq!(result["runs_total"], 1);
+    assert_eq!(result["failures_total"], 0);
+    assert!(result.get("hint").is_none());
+
+    let output = repo.run(&[
+        "workflow",
+        "record",
+        "recorded_release",
+        "--result",
+        "failure",
+        "--note",
+        "push rejected",
+    ]);
+    let result: serde_json::Value = serde_json::from_str(&output).expect("record json");
+    assert_eq!(result["runs_total"], 2);
+    assert_eq!(result["failures_total"], 1);
+    assert!(result["hint"].as_str().expect("hint").contains("mem save"));
+
+    let output = repo.run(&["retro", "weekly"]);
+    let bundle: serde_json::Value = serde_json::from_str(&output).expect("retro json");
+    let runs = bundle["workflow_runs"].as_array().expect("workflow_runs");
+    assert_eq!(runs.len(), 1, "bundle: {bundle}");
+    assert_eq!(runs[0]["name"], "recorded_release");
+    assert_eq!(runs[0]["runs"], 2);
+    assert_eq!(runs[0]["failures"], 1);
+    assert_eq!(runs[0]["last_result"], "failure");
+}
+
+#[test]
+fn workflow_record_rejects_non_workflow_memory() {
+    let repo = TestRepo::new("workflow-record-reject");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--type",
+        "feedback",
+        "--name",
+        "not_a_workflow",
+        "--tags",
+        "[\"domain:test\"]",
+        "--content",
+        "plain feedback memory",
+    ]);
+    let output = repo.run_fail(&["workflow", "record", "not_a_workflow", "--result", "success"]);
+    assert!(output.contains("not a workflow"), "message: {output}");
+}
+
+#[test]
+fn workflow_new_scaffolds_valid_template() {
+    let repo = TestRepo::new("workflow-new");
+    repo.run(&["init"]);
+
+    let output = repo.run(&["workflow", "new", "triage_ci"]);
+    let result: serde_json::Value = serde_json::from_str(&output).expect("new json");
+    assert_eq!(result["status"], "scaffolded");
+    let path = repo.join("triage_ci.yaml");
+    assert!(path.exists());
+    let content = fs::read_to_string(&path).expect("template");
+    assert!(content.contains("schema_version: 1"));
+    assert!(content.contains("must be"), "quoting note: {content}");
+
+    // Refuses overwrite without --force.
+    let output = repo.run_fail(&["workflow", "new", "triage_ci"]);
+    assert!(output.contains("--force"), "message: {output}");
+
+    // The scaffold saves and validates as-is (template must stay valid).
+    repo.run(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "triage_ci",
+        "--tags",
+        "[\"workflow:triage_ci\"]",
+        "--content-file",
+        path.to_str().expect("path"),
+    ]);
+    let output = repo.run(&["workflow", "validate", "triage_ci"]);
+    let result: serde_json::Value = serde_json::from_str(&output).expect("validate json");
+    assert_eq!(result["status"], "valid");
+}

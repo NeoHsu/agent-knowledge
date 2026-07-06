@@ -35,6 +35,7 @@ mod memory;
 mod metadata;
 mod migration;
 mod reporting;
+mod workflow_runs;
 
 pub use ambiguity::{add_ambiguity_record, ambiguity_by_id, ambiguity_rows};
 pub use changelog::log_change;
@@ -46,6 +47,7 @@ pub use memory::{
 pub use metadata::{index_dirty, set_index_dirty};
 pub use migration::migrate_schema;
 pub use reporting::{grouped_count, query_json_rows};
+pub use workflow_runs::{log_workflow_run, workflow_run_counts, workflow_run_stats};
 
 pub fn with_transaction<T, F>(conn: &Connection, f: F) -> Result<T>
 where

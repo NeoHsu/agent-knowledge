@@ -1,3 +1,8 @@
+# mnemark workflow runbook template.
+# Required fields: schema_version, goal, triggers, steps, stop_conditions;
+# each step needs `id` plus one of run / check / manual / ask.
+# YAML trap: values starting with reserved characters such as ` or @ must be
+# quoted, e.g. verify: "`mem --version` succeeds on PATH".
 schema_version: 1
 goal: Describe the recurring task outcome.
 triggers:

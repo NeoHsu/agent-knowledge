@@ -1,4 +1,9 @@
 use super::*;
+use std::path::PathBuf;
+
+/// Baseline runbook template, embedded so `workflow new` works without a
+/// source checkout and always matches the binary's validation rules.
+const WORKFLOW_TEMPLATE: &str = include_str!("../../../../templates/workflow.yaml");
 
 pub(crate) fn cmd_workflow(app: &App, command: WorkflowCommand) -> Result<()> {
     app.ensure_schema()?;
@@ -21,7 +26,11 @@ pub(crate) fn cmd_workflow(app: &App, command: WorkflowCommand) -> Result<()> {
         }
         WorkflowCommand::Show(args) => {
             let workflow = workflow_by_ref(&conn, &args.reference)?;
-            print_json_pretty(&workflow)?;
+            if args.checklist {
+                print_text(workflow_core::render_checklist(&workflow)?)?;
+            } else {
+                print_json_pretty(&workflow)?;
+            }
         }
         WorkflowCommand::Find(args) => {
             let limit = args
@@ -45,6 +54,66 @@ pub(crate) fn cmd_workflow(app: &App, command: WorkflowCommand) -> Result<()> {
             });
             workflows.truncate(limit);
             print_json_pretty(&workflows)?;
+        }
+        WorkflowCommand::New(args) => {
+            let output = args
+                .output
+                .unwrap_or_else(|| PathBuf::from(format!("{}.yaml", args.name)));
+            if output.exists() && !args.force {
+                bail!(
+                    "{} already exists; pass --force to overwrite",
+                    output.display()
+                );
+            }
+            if let Some(parent) = output.parent() {
+                if !parent.as_os_str().is_empty() {
+                    fs::create_dir_all(parent)
+                        .with_context(|| format!("create directory {}", parent.display()))?;
+                }
+            }
+            fs::write(&output, WORKFLOW_TEMPLATE)
+                .with_context(|| format!("write {}", output.display()))?;
+            print_json_pretty(&json!({
+                "status": "scaffolded",
+                "path": output.display().to_string(),
+                "next_steps": [
+                    "edit the YAML: fill goal, triggers, steps, stop_conditions; delete unused example steps",
+                    format!(
+                        "mem save --type workflow --name {} --tags '[\"workflow:{}\",\"intent:<intent>\"]' --content-file {}",
+                        args.name, args.name, output.display()
+                    ),
+                    format!("mem workflow validate {}", args.name)
+                ]
+            }))?;
+        }
+        WorkflowCommand::Record(args) => {
+            let workflow = workflow_by_ref(&conn, &args.reference)?;
+            if workflow.r#type != "workflow" {
+                bail!("memory is not a workflow: {}", workflow.name);
+            }
+            log_workflow_run(
+                &conn,
+                &workflow.id,
+                &args.result,
+                args.note.as_deref(),
+                &args.source,
+            )?;
+            let (runs, failures) = workflow_run_counts(&conn, &workflow.id)?;
+            let mut response = json!({
+                "status": "recorded",
+                "id": workflow.id,
+                "name": workflow.name,
+                "result": args.result,
+                "runs_total": runs,
+                "failures_total": failures
+            });
+            if args.result == "failure" {
+                response["hint"] = json!(
+                    "save the durable lesson with `mem save`, and update the runbook \
+                     with `mem update` if a step is stale"
+                );
+            }
+            print_json_pretty(&response)?;
         }
         WorkflowCommand::Validate(args) => {
             let workflow = workflow_by_ref(&conn, &args.reference)?;
