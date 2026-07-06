@@ -76,6 +76,27 @@ impl App {
         })
     }
 
+    /// Discover the runtime store only: `--home`, `MNEMARK_HOME`, user config,
+    /// then `~/.mnemark`. Skips current-directory and executable-adjacent
+    /// schema detection so runtime-facing commands (prime, doctor, sync)
+    /// never mistake a source checkout for the active store.
+    pub fn discover_runtime_with_home(home: Option<&str>) -> Result<Self> {
+        let user_config = Config::load_user()?;
+        let (root, store_source) = if let Some(home) = home {
+            (expand_home(home), StoreSource::CliOverride)
+        } else {
+            default_root(&user_config)
+        };
+        let config = Config::merged_for_root(&root, &user_config)?;
+        Ok(Self {
+            db_path: root.join("memory.db"),
+            index_path: root.join("index"),
+            root,
+            config,
+            store_source,
+        })
+    }
+
     pub fn init(&self) -> Result<()> {
         self.ensure_schema()?;
         fs::create_dir_all(&self.index_path).context("create index directory")?;
