@@ -61,6 +61,7 @@ mem retro daily
 
 | File | Description |
 | --- | --- |
+| [Overview](docs/overview.md) | Big-picture ASCII diagrams: system map, session lifecycle, save/query flows, workflow lifecycle, sync, and all usage scenarios |
 | [Getting Started](docs/getting-started.md) | Install, initialize, first save/query, and mnemark skill install |
 | [Workflows](docs/workflows.md) | Workflow memories, artifacts, bundles, import/export, merge, and retrospectives |
 | [Runtime Model](docs/runtime-model.md) | Store discovery, config priority, runtime files, artifact layout, and index behavior |

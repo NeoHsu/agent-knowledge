@@ -48,36 +48,7 @@ Use this ownership split:
 - Workflow memories own the runbook context: triggers, preconditions, script path, required checks, confirmations, expected outputs, and lessons learned.
 - Skills own stable cross-project execution policy, not project-specific script bodies.
 
-Prefer project-owned scripts for repository-specific logic:
-
-```yaml
-reusable_scripts:
-  - path: scripts/build-release.sh
-    owner: repo
-    required: true
-    purpose: build release artifacts
-steps:
-  - id: build_release
-    run: scripts/build-release.sh
-    check: scripts/build-release.sh exists and is executable
-    verify: release artifacts are generated
-```
-
-Prefer knowledge-store artifacts for reusable cross-project helpers:
-
-```yaml
-reusable_scripts:
-  - path: artifacts/scripts/ci-triage.sh
-    owner: knowledge_store
-    required: true
-    checksum: sha256:<hex>
-    purpose: collect CI failure context
-steps:
-  - id: collect_ci_context
-    run: artifacts/scripts/ci-triage.sh
-    check: artifact exists, checksum matches manifest, and script is executable
-    verify: failed job context is available
-```
+Prefer `owner: repo` for repository-specific logic and `owner: knowledge_store` for reusable cross-project helpers (the latter also needs a `checksum:`). `templates/workflow.yaml` — the fixed baseline template — demonstrates both owners in one `reusable_scripts` list with their matching `steps[].run`; use it via `mem workflow new` rather than hand-writing these blocks.
 
 Allowed knowledge-store artifact paths are:
 

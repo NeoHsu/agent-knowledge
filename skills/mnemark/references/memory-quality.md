@@ -32,6 +32,8 @@ Good:
 - Record provenance in `--why` (who said it, in what context) so later retros can re-judge confidence.
 - Names: short snake_case, stable across updates. Rename via `supersede`, not delete + save.
 
+`mem save` mechanically lints for four of these — missing tags (`no_tags`), over-long content (`content_long`), relative-date language (`relative_date_language`), and vague names (`vague_name`) — and returns them as `warnings` in the save result (never blocking). Treat a returned warning as ground truth, not a reminder to re-derive: fix it with `mem update` per `SKILL.md` Save Workflow step 7 instead of re-checking the rule from prose.
+
 ## Promotion ladder
 
 Move knowledge up one level only when the threshold is met:
