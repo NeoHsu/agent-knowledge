@@ -28,7 +28,12 @@ default_limit = 20
 [workflow]
 default_scope = "auto"
 default_limit = 20
+
+[budget]
+per_scope_max = 30
 ```
+
+`budget.per_scope_max` is a soft cap on active memories per scope (default 30; 0 disables). Exceeding it never blocks saves; `mem audit` and retro bundles flag the scope for curation instead.
 
 ## Setup helpers
 
@@ -218,6 +223,7 @@ mem retro weekly --limit 200
 ```
 
 `history` accepts an optional positional `name` plus `--action <save|update|supersede|delete|...>` and `--limit` (default 20). `gc --days` purges soft-deleted memories older than the given window.
+`audit` reports broken supersede links, expired-but-active memories, stale and cleanup candidates, and `over_budget_scopes`: scopes holding more active memories than `budget.per_scope_max`, each with its lowest-access curation candidates (protected manual memories excluded). Curate over-budget scopes down to the cap — merge, supersede, or delete — rather than raising the cap by default.
 `retro` emits an orchestration bundle for the LLM. It does not read platform logs itself; the active platform or harness should provide conversation history. `retro daily|weekly --limit` controls the bundle size (default 50).
 
 ## Reconcile

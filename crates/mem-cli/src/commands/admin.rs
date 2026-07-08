@@ -31,7 +31,8 @@ pub(crate) fn cmd_config(app: &App, command: ConfigCommand) -> Result<()> {
                     "query_default_scope": app.config.query_default_scope(),
                     "query_default_limit": app.config.query_default_limit().unwrap_or(DEFAULT_LIMIT),
                     "workflow_default_scope": app.config.workflow_default_scope(),
-                    "workflow_default_limit": app.config.workflow_default_limit().unwrap_or(DEFAULT_LIMIT)
+                    "workflow_default_limit": app.config.workflow_default_limit().unwrap_or(DEFAULT_LIMIT),
+                    "budget_per_scope_max": app.config.per_scope_max()
                 },
                 "config": app.config
             }))?;
@@ -165,6 +166,13 @@ pub(crate) fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Va
          ORDER BY created_at ASC",
     )?;
 
+    let per_scope_max = app.config.per_scope_max();
+    let over_budget_scopes = if per_scope_max == 0 {
+        Vec::new()
+    } else {
+        over_budget_scope_rows(conn, per_scope_max)?
+    };
+
     let mut fixed_expired = 0;
     let mut fixed_broken_links = 0;
     if fix {
@@ -204,10 +212,56 @@ pub(crate) fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Va
         "stale_low_access": stale_low_access,
         "low_confidence_high_access": low_confidence_high_access,
         "cleanup_candidates": cleanup_candidates,
+        "per_scope_max": per_scope_max,
+        "over_budget_scopes": over_budget_scopes,
         "fixed": fix,
         "fixed_expired": fixed_expired,
         "fixed_broken_links": fixed_broken_links
     }))
+}
+
+/// Scopes holding more active memories than the soft budget, each with its
+/// lowest-value curation candidates (protected manual memories excluded).
+/// The cap never blocks writes; it exists to force curation at audit/retro
+/// time instead of letting scopes grow without bound.
+fn over_budget_scope_rows(conn: &Connection, per_scope_max: usize) -> Result<Vec<Value>> {
+    let scopes = query_json_rows(
+        conn,
+        &format!(
+            "SELECT scope, COUNT(*) AS count FROM memories
+             WHERE valid_until IS NULL
+             GROUP BY scope
+             HAVING COUNT(*) > {per_scope_max}
+             ORDER BY count DESC"
+        ),
+    )?;
+    let mut rows = Vec::new();
+    for entry in scopes {
+        let scope = entry["scope"].as_str().unwrap_or_default().to_string();
+        let mut stmt = conn.prepare(
+            "SELECT name, confidence, access_count, created_at FROM memories
+             WHERE valid_until IS NULL AND scope = ?1 AND protected = 0
+             ORDER BY access_count ASC, created_at ASC
+             LIMIT 10",
+        )?;
+        let candidates = stmt
+            .query_map(params![scope], |row| {
+                Ok(json!({
+                    "name": row.get::<_, String>(0)?,
+                    "confidence": row.get::<_, String>(1)?,
+                    "access_count": row.get::<_, i64>(2)?,
+                    "created_at": row.get::<_, String>(3)?,
+                }))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows.push(json!({
+            "scope": scope,
+            "count": entry["count"],
+            "per_scope_max": per_scope_max,
+            "curation_candidates": candidates
+        }));
+    }
+    Ok(rows)
 }
 
 pub(crate) fn cmd_gc(app: &App, args: GcArgs) -> Result<()> {

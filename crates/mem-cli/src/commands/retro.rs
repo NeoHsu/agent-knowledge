@@ -44,6 +44,7 @@ pub(crate) fn cmd_retro(app: &App, command: RetroCommand) -> Result<()> {
             "Use workflow_runs stats to detect stale workflow steps and workflows with repeated failures; propose runbook updates for any workflow whose failures exceed successes.",
             "Prefer repeated project procedures as workflow memory; reserve skills for stable cross-project execution policy.",
             "Calibrate low-confidence high-access memories after review.",
+            "Curate every audit.over_budget_scopes entry down to per_scope_max: merge duplicates, supersede stale facts, delete obsolete low-access memories. Raise budget.per_scope_max in config.toml only when the scope genuinely needs more.",
             "Use audit --fix only for deterministic repairs.",
         ],
     };

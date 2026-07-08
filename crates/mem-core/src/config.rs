@@ -13,6 +13,7 @@ pub struct Config {
     pub default_limit: Option<usize>,
     pub query: QueryConfig,
     pub workflow: WorkflowConfig,
+    pub budget: BudgetConfig,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -28,6 +29,16 @@ pub struct WorkflowConfig {
     pub default_scope: Option<String>,
     pub default_limit: Option<usize>,
 }
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct BudgetConfig {
+    pub per_scope_max: Option<usize>,
+}
+
+/// Default soft cap on active memories per scope. Exceeding it never blocks
+/// writes; audit and retro flag the scope for curation instead.
+pub const DEFAULT_PER_SCOPE_MAX: usize = 30;
 
 impl Config {
     pub fn load_user() -> Result<Self> {
@@ -69,6 +80,9 @@ impl Config {
         if higher.workflow.default_limit.is_some() {
             self.workflow.default_limit = higher.workflow.default_limit;
         }
+        if higher.budget.per_scope_max.is_some() {
+            self.budget.per_scope_max = higher.budget.per_scope_max;
+        }
         self
     }
 
@@ -96,6 +110,11 @@ impl Config {
 
     pub fn workflow_default_limit(&self) -> Option<usize> {
         self.workflow.default_limit.or(self.default_limit)
+    }
+
+    /// Soft per-scope memory cap; 0 disables budget checks.
+    pub fn per_scope_max(&self) -> usize {
+        self.budget.per_scope_max.unwrap_or(DEFAULT_PER_SCOPE_MAX)
     }
 }
 

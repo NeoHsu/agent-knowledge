@@ -109,7 +109,7 @@ mem retro weekly
 
 Retrospectives should use platform-provided conversation history when available, then use `mem retro daily|weekly` for repository state.
 
-Daily retro focuses on missed durable knowledge, stale memories, ambiguities, and repeated manual procedures that may become workflow memories. Weekly retro focuses on memory quality: duplicate cleanup, confidence calibration, unresolved ambiguities, workflow candidates, and skill candidates.
+Daily retro focuses on missed durable knowledge, stale memories, ambiguities, and repeated manual procedures that may become workflow memories. Weekly retro focuses on memory quality: duplicate cleanup, confidence calibration, unresolved ambiguities, workflow candidates, and skill candidates. The embedded audit section also lists `over_budget_scopes` — scopes above the `budget.per_scope_max` soft cap (default 30) — with their lowest-access curation candidates, so each weekly retro ends over-budget scopes back under the cap instead of letting them grow unbounded.
 
 ## Reconcile
 

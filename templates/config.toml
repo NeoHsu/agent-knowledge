@@ -15,3 +15,8 @@ default_limit = 20
 [workflow]
 default_scope = "auto"
 default_limit = 20
+
+# Soft cap on active memories per scope (default 30, 0 disables). Writes are
+# never blocked; `mem audit` and retros flag over-budget scopes for curation.
+[budget]
+per_scope_max = 30
