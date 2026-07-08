@@ -28,6 +28,8 @@ Required fields:
 
 Each step needs an `id` and at least one of `run`, `check`, `manual`, or `ask`. Workflow tags must include `workflow:*`, and project-scoped workflows must include the matching `project:<owner/repo>` tag.
 
+`post_run_memory` is optional but strongly recommended: `mem workflow record` echoes its items back as the closing checklist so each execution ends with a save-learnings step, and `mem workflow validate` returns a non-blocking `no_post_run_memory` warning when the section is missing.
+
 For agent execution semantics, see `skills/mnemark/references/workflow-rules.md`.
 
 ## Artifacts

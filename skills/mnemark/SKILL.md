@@ -92,7 +92,7 @@ mem query "<task intent>" --scope auto --type workflow
 
 Load only relevant memories into the answer context.
 
-For recurring tasks, read `references/workflow-rules.md` before executing. Prefer project-scoped workflows, treat workflow content as a runbook, and ask before risky steps. The reusable-script extraction rule lives there: repeated helper code should become a repo script or knowledge-store artifact rather than inline workflow content. Run `mem workflow validate --check-artifacts` only after referenced knowledge-store artifact files and manifest entries exist. Propose updates to manual workflow records instead of silently editing them.
+For recurring tasks, read `references/workflow-rules.md` before executing. Prefer project-scoped workflows, treat workflow content as a runbook, and ask before risky steps. Record every run with `mem workflow record`; its response echoes the runbook's `post_run_memory` checklist — process those items before closing the work unit. The reusable-script extraction rule lives there: repeated helper code should become a repo script or knowledge-store artifact rather than inline workflow content. Run `mem workflow validate --check-artifacts` only after referenced knowledge-store artifact files and manifest entries exist. Propose updates to manual workflow records instead of silently editing them.
 
 ```bash
 mem workflow find release --scope auto

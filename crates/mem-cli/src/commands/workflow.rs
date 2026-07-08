@@ -113,6 +113,18 @@ pub(crate) fn cmd_workflow(app: &App, command: WorkflowCommand) -> Result<()> {
                      with `mem update` if a step is stale"
                 );
             }
+            // Feed the learning checklist to the agent at the moment the run
+            // ends, so closing the loop does not depend on it remembering to.
+            let post_run =
+                workflow_core::post_run_memory(workflow.content.as_deref().unwrap_or_default());
+            if post_run.is_empty() {
+                response["post_run_memory_missing"] = json!(
+                    "runbook has no post_run_memory section; add one with `mem update` \
+                     so every run ends with a save-learnings check"
+                );
+            } else {
+                response["post_run_memory"] = json!(post_run);
+            }
             print_json_pretty(&response)?;
         }
         WorkflowCommand::Validate(args) => {
@@ -126,12 +138,21 @@ pub(crate) fn cmd_workflow(app: &App, command: WorkflowCommand) -> Result<()> {
             } else {
                 None
             };
-            print_json_pretty(&json!({
+            let mut result = json!({
                 "status": "valid",
                 "id": workflow.id,
                 "name": workflow.name,
                 "artifact_checks": artifact_report
-            }))?;
+            });
+            if workflow_core::post_run_memory(workflow.content.as_deref().unwrap_or_default())
+                .is_empty()
+            {
+                result["warnings"] = json!([{
+                    "code": "no_post_run_memory",
+                    "hint": "add a post_run_memory section so every execution ends with a save-learnings step"
+                }]);
+            }
+            print_json_pretty(&result)?;
         }
     }
     Ok(())

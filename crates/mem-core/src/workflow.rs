@@ -449,6 +449,25 @@ fn parse_string_array(raw: &str) -> Result<Vec<String>> {
     Ok(strings)
 }
 
+/// Extract the runbook's `post_run_memory` items so callers can surface the
+/// learning checklist at execution time. Returns an empty list when the
+/// section is absent or the content cannot be parsed.
+pub fn post_run_memory(content: &str) -> Vec<String> {
+    let Ok(value) = serde_yaml::from_str::<YamlValue>(content) else {
+        return Vec::new();
+    };
+    value
+        .get("post_run_memory")
+        .and_then(YamlValue::as_sequence)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Render a workflow runbook as a step-by-step execution checklist. The
 /// checklist is the agent-facing form of the runbook: strictly ordered,
 /// checkbox per step, confirm flags surfaced, and the run-record step

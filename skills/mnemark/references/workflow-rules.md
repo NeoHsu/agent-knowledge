@@ -80,6 +80,7 @@ mem workflow record <name> --result success --note "clean run"
 mem workflow record <name> --result failure --note "failed at <step>: <why>"
 ```
 
+- The record response echoes the runbook's `post_run_memory` checklist; process every item before closing the work unit. If it reports `post_run_memory_missing`, add the section to the runbook with `mem update`.
 - Save durable failures or lessons after a run.
 - Create new runbooks from the embedded template with `mem workflow new <name>` instead of writing YAML from scratch; the template documents required fields and YAML quoting traps.
 - Propose updates to manual workflow memories instead of silently editing them.

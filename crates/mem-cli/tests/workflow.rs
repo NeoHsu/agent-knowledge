@@ -540,3 +540,66 @@ fn workflow_new_scaffolds_valid_template() {
     let result: serde_json::Value = serde_json::from_str(&output).expect("validate json");
     assert_eq!(result["status"], "valid");
 }
+
+#[test]
+fn workflow_record_echoes_post_run_memory_and_validate_warns_when_missing() {
+    let repo = TestRepo::new("workflow-post-run");
+    repo.run(&["init"]);
+    save_checklist_workflow(&repo, "with_post_run");
+
+    let output = repo.run(&["workflow", "record", "with_post_run", "--result", "success"]);
+    let result: serde_json::Value = serde_json::from_str(&output).expect("record json");
+    assert_eq!(
+        result["post_run_memory"][0],
+        "save durable lessons from this run"
+    );
+    assert!(result.get("post_run_memory_missing").is_none());
+
+    let output = repo.run(&["workflow", "validate", "with_post_run"]);
+    let result: serde_json::Value = serde_json::from_str(&output).expect("validate json");
+    assert!(result.get("warnings").is_none(), "result: {result}");
+
+    let workflow_file = repo.join("no-post-run.yaml");
+    fs::write(
+        &workflow_file,
+        r#"schema_version: 1
+goal: Run without a learning step.
+triggers:
+  - demo
+steps:
+  - id: act
+    manual: do the thing
+stop_conditions:
+  - anything fails
+"#,
+    )
+    .expect("write workflow");
+    repo.run(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "no_post_run",
+        "--tags",
+        "[\"workflow:no_post_run\"]",
+        "--force",
+        "--content-file",
+        workflow_file.to_str().expect("workflow path"),
+    ]);
+
+    let output = repo.run(&["workflow", "record", "no_post_run", "--result", "success"]);
+    let result: serde_json::Value = serde_json::from_str(&output).expect("record json");
+    assert!(result.get("post_run_memory").is_none());
+    assert!(
+        result["post_run_memory_missing"]
+            .as_str()
+            .expect("missing note")
+            .contains("post_run_memory"),
+        "result: {result}"
+    );
+
+    let output = repo.run(&["workflow", "validate", "no_post_run"]);
+    let result: serde_json::Value = serde_json::from_str(&output).expect("validate json");
+    assert_eq!(result["status"], "valid");
+    assert_eq!(result["warnings"][0]["code"], "no_post_run_memory");
+}
