@@ -181,11 +181,14 @@ pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
             "result": result
         }));
     }
-    print_json_pretty(&json!({
-        "status": "import_complete",
-        "total": results.len(),
-        "counts": Value::Object(counts),
-        "results": results
-    }))?;
+    print_write_json_pretty(
+        app,
+        json!({
+            "status": "import_complete",
+            "total": results.len(),
+            "counts": Value::Object(counts),
+            "results": results
+        }),
+    )?;
     Ok(())
 }

@@ -19,7 +19,7 @@ Goal: improve memory quality. Weekly retro reads `changelog`, `memory.db`, and `
 11. Curate every `over_budget_scopes` entry in the audit section down to `per_scope_max`: merge duplicates, supersede stale facts, delete obsolete low-access memories. Raise `budget.per_scope_max` in `config.toml` only when a scope genuinely needs more.
 12. Run `mem reconcile --scope <project-scope> --repo <checkout>` for each project scope touched this week; judge every flagged memory and fix it with `mem update`, `mem supersede`, or `mem delete`.
 13. Run `mem audit --fix` if deterministic repairs are needed.
-14. Offer sync. If approved, run `mem sync --dry-run`, then `mem sync --no-push` unless the user explicitly approves a remote push.
+14. Offer sync per `SKILL.md` Safety Gates.
 
 The promotion direction is:
 

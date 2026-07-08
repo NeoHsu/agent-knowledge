@@ -32,6 +32,8 @@ Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in
 
 Exception: `mem prime`, `mem doctor`, and `mem sync` skip steps 2 and 3 and resolve only `--home`, `MNEMARK_HOME`, user config, then `~/.mnemark`. These commands target the runtime store by definition, so a mnemark source checkout in the current directory is never mistaken for the active store.
 
+When a write command (`save`, `update`, `supersede`, `delete`, `import`, `merge`) does resolve the store through step 2 or 3, its JSON response carries `store_source` and `store_warning` fields so the caller sees the provenance without running `mem config show` first.
+
 ## Configuration
 
 CLI/tool settings use TOML; workflow runbooks use YAML. Command default priority is:

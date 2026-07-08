@@ -2,7 +2,7 @@ use super::*;
 
 pub(crate) fn cmd_merge(app: &App, args: MergeArgs) -> Result<()> {
     let result = merge_database(app, &args.db, args.prefer_trusted)?;
-    print_json_pretty(&result)?;
+    print_write_json_pretty(app, result)?;
     Ok(())
 }
 

@@ -50,7 +50,7 @@ mem setup opencode
 mem setup claude-code --base-dir /tmp/sandbox --no-hook
 ```
 
-`setup agent-policy` prepends the mnemark memory policy (v2) to the coding-agent entrypoint in the current project. It prefers an existing `CLAUDE.md`, otherwise it creates or updates `AGENTS.md`. Use `--target <FILE>` to choose a specific file. The command is idempotent, upgrades the legacy v1 block in place, and does not duplicate the v2 block when it already exists.
+`setup agent-policy` prepends the mnemark memory policy (v3) to the coding-agent entrypoint in the current project. It prefers an existing `CLAUDE.md`, otherwise it creates or updates `AGENTS.md`. Use `--target <FILE>` to choose a specific file. The command is idempotent, upgrades an unedited v1/v2 block in place, and does not duplicate the v3 block when it already exists.
 
 `setup <platform>` wires mnemark into one coding agent for the whole user account. It installs three layers, each idempotent:
 
@@ -84,7 +84,8 @@ mem prime --per-section 5 --format json
 
 ```bash
 mem save --type feedback --name pr_small --scope "project:example/ot-product" --source agent --tags '["style:review","decision:pr-size"]' --content "PR 拆小逐個 review"
-mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
+mem workflow new release_runbook
+mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file release_runbook.yaml
 mem save --type project --name q4_freeze --description "Mobile release cut" --tags '["project:example/ot-mobile"]' --content "..." --expires-at 2026-03-05T00:00:00Z --why "freeze for release branch"
 ```
 
@@ -101,7 +102,9 @@ Confidence is inferred from source unless `--confidence` is provided:
 
 Without `--force`, `save` returns `duplicate_found` for an exact name match and `similar_found` for high-overlap content. The caller should decide whether to skip, update, or supersede. With `--force`, an exact-name save updates the existing memory only if the incoming source is at least as trusted as the existing source.
 
-Workflow memories are validated on save/import unless `--no-validate-workflow` is passed. Merge validates workflow records too; invalid incoming workflows are not imported automatically and are recorded as pending ambiguity records for human review. Required fields are `schema_version`, `goal`, `triggers`, `steps`, and `stop_conditions`; each step needs `id` plus one of `run`, `check`, `manual`, or `ask`. Use `templates/workflow.yaml` as the baseline template.
+Write-command responses (`save`, `update`, `supersede`, `delete`, `import`, `merge`) include `store_source` and `store_warning` fields when the active store was discovered from a source checkout (`current_directory` or `executable_parent` discovery). Treat the warning as a failed safety gate: stop and rerun with `--home <runtime-store>` unless the checkout is intentionally the store.
+
+Workflow memories are validated on save/import unless `--no-validate-workflow` is passed. Merge validates workflow records too; invalid incoming workflows are not imported automatically and are recorded as pending ambiguity records for human review. Required fields are `schema_version`, `goal`, `triggers`, `steps`, and `stop_conditions`; each step needs `id` plus one of `run`, `check`, `manual`, or `ask`. Scaffold new runbooks with `mem workflow new <name>` — the baseline template is embedded in the binary, so it works everywhere `mem` does.
 
 ## Query
 
@@ -130,7 +133,7 @@ Query updates `access_count` and `last_accessed_at`; use `--no-touch` for read-o
 
 ```bash
 mem update no_emoji --content "不要在回覆中使用 emoji"
-mem update release_runbook --content-file templates/workflow.yaml
+mem update release_runbook --content-file release_runbook.yaml
 mem update no_emoji --expected-version 2 --content "不要在回覆中使用 emoji"
 mem update no_emoji --add-tags '["style:output"]'
 mem update no_emoji --description "preferred output style"

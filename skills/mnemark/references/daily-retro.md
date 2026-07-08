@@ -14,7 +14,7 @@ Goal: extract durable knowledge missed during the day and keep `memory.db` curre
 8. Add ambiguity records when two memories conflict or scope is unclear.
 9. Run `mem stats` and `mem audit`.
 10. Report concise counts and unresolved questions.
-11. Offer sync. If approved, run `mem sync --dry-run`, then `mem sync --no-push` unless the user explicitly approves a remote push.
+11. Offer sync per `SKILL.md` Safety Gates.
 
 ## What to Save
 

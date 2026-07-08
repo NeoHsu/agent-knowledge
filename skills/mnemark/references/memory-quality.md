@@ -60,7 +60,7 @@ Move knowledge up one level only when the threshold is met:
 | Signal | Action |
 | --- | --- |
 | Durable fact or preference stated once | `mem save` as memory |
-| Same manual procedure performed a 2nd time | propose a `type=workflow` memory (use `templates/workflow.yaml` shape) |
+| Same manual procedure performed a 2nd time | propose a `type=workflow` memory (scaffold with `mem workflow new`) |
 | Same helper script/template pasted or generated a 2nd time, or workflow keeps regenerating 10+ lines of helper code | propose extraction; see `workflow-rules.md` Reusable Scripts |
 | Workflow stable and used across 2+ projects | skill candidate — raise it in weekly retro |
 

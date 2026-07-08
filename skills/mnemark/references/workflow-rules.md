@@ -2,16 +2,13 @@
 
 Workflow memories are durable runbooks stored as `type=workflow`. They help agents discover recurring procedures without turning every project-specific process into a skill.
 
-Use `templates/workflow.yaml` as the fixed baseline template for new workflow memories. Keep project-specific details in the workflow content and keep execution policy in this skill guidance.
+Scaffold new workflow memories with `mem workflow new <name>` — the baseline template is embedded in the binary. Keep project-specific details in the workflow content and keep execution policy in this skill guidance.
 
 ## Lookup
 
-At task start, load context in this order:
+`mem prime` (or the session-start hook) already loads feedback, preference, and project context; run it first if it has not run this session. Then look up runbooks for the task intent:
 
 ```bash
-mem query --scope auto --type feedback
-mem query --scope auto --type preference
-mem query --scope auto --type project
 mem query "<task intent>" --scope auto --type workflow
 mem workflow find "<task intent>" --scope auto
 ```
@@ -56,7 +53,7 @@ When executing a workflow, do not repeatedly synthesize throwaway helper program
 
 Ask before changing workflow memory or moving helper ownership between repo and knowledge store. After extraction, update the workflow runbook to call the script path, validate it, and record the run result.
 
-Prefer `owner: repo` for repository-specific logic and `owner: knowledge_store` for reusable cross-project helpers (the latter also needs a `checksum:`). `templates/workflow.yaml` — the fixed baseline template — demonstrates both owners in one `reusable_scripts` list with their matching `steps[].run`; use it via `mem workflow new` rather than hand-writing these blocks.
+Prefer `owner: repo` for repository-specific logic and `owner: knowledge_store` for reusable cross-project helpers (the latter also needs a `checksum:`). The embedded baseline template demonstrates both owners in one `reusable_scripts` list with their matching `steps[].run`; scaffold with `mem workflow new` rather than hand-writing these blocks.
 
 Allowed knowledge-store artifact paths are:
 

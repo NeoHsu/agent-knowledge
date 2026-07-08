@@ -56,6 +56,36 @@ pub(crate) fn print_json<T: Serialize + ?Sized>(value: &T) -> Result<()> {
     Output::Json.json(value)
 }
 
+/// Print a write-command response, attaching store provenance when the active
+/// store was discovered through a source checkout (schema-file discovery).
+/// This puts the Safety Gates evidence directly into the caller's context
+/// instead of relying on it to run `mem config show` first.
+pub(crate) fn print_write_json(app: &App, value: Value) -> Result<()> {
+    let value = attach_store_warning(app, value);
+    print_json(&value)
+}
+
+/// Pretty variant of `print_write_json` for multi-record responses.
+pub(crate) fn print_write_json_pretty(app: &App, value: Value) -> Result<()> {
+    let value = attach_store_warning(app, value);
+    print_json_pretty(&value)
+}
+
+fn attach_store_warning(app: &App, mut value: Value) -> Value {
+    use mem_core::app::StoreSource;
+    if matches!(
+        app.store_source,
+        StoreSource::CurrentDirectory | StoreSource::ExecutableParent
+    ) {
+        value["store_source"] = json!(app.store_source.as_str());
+        value["store_warning"] = json!(format!(
+            "active store {} was discovered from a source checkout; pass --home <runtime-store> if this is not intended",
+            app.root.display()
+        ));
+    }
+    value
+}
+
 pub(crate) fn print_json_pretty<T: Serialize + ?Sized>(value: &T) -> Result<()> {
     Output::Json.json_pretty(value)
 }

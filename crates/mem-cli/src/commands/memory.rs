@@ -8,9 +8,9 @@ pub(crate) fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
         .map(|status| status == "similar_found")
         .unwrap_or(false);
     if is_similar {
-        print_json_pretty(&result)?;
+        print_write_json_pretty(app, result)?;
     } else {
-        print_json(&result)?;
+        print_write_json(app, result)?;
     }
     Ok(())
 }
@@ -417,7 +417,10 @@ pub(crate) fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
 
     let updated = memory_by_id(&conn, &old.id)?
         .ok_or_else(|| anyhow!("updated memory missing: {}", old.id))?;
-    print_json(&json!({"status": "updated", "id": updated.id, "version": updated.version}))?;
+    print_write_json(
+        app,
+        json!({"status": "updated", "id": updated.id, "version": updated.version}),
+    )?;
     Ok(())
 }
 
@@ -492,7 +495,10 @@ pub(crate) fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
     memory_index::upsert_or_mark_stale(app, &conn, &new_id)?;
     memory_index::reindex_or_mark_stale(app, "rebuild index after supersede")?;
 
-    print_json(&json!({"status": "superseded", "old_id": old.id, "new_id": new_id}))?;
+    print_write_json(
+        app,
+        json!({"status": "superseded", "old_id": old.id, "new_id": new_id}),
+    )?;
     Ok(())
 }
 
@@ -528,7 +534,10 @@ pub(crate) fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
             Ok(())
         })?;
         memory_index::reindex_or_mark_stale(app, "rebuild index after delete")?;
-        print_json(&json!({"status": "deleted", "mode": "hard", "id": old.id}))?;
+        print_write_json(
+            app,
+            json!({"status": "deleted", "mode": "hard", "id": old.id}),
+        )?;
     } else {
         let now = now();
         with_transaction(&conn, |conn| {
@@ -547,7 +556,10 @@ pub(crate) fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
             Ok(())
         })?;
         memory_index::reindex_or_mark_stale(app, "rebuild index after delete")?;
-        print_json(&json!({"status": "deleted", "mode": "soft", "id": old.id}))?;
+        print_write_json(
+            app,
+            json!({"status": "deleted", "mode": "soft", "id": old.id}),
+        )?;
     }
     Ok(())
 }
