@@ -220,6 +220,16 @@ mem retro weekly --limit 200
 `history` accepts an optional positional `name` plus `--action <save|update|supersede|delete|...>` and `--limit` (default 20). `gc --days` purges soft-deleted memories older than the given window.
 `retro` emits an orchestration bundle for the LLM. It does not read platform logs itself; the active platform or harness should provide conversation history. `retro daily|weekly --limit` controls the bundle size (default 50).
 
+## Reconcile
+
+```bash
+mem reconcile
+mem reconcile --scope project:example/app --repo ~/code/app
+mem reconcile --type project
+```
+
+`reconcile` treats memories as a cache of external reality and checks that cache mechanically: it extracts path and command claims from memory content (backtick code spans first, bare path-like tokens as fallback) and verifies each against the filesystem — paths via existence checks relative to `--repo` (default: current directory; `<placeholder>` segments match any entry), commands via `PATH` lookup. It is read-only: it never executes commands, edits memories, or updates access counters. `--scope auto` (default) checks global plus the detected project scope; an explicit `--scope` checks exactly that scope. Workflow memories are skipped unless `--type workflow` is passed because `mem workflow validate` owns runbook checking. The JSON report marks each claim `ok` or `missing`, lists `unverifiable` spans, and flags memories with missing claims; deciding whether a flagged memory needs `mem update`, `mem supersede`, or `mem delete` stays with the agent.
+
 ## Import and Export
 
 ```bash

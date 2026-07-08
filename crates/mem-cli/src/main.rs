@@ -47,6 +47,8 @@ fn main() -> Result<()> {
         Command::History(args) => cmd_history(&app, args)?,
         Command::Stats(args) => cmd_stats(&app, args)?,
         Command::Audit(args) => with_lock(&app, || cmd_audit(&app, args))?,
+        // Read-only: verifies claims against the filesystem, never writes.
+        Command::Reconcile(args) => cmd_reconcile(&app, args)?,
         Command::Gc(args) => with_lock(&app, || cmd_gc(&app, args))?,
         Command::Export(args) => cmd_export(&app, args)?,
         Command::Import(args) => with_lock(&app, || cmd_import(&app, args))?,

@@ -115,6 +115,7 @@ Every write runs the same pipeline. Warnings never block the save.
        |
        v
   lint (non-blocking):  no_tags · content_long · relative_date_language · vague_name
+                        · claims_outside_backticks
        |
        v
   result JSON { status: saved, id, version, warnings? }   -> caller fixes warnings
@@ -253,6 +254,9 @@ that explains it.
                               mem ambiguity list --pending   (resolve conflicts)
 
  Health check / repair         mem doctor  ;  mem audit --fix  ;  mem reindex       #1,#3
+
+ Stale-memory reconcile        mem reconcile --scope auto   (verify path/command    #1,#3
+                              claims in memories against the filesystem, read-only)
 ```
 
 ## Where to go next

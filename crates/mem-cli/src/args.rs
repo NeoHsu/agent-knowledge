@@ -93,6 +93,10 @@ pub(crate) enum Command {
     Stats(StatsArgs),
     #[command(about = "Audit memory health and optional fixes")]
     Audit(AuditArgs),
+    #[command(
+        about = "Verify path and command claims in memories against the filesystem (read-only)"
+    )]
+    Reconcile(ReconcileArgs),
     #[command(about = "Garbage-collect old soft-deleted memories")]
     Gc(GcArgs),
     #[command(about = "Export memories as JSON or Markdown")]
@@ -394,6 +398,24 @@ pub(crate) struct StatsArgs {
 pub(crate) struct AuditArgs {
     #[arg(long)]
     pub(crate) fix: bool,
+}
+
+#[derive(Args)]
+pub(crate) struct ReconcileArgs {
+    #[arg(
+        long,
+        default_value = "auto",
+        help = "Scope to check; auto = global plus detected project, otherwise exactly the named scope"
+    )]
+    pub(crate) scope: String,
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Repository root for resolving relative path claims; defaults to the current directory"
+    )]
+    pub(crate) repo: Option<PathBuf>,
+    #[arg(long, value_parser = parse_memory_type, help = "Only check one memory type; workflow memories are skipped otherwise")]
+    pub(crate) r#type: Option<String>,
 }
 
 #[derive(Args)]

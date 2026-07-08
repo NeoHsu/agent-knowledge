@@ -108,3 +108,12 @@ mem retro weekly
 Retrospectives should use platform-provided conversation history when available, then use `mem retro daily|weekly` for repository state.
 
 Daily retro focuses on missed durable knowledge, stale memories, ambiguities, and repeated manual procedures that may become workflow memories. Weekly retro focuses on memory quality: duplicate cleanup, confidence calibration, unresolved ambiguities, workflow candidates, and skill candidates.
+
+## Reconcile
+
+```bash
+mem reconcile
+mem reconcile --scope project:example/app --repo ~/code/app
+```
+
+Memories that describe external reality (paths, commands) are a cache and go stale silently. `mem reconcile` extracts path and command claims from memory content and verifies them against the filesystem and `PATH`, read-only: each claim is reported as `ok` or `missing`, unverifiable spans are listed for judgment, and memories with missing claims are flagged. Deciding the fix — `mem update` when the fact is true but the path moved, `mem supersede` when the fact was replaced, `mem delete` when it is obsolete — stays with the agent. Run it when entering a project untouched for a while, and per touched project scope during weekly retro.

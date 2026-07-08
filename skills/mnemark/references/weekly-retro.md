@@ -16,8 +16,9 @@ Goal: improve memory quality. Weekly retro reads `changelog`, `memory.db`, and `
    - frequently accessed low confidence can become medium after review
    - stale medium confidence can be downgraded or marked for cleanup
 10. Resolve ambiguities when scope or newer evidence makes the answer clear.
-11. Run `mem audit --fix` if deterministic repairs are needed.
-12. Offer sync. If approved, run `mem sync --dry-run`, then `mem sync --no-push` unless the user explicitly approves a remote push.
+11. Run `mem reconcile --scope <project-scope> --repo <checkout>` for each project scope touched this week; judge every flagged memory and fix it with `mem update`, `mem supersede`, or `mem delete`.
+12. Run `mem audit --fix` if deterministic repairs are needed.
+13. Offer sync. If approved, run `mem sync --dry-run`, then `mem sync --no-push` unless the user explicitly approves a remote push.
 
 The promotion direction is:
 

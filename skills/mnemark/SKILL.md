@@ -59,7 +59,7 @@ Write memory content in the trigger/action/why shape from `references/memory-qua
 4. Extract tags.
 5. Run `mem save`. Defaults: `--type reference`, `--scope global`, `--source agent`, `--tags '[]'`.
 6. If `duplicate_found` or `similar_found` is returned, decide whether to update, supersede, or skip. Use `--force` only when you intend to overwrite an existing same-name memory and the incoming source is at least as trusted as the stored one (`manual` > `agent` > `daily_retro`/`weekly_retro`).
-7. If the result carries `warnings` (`no_tags`, `content_long`, `relative_date_language`, `vague_name` — mechanically checked by `mem save`, see `references/memory-quality.md`), fix the memory with `mem update` instead of leaving it degraded.
+7. If the result carries `warnings` (`no_tags`, `content_long`, `relative_date_language`, `vague_name`, `claims_outside_backticks` — mechanically checked by `mem save`, see `references/memory-quality.md`), fix the memory with `mem update` instead of leaving it degraded.
 8. At the end of the work unit, offer to sync. If approved, run `mem sync --dry-run` first, then `mem sync --no-push` unless the user explicitly approves a remote push.
 
 ```bash
@@ -73,7 +73,7 @@ mem sync --no-push
 
 `source=manual` is protected and high confidence. `source=agent` is medium confidence. `source=daily_retro` and `source=weekly_retro` are low confidence. Confidence can be set explicitly with `--confidence high|medium|low`.
 
-Full CLI details, including `history`/`stats`/`audit`/`gc`/`export`/`import`/`merge`/`reindex`: `references/cli-guide.md`.
+Full CLI details, including `history`/`stats`/`audit`/`reconcile`/`gc`/`export`/`import`/`merge`/`reindex`: `references/cli-guide.md`.
 
 ## Query Workflow
 
@@ -99,6 +99,17 @@ mem workflow find release --scope auto
 mem workflow show release_runbook --checklist
 mem workflow record release_runbook --result success --note "clean run"
 ```
+
+## Reconcile Workflow
+
+Memories that describe external reality (paths, commands, flags) are a cache and go stale silently. When entering a project that has not been touched for a while, or when a memory's referenced path fails during a task, reconcile that scope instead of trusting or silently ignoring the memory:
+
+```bash
+mem reconcile --scope auto
+mem reconcile --scope project:example/app --repo ~/code/app
+```
+
+`reconcile` is read-only: it extracts path/command claims from memory content and verifies them against the filesystem and `PATH`, reporting each as `ok`, `missing`, or `unverifiable`. For each flagged memory, judge the cause and fix it at once — path moved but fact still true (`mem update`), fact replaced (`mem supersede`), fact obsolete (`mem delete`), or claim describes another machine (leave it, note it in the memory if recurring). Then `mem sync`. Details: `references/cli-guide.md`.
 
 ## Artifact Guidance
 

@@ -95,6 +95,7 @@ npx skills add ./skills/mnemark
 | Lifecycle | Soft delete, protected manual memories, version conflicts | `valid_until`, `protected`, `--expected-version` |
 | History | Changelog and stats | `mem history`, `mem stats` |
 | Health | Audit and garbage collection | `mem audit`, `mem audit --fix`, `mem gc` |
+| Reconcile | Verify path/command claims in memories against the filesystem | `mem reconcile`, `--scope`, `--repo` |
 | Workflow | Store recurring runbooks as validated memory | `mem workflow list|find|show|validate` |
 | Artifacts | Portable helper file metadata and safety checks | `mem artifact list|show|check|add|update|remove`, `manifest.toml` |
 | Bundles | Portable store export/import/inspect | `mem bundle export|inspect|import` |

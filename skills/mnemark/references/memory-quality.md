@@ -32,7 +32,9 @@ Good:
 - Record provenance in `--why` (who said it, in what context) so later retros can re-judge confidence.
 - Names: short snake_case, stable across updates. Rename via `supersede`, not delete + save.
 
-`mem save` mechanically lints for four of these — missing tags (`no_tags`), over-long content (`content_long`), relative-date language (`relative_date_language`), and vague names (`vague_name`) — and returns them as `warnings` in the save result (never blocking). Treat a returned warning as ground truth, not a reminder to re-derive: fix it with `mem update` per `SKILL.md` Save Workflow step 7 instead of re-checking the rule from prose.
+`mem save` mechanically lints for five of these — missing tags (`no_tags`), over-long content (`content_long`), relative-date language (`relative_date_language`), vague names (`vague_name`), and paths mentioned outside backticks (`claims_outside_backticks`) — and returns them as `warnings` in the save result (never blocking). Treat a returned warning as ground truth, not a reminder to re-derive: fix it with `mem update` per `SKILL.md` Save Workflow step 7 instead of re-checking the rule from prose.
+
+Wrap every path and command the content asserts in backticks. `mem reconcile` extracts those backtick claims and verifies them against the filesystem, so a backticked claim keeps the memory mechanically checkable for staleness; a plain-text path may still be found heuristically but is second-class.
 
 ## Promotion ladder
 

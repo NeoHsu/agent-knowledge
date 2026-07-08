@@ -68,6 +68,48 @@ fn save_warns_on_vague_name_and_long_content() {
 }
 
 #[test]
+fn save_warns_on_paths_outside_backticks() {
+    let repo = TestRepo::new("lint-claims");
+    repo.run(&["init"]);
+
+    let output = repo.run(&[
+        "save",
+        "--type",
+        "project",
+        "--name",
+        "plain_path_note",
+        "--tags",
+        "[\"project:example/app\"]",
+        "--content",
+        "Action: 參考 crates/mem-core/src/util.rs 的匯出。Why: 2026-07-08 建立。",
+    ]);
+    let result: serde_json::Value = serde_json::from_str(&output).expect("save json");
+    let codes = warning_codes(&result);
+    assert!(
+        codes.contains(&"claims_outside_backticks".to_string()),
+        "codes: {codes:?}"
+    );
+
+    let output = repo.run(&[
+        "save",
+        "--type",
+        "project",
+        "--name",
+        "backticked_path_note",
+        "--tags",
+        "[\"project:example/app\"]",
+        "--content",
+        "Action: 參考 `crates/mem-core/src/util.rs` 的匯出。Why: 2026-07-08 建立。",
+    ]);
+    let result: serde_json::Value = serde_json::from_str(&output).expect("save json");
+    let codes = warning_codes(&result);
+    assert!(
+        !codes.contains(&"claims_outside_backticks".to_string()),
+        "codes: {codes:?}"
+    );
+}
+
+#[test]
 fn clean_save_has_no_warnings() {
     let repo = TestRepo::new("lint-clean");
     repo.run(&["init"]);

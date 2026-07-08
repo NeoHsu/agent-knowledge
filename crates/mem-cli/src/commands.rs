@@ -128,6 +128,7 @@ mod memory;
 mod merge;
 mod prime;
 mod query;
+mod reconcile;
 mod retro;
 mod setup;
 mod sync;
@@ -147,6 +148,7 @@ pub(crate) use memory::{
 pub(crate) use merge::{cmd_merge, merge_database};
 pub(crate) use prime::cmd_prime;
 pub(crate) use query::cmd_query;
+pub(crate) use reconcile::cmd_reconcile;
 pub(crate) use retro::cmd_retro;
 pub(crate) use setup::cmd_setup;
 pub(crate) use sync::cmd_sync;

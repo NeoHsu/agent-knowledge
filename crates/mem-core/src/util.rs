@@ -1,3 +1,4 @@
+mod claims;
 mod content;
 mod secrets;
 mod source;
@@ -5,6 +6,7 @@ mod tags;
 mod text;
 mod time;
 
+pub use claims::{extract_claims, Claim, ClaimKind, ExtractedClaims};
 pub use content::{optional_content, required_content, slugify};
 pub use secrets::strip_secrets;
 pub use source::{confidence_for_source, source_priority, version_conflict};

@@ -204,6 +204,15 @@ fn lint_memory(r#type: &str, name: &str, content: &str, tags: &str) -> Vec<Value
             }));
         }
     }
+    if r#type != "workflow" {
+        let extracted = extract_claims(content);
+        if extracted.claims.iter().any(|claim| !claim.backticked) {
+            warnings.push(json!({
+                "code": "claims_outside_backticks",
+                "hint": "content mentions paths outside backticks; wrap them in `...` so `mem reconcile` can verify them"
+            }));
+        }
+    }
     let lowered_name = name.to_lowercase();
     if name.chars().count() < 3 || VAGUE_NAMES.contains(&lowered_name.as_str()) {
         warnings.push(json!({
