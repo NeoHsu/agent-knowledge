@@ -57,7 +57,10 @@ fn save_warns_on_vague_name_and_long_content() {
     ]);
     let result: serde_json::Value = serde_json::from_str(&output).expect("save json");
     let codes = warning_codes(&result);
-    assert!(codes.contains(&"vague_name".to_string()), "codes: {codes:?}");
+    assert!(
+        codes.contains(&"vague_name".to_string()),
+        "codes: {codes:?}"
+    );
     assert!(
         codes.contains(&"content_long".to_string()),
         "codes: {codes:?}"

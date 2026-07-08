@@ -138,7 +138,12 @@ fn drop_last_entry(sections: &mut [(&str, Vec<Memory>)]) -> bool {
     false
 }
 
-fn render_text(app: &App, scopes: &[String], sections: &[(&str, Vec<Memory>)], cap: usize) -> String {
+fn render_text(
+    app: &App,
+    scopes: &[String],
+    sections: &[(&str, Vec<Memory>)],
+    cap: usize,
+) -> String {
     let mut output = String::new();
     output.push_str(&format!(
         "=== mnemark context | store: {} | scope: {} ===\n",

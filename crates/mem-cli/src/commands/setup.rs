@@ -54,7 +54,10 @@ pub(crate) const PLATFORMS: &[PlatformSpec] = &[
 /// Skill files embedded at build time so `mem setup <platform>` installs a
 /// skill version that always matches the binary.
 pub(crate) const SKILL_FILES: &[(&str, &str)] = &[
-    ("SKILL.md", include_str!("../../../../skills/mnemark/SKILL.md")),
+    (
+        "SKILL.md",
+        include_str!("../../../../skills/mnemark/SKILL.md"),
+    ),
     (
         "references/cli-guide.md",
         include_str!("../../../../skills/mnemark/references/cli-guide.md"),

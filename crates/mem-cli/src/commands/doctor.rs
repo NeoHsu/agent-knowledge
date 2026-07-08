@@ -41,7 +41,12 @@ pub(crate) fn cmd_doctor(app: &App, args: DoctorArgs) -> Result<()> {
                 Some("run `mem reindex`"),
             ));
         } else {
-            checks.push(check("index", "ok", "search index present".to_string(), None));
+            checks.push(check(
+                "index",
+                "ok",
+                "search index present".to_string(),
+                None,
+            ));
         }
         let git_dir = app.root.join(".git");
         if git_dir.exists() {
@@ -70,8 +75,9 @@ pub(crate) fn cmd_doctor(app: &App, args: DoctorArgs) -> Result<()> {
 
     let base = base_dir(args.base_dir.as_deref());
     let platforms: Vec<&PlatformSpec> = match args.platform.as_deref() {
-        Some(name) => vec![platform_by_name(name)
-            .ok_or_else(|| anyhow!("unknown platform: {name}"))?],
+        Some(name) => {
+            vec![platform_by_name(name).ok_or_else(|| anyhow!("unknown platform: {name}"))?]
+        }
         None => PLATFORMS.iter().collect(),
     };
     for platform in platforms {
@@ -199,12 +205,7 @@ fn check_platform(checks: &mut Vec<Value>, platform: &PlatformSpec, base: &Path)
     }
 }
 
-fn check(
-    id: impl Into<String>,
-    status: &str,
-    detail: String,
-    fix: Option<&str>,
-) -> Value {
+fn check(id: impl Into<String>, status: &str, detail: String, fix: Option<&str>) -> Value {
     let mut entry = json!({
         "id": id.into(),
         "status": status,

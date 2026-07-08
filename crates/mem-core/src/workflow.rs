@@ -449,6 +449,84 @@ fn parse_string_array(raw: &str) -> Result<Vec<String>> {
     Ok(strings)
 }
 
+/// Render a workflow runbook as a step-by-step execution checklist. The
+/// checklist is the agent-facing form of the runbook: strictly ordered,
+/// checkbox per step, confirm flags surfaced, and the run-record step
+/// appended so executions leave telemetry for retros.
+pub fn render_checklist(memory: &Memory) -> Result<String> {
+    validate_record(memory)?;
+    let content = memory.content.as_deref().unwrap_or_default();
+    let value: YamlValue = serde_yaml::from_str(content).context("parse workflow YAML/JSON")?;
+    let goal = value.get("goal").and_then(YamlValue::as_str).unwrap_or("");
+
+    let mut out = String::new();
+    out.push_str(&format!("# {} — {}\n", memory.name, goal));
+    out.push_str(
+        "Execute strictly in order. Stop at any failed check or verify. \
+         Steps marked CONFIRM require explicit user approval first.\n\n",
+    );
+    if let Some(items) = value.get("preconditions").and_then(YamlValue::as_sequence) {
+        out.push_str("Preconditions:\n");
+        for item in items {
+            if let Some(text) = item.as_str() {
+                out.push_str(&format!("  [ ] {text}\n"));
+            }
+        }
+        out.push('\n');
+    }
+    if let Some(steps) = value.get("steps").and_then(YamlValue::as_sequence) {
+        out.push_str("Steps:\n");
+        for (index, step) in steps.iter().enumerate() {
+            let id = step.get("id").and_then(YamlValue::as_str).unwrap_or("step");
+            let confirm = matches!(step.get("confirm"), Some(YamlValue::Bool(true)));
+            out.push_str(&format!(
+                "  {}. [ ] {}{}\n",
+                index + 1,
+                id,
+                if confirm {
+                    "  !! CONFIRM WITH USER BEFORE RUNNING"
+                } else {
+                    ""
+                }
+            ));
+            for key in ["run", "manual", "ask", "check", "verify"] {
+                if let Some(text) = step.get(key).and_then(YamlValue::as_str) {
+                    out.push_str(&format!("       {key}: {text}\n"));
+                }
+            }
+        }
+        out.push('\n');
+    }
+    if let Some(items) = value
+        .get("stop_conditions")
+        .and_then(YamlValue::as_sequence)
+    {
+        out.push_str("Stop immediately when:\n");
+        for item in items {
+            if let Some(text) = item.as_str() {
+                out.push_str(&format!("  - {text}\n"));
+            }
+        }
+        out.push('\n');
+    }
+    out.push_str("After the run:\n");
+    out.push_str(&format!(
+        "  [ ] mem workflow record {} --result success|failure --note \"<one line>\"\n",
+        memory.name
+    ));
+    if let Some(items) = value
+        .get("post_run_memory")
+        .and_then(YamlValue::as_sequence)
+    {
+        for item in items {
+            if let Some(text) = item.as_str() {
+                out.push_str(&format!("  [ ] {text}\n"));
+            }
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -517,76 +595,4 @@ mod tests {
 
         assert!(rank(&precise, "deploy", None) > rank(&broad, "deploy", None));
     }
-}
-
-/// Render a workflow runbook as a step-by-step execution checklist. The
-/// checklist is the agent-facing form of the runbook: strictly ordered,
-/// checkbox per step, confirm flags surfaced, and the run-record step
-/// appended so executions leave telemetry for retros.
-pub fn render_checklist(memory: &Memory) -> Result<String> {
-    validate_record(memory)?;
-    let content = memory.content.as_deref().unwrap_or_default();
-    let value: YamlValue = serde_yaml::from_str(content).context("parse workflow YAML/JSON")?;
-    let goal = value.get("goal").and_then(YamlValue::as_str).unwrap_or("");
-
-    let mut out = String::new();
-    out.push_str(&format!("# {} — {}\n", memory.name, goal));
-    out.push_str(
-        "Execute strictly in order. Stop at any failed check or verify. \
-         Steps marked CONFIRM require explicit user approval first.\n\n",
-    );
-    if let Some(items) = value.get("preconditions").and_then(YamlValue::as_sequence) {
-        out.push_str("Preconditions:\n");
-        for item in items {
-            if let Some(text) = item.as_str() {
-                out.push_str(&format!("  [ ] {text}\n"));
-            }
-        }
-        out.push('\n');
-    }
-    if let Some(steps) = value.get("steps").and_then(YamlValue::as_sequence) {
-        out.push_str("Steps:\n");
-        for (index, step) in steps.iter().enumerate() {
-            let id = step.get("id").and_then(YamlValue::as_str).unwrap_or("step");
-            let confirm = matches!(step.get("confirm"), Some(YamlValue::Bool(true)));
-            out.push_str(&format!(
-                "  {}. [ ] {}{}\n",
-                index + 1,
-                id,
-                if confirm {
-                    "  !! CONFIRM WITH USER BEFORE RUNNING"
-                } else {
-                    ""
-                }
-            ));
-            for key in ["run", "manual", "ask", "check", "verify"] {
-                if let Some(text) = step.get(key).and_then(YamlValue::as_str) {
-                    out.push_str(&format!("       {key}: {text}\n"));
-                }
-            }
-        }
-        out.push('\n');
-    }
-    if let Some(items) = value.get("stop_conditions").and_then(YamlValue::as_sequence) {
-        out.push_str("Stop immediately when:\n");
-        for item in items {
-            if let Some(text) = item.as_str() {
-                out.push_str(&format!("  - {text}\n"));
-            }
-        }
-        out.push('\n');
-    }
-    out.push_str("After the run:\n");
-    out.push_str(&format!(
-        "  [ ] mem workflow record {} --result success|failure --note \"<one line>\"\n",
-        memory.name
-    ));
-    if let Some(items) = value.get("post_run_memory").and_then(YamlValue::as_sequence) {
-        for item in items {
-            if let Some(text) = item.as_str() {
-                out.push_str(&format!("  [ ] {text}\n"));
-            }
-        }
-    }
-    Ok(out)
 }

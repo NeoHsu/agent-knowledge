@@ -111,9 +111,10 @@ fn setup_claude_code_wires_policy_skill_and_hook() {
         .join(".claude/skills/mnemark/references/memory-quality.md")
         .exists());
 
-    let settings: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(base.join(".claude/settings.json")).expect("settings"))
-            .expect("settings json");
+    let settings: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(base.join(".claude/settings.json")).expect("settings"),
+    )
+    .expect("settings json");
     let command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
         .as_str()
         .expect("hook command");
@@ -148,9 +149,10 @@ fn setup_claude_code_preserves_existing_settings() {
         "--no-skill",
     ]);
 
-    let settings: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(base.join(".claude/settings.json")).expect("settings"))
-            .expect("settings json");
+    let settings: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(base.join(".claude/settings.json")).expect("settings"),
+    )
+    .expect("settings json");
     assert_eq!(settings["model"], "opus");
     assert!(settings["hooks"]["Stop"].is_array());
     assert!(settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
@@ -216,7 +218,10 @@ fn setup_gemini_has_no_skill_dir_and_list_reports_platforms() {
         .iter()
         .map(|p| p["name"].as_str().expect("name"))
         .collect();
-    assert_eq!(names, vec!["claude-code", "codex", "gemini-cli", "opencode"]);
+    assert_eq!(
+        names,
+        vec!["claude-code", "codex", "gemini-cli", "opencode"]
+    );
 
     fs::remove_dir_all(base).ok();
 }

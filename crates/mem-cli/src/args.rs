@@ -158,7 +158,11 @@ pub(crate) struct SetupPlatformArgs {
         help = "Base directory treated as the user home; defaults to ~"
     )]
     pub(crate) base_dir: Option<PathBuf>,
-    #[arg(long, value_name = "FILE", help = "Override the instructions file path")]
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Override the instructions file path"
+    )]
     pub(crate) instructions: Option<PathBuf>,
     #[arg(
         long,
@@ -508,7 +512,11 @@ pub(crate) struct WorkflowShowArgs {
 #[derive(Args)]
 pub(crate) struct WorkflowNewArgs {
     pub(crate) name: String,
-    #[arg(long, value_name = "FILE", help = "Output path; defaults to <name>.yaml")]
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Output path; defaults to <name>.yaml"
+    )]
     pub(crate) output: Option<PathBuf>,
     #[arg(long, help = "Overwrite an existing file")]
     pub(crate) force: bool,

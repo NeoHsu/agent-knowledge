@@ -412,19 +412,28 @@ fn workflow_show_checklist_renders_ordered_steps() {
         output.starts_with("# checklist_release — Ship a release safely."),
         "header: {output}"
     );
-    assert!(output.contains("Preconditions:\n  [ ] working tree is clean"), "{output}");
+    assert!(
+        output.contains("Preconditions:\n  [ ] working tree is clean"),
+        "{output}"
+    );
     assert!(output.contains("1. [ ] build"), "{output}");
     assert!(
         output.contains("2. [ ] publish  !! CONFIRM WITH USER BEFORE RUNNING"),
         "{output}"
     );
     assert!(output.contains("run: scripts/build-release.sh"), "{output}");
-    assert!(output.contains("Stop immediately when:\n  - tests fail"), "{output}");
+    assert!(
+        output.contains("Stop immediately when:\n  - tests fail"),
+        "{output}"
+    );
     assert!(
         output.contains("mem workflow record checklist_release --result success|failure"),
         "{output}"
     );
-    assert!(output.contains("[ ] save durable lessons from this run"), "{output}");
+    assert!(
+        output.contains("[ ] save durable lessons from this run"),
+        "{output}"
+    );
 }
 
 #[test]
@@ -487,7 +496,13 @@ fn workflow_record_rejects_non_workflow_memory() {
         "--content",
         "plain feedback memory",
     ]);
-    let output = repo.run_fail(&["workflow", "record", "not_a_workflow", "--result", "success"]);
+    let output = repo.run_fail(&[
+        "workflow",
+        "record",
+        "not_a_workflow",
+        "--result",
+        "success",
+    ]);
     assert!(output.contains("not a workflow"), "message: {output}");
 }
 

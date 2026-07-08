@@ -37,7 +37,10 @@ fn prime_renders_sections_and_protocol() {
     assert!(output.contains("- no_emoji ::"), "entry line: {output}");
     assert!(output.contains("[project]"), "project section: {output}");
     assert!(output.contains("-- protocol --"), "protocol: {output}");
-    assert!(output.contains("mem save"), "protocol mentions save: {output}");
+    assert!(
+        output.contains("mem save"),
+        "protocol mentions save: {output}"
+    );
 }
 
 #[test]
@@ -147,5 +150,8 @@ fn prime_json_format_parses() {
     let output = store.run(&["prime", "--format", "json"]);
     let parsed: serde_json::Value = serde_json::from_str(&output).expect("prime json");
     assert_eq!(parsed["status"], "ok");
-    assert_eq!(parsed["sections"]["preference"][0]["name"], "reply_language");
+    assert_eq!(
+        parsed["sections"]["preference"][0]["name"],
+        "reply_language"
+    );
 }

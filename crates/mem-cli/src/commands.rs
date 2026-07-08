@@ -139,11 +139,11 @@ pub(crate) use admin::{
 pub(crate) use ambiguity::cmd_ambiguity;
 pub(crate) use artifact::cmd_artifact;
 pub(crate) use bundle::cmd_bundle;
+pub(crate) use doctor::cmd_doctor;
 pub(crate) use io::{cmd_export, cmd_import};
 pub(crate) use memory::{
     cmd_delete, cmd_save, cmd_supersede, cmd_update, save_memory, save_memory_no_index,
 };
-pub(crate) use doctor::cmd_doctor;
 pub(crate) use merge::{cmd_merge, merge_database};
 pub(crate) use prime::cmd_prime;
 pub(crate) use query::cmd_query;

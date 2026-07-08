@@ -89,10 +89,13 @@ pub(crate) fn cmd_sync(app: &App, args: SyncArgs) -> Result<()> {
         git_run(root, &["pull", &args.remote, &branch])?;
         pulled = true;
     } else if remote_exists {
-        let behind: usize = git_capture(root, &["rev-list", "--count", &format!("HEAD..{remote_ref}")])?
-            .trim()
-            .parse()
-            .unwrap_or(0);
+        let behind: usize = git_capture(
+            root,
+            &["rev-list", "--count", &format!("HEAD..{remote_ref}")],
+        )?
+        .trim()
+        .parse()
+        .unwrap_or(0);
         if behind > 0 {
             pulled = true;
             if !git_ok(root, &["merge", "--no-edit", &remote_ref])? {
@@ -135,7 +138,10 @@ fn resolve_db_conflict(app: &App, root: &Path, remote_ref: &str) -> Result<Value
     }
     if files.is_empty() {
         git_run(root, &["merge", "--abort"])?;
-        bail!("merge failed without conflicted files; resolve manually in {}", root.display());
+        bail!(
+            "merge failed without conflicted files; resolve manually in {}",
+            root.display()
+        );
     }
 
     let theirs_path = root.join(".mem-sync-theirs.db");

@@ -26,7 +26,7 @@ fn clap_subcommands() -> BTreeSet<String> {
             if line.starts_with("Options:") || line.trim().is_empty() {
                 break;
             }
-            if let Some(name) = line.trim_start().split_whitespace().next() {
+            if let Some(name) = line.split_whitespace().next() {
                 commands.insert(name.to_string());
             }
         }

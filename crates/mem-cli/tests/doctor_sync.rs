@@ -51,15 +51,27 @@ fn doctor_reports_store_and_platform_wiring() {
     let checks = &report["checks"];
     assert_eq!(find_check(checks, "store")["status"], "ok");
     assert_eq!(find_check(checks, "store_git")["status"], "warn");
-    assert_eq!(find_check(checks, "claude-code.policy")["status"], "missing");
+    assert_eq!(
+        find_check(checks, "claude-code.policy")["status"],
+        "missing"
+    );
 
     store.run(&["setup", "claude-code", "--base-dir", base_str]);
-    let output = store.run(&["doctor", "--platform", "claude-code", "--base-dir", base_str]);
+    let output = store.run(&[
+        "doctor",
+        "--platform",
+        "claude-code",
+        "--base-dir",
+        base_str,
+    ]);
     let report: serde_json::Value = serde_json::from_str(&output).expect("doctor json");
     let checks = &report["checks"];
     assert_eq!(find_check(checks, "claude-code.policy")["status"], "ok");
     assert_eq!(find_check(checks, "claude-code.skill")["status"], "ok");
-    assert_eq!(find_check(checks, "claude-code.session_hook")["status"], "ok");
+    assert_eq!(
+        find_check(checks, "claude-code.session_hook")["status"],
+        "ok"
+    );
 
     fs::remove_dir_all(base).ok();
 }
