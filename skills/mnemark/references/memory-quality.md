@@ -36,6 +36,23 @@ Good:
 
 Wrap every path and command the content asserts in backticks. `mem reconcile` extracts those backtick claims and verifies them against the filesystem, so a backticked claim keeps the memory mechanically checkable for staleness; a plain-text path may still be found heuristically but is second-class.
 
+## Write moments
+
+Query paths and write paths are separate. Mid-task the store is read-only: `mem prime` and `mem query` load context; nothing writes. Durable candidates noticed mid-task are collected, not saved — a fact observed mid-task lacks the outcome (did the approach work?) and tends to produce fragmentary, low-context memories that later need merging.
+
+Writes happen at exactly three moments, each with its own quality gate:
+
+| Moment | Why it is a good write point |
+| --- | --- |
+| End of a work unit | outcome is known; candidates can be written once, complete, in trigger/action/why shape |
+| Retrospective (`mem retro daily\|weekly`) | bundle supplies changelog/audit/ambiguity context for dedupe and confidence calibration |
+| Reconcile pass (`mem reconcile`) | fixes are grounded in a machine-verified report, not impressions |
+
+Two exceptions write immediately:
+
+- The user explicitly asks to remember something (`記住`, "remember this") — user intent overrides batching.
+- A task step proves an existing memory wrong — fix it on the spot with `update`/`supersede`/`delete`; a wrong memory misleads every session until corrected.
+
 ## Promotion ladder
 
 Move knowledge up one level only when the threshold is met:

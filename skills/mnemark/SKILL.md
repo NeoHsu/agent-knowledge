@@ -53,6 +53,8 @@ Keep tags stable, lowercase, and specific. Details: `references/tag-rules.md`.
 
 Write memory content in the trigger/action/why shape from `references/memory-quality.md` so weaker models can apply it mechanically.
 
+Concentrate writes at three moments: the end of a work unit, retrospectives, and reconcile passes. Mid-task, the store is read-only — query freely, note durable candidates as they appear, and save them together at the close, when the outcome is known and the content can be written with full context. Two exceptions write immediately: the user explicitly asks to remember something, and a task step exposes an existing memory as wrong (fix it before it misleads again). Rationale: `references/memory-quality.md` Write moments.
+
 1. Decide if the knowledge is durable.
 2. Choose `type`: `user`, `feedback`, `project`, `reference`, `preference`, or `workflow`.
 3. Choose `scope`: `global` or `project:<owner/repo>`.

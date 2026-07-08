@@ -54,7 +54,7 @@ mem setup claude-code --base-dir /tmp/sandbox --no-hook
 
 `setup <platform>` wires mnemark into one coding agent for the whole user account. It installs three layers, each idempotent:
 
-1. Policy: prepends the v2 policy block to the platform's global instructions file (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.gemini/GEMINI.md`, or `~/.config/opencode/AGENTS.md`).
+1. Policy: prepends the v3 policy block to the platform's global instructions file (upgrading an unedited v1/v2 block in place) (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.gemini/GEMINI.md`, or `~/.config/opencode/AGENTS.md`).
 2. Skill: writes the bundled mnemark skill files (embedded in the binary, always version-matched) into the platform skill directory when the platform has one (`~/.claude/skills/mnemark`, `~/.codex/skills/mnemark`).
 3. Session start: on Claude Code, adds a `SessionStart` hook running `mem prime` to `~/.claude/settings.json` while preserving all existing settings. Platforms without a hook mechanism rely on the policy block's "run `mem prime` at session start" instruction instead.
 

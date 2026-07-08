@@ -1,6 +1,7 @@
 use super::*;
 use crate::commands::setup::{
     base_dir, platform_by_name, PlatformSpec, HOOK_COMMAND, PLATFORMS, POLICY_MARKER_V2,
+    POLICY_MARKER_V3,
 };
 
 pub(crate) fn cmd_doctor(app: &App, args: DoctorArgs) -> Result<()> {
@@ -100,17 +101,23 @@ fn check_platform(checks: &mut Vec<Value>, platform: &PlatformSpec, base: &Path)
     let prefix = platform.name;
     let instructions = base.join(platform.instructions);
     match fs::read_to_string(&instructions) {
-        Ok(content) if content.contains(POLICY_MARKER_V2) => checks.push(check(
+        Ok(content) if content.contains(POLICY_MARKER_V3) => checks.push(check(
             format!("{prefix}.policy"),
             "ok",
-            format!("v2 policy in {}", instructions.display()),
+            format!("v3 policy in {}", instructions.display()),
             None,
+        )),
+        Ok(content) if content.contains(POLICY_MARKER_V2) => checks.push(check(
+            format!("{prefix}.policy"),
+            "warn",
+            format!("v2 policy in {}", instructions.display()),
+            Some("run `mem setup <platform>` to upgrade the policy block to v3"),
         )),
         Ok(content) if content.contains("mnemark memory policy") => checks.push(check(
             format!("{prefix}.policy"),
             "warn",
             format!("legacy policy block in {}", instructions.display()),
-            Some("run `mem setup <platform>` and replace the old block with v2"),
+            Some("run `mem setup <platform>` and replace the old block with v3"),
         )),
         Ok(_) => checks.push(check(
             format!("{prefix}.policy"),
