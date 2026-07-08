@@ -1,9 +1,11 @@
 #![allow(dead_code)]
 
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::process::{Command, Output};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection};
 
@@ -76,12 +78,7 @@ impl TestRuntimeStore {
     }
 
     pub fn run(&self, args: &[&str]) -> String {
-        let output = Command::new(&self.mem)
-            .current_dir(&self.run_dir)
-            .env("MNEMARK_HOME", &self.home)
-            .args(args)
-            .output()
-            .expect("run installed mem");
+        let output = run_installed_mem(&self.mem, &self.run_dir, &self.home, args);
         assert!(
             output.status.success(),
             "command failed: {:?}\nstdout={}\nstderr={}",
@@ -93,12 +90,7 @@ impl TestRuntimeStore {
     }
 
     pub fn run_fail(&self, args: &[&str]) -> String {
-        let output = Command::new(&self.mem)
-            .current_dir(&self.run_dir)
-            .env("MNEMARK_HOME", &self.home)
-            .args(args)
-            .output()
-            .expect("run installed mem");
+        let output = run_installed_mem(&self.mem, &self.run_dir, &self.home, args);
         assert!(
             !output.status.success(),
             "command unexpectedly succeeded: {:?}\nstdout={}\nstderr={}",
@@ -126,6 +118,24 @@ impl Drop for TestRuntimeStore {
             fs::remove_dir_all(root).ok();
         }
     }
+}
+
+fn run_installed_mem(mem: &Path, run_dir: &Path, home: &Path, args: &[&str]) -> Output {
+    for attempt in 0..5 {
+        match Command::new(mem)
+            .current_dir(run_dir)
+            .env("MNEMARK_HOME", home)
+            .args(args)
+            .output()
+        {
+            Ok(output) => return output,
+            Err(error) if error.kind() == ErrorKind::ExecutableFileBusy && attempt < 4 => {
+                thread::sleep(Duration::from_millis(25 * (attempt + 1)))
+            }
+            Err(error) => panic!("run installed mem: {error:?}"),
+        }
+    }
+    unreachable!("retry loop always returns or panics")
 }
 
 pub fn mem_bin() -> PathBuf {
