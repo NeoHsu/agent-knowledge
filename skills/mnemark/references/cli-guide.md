@@ -14,6 +14,8 @@ mem doctor
 
 CLI configuration uses TOML. User config lives at `~/.config/mnemark/config.toml` and can set `knowledge_home` plus command defaults. Store config lives at `<active-store-root>/config.toml` and can set store-local defaults; `$MNEMARK_HOME` is one way to choose that active store root. Active store discovery order is: explicit `--home`, current directory when it contains `schema/memory-schema.sql`, an executable-near repo root, `MNEMARK_HOME`, user-configured `knowledge_home`, then `~/.mnemark`. Command default priority is: CLI flags, user config, store config, then built-in defaults.
 
+Before write commands, verify the target with `mem config show` or a dry-run. From a mnemark source checkout, use `--home <runtime-store>` unless the user explicitly intends that checkout to be the active store.
+
 ```toml
 knowledge_home = "~/.mnemark"
 default_scope = "auto"
@@ -264,13 +266,13 @@ Lower-trust incoming same-name memories are rejected. `--prefer-trusted` lets a 
 ## Sync
 
 ```bash
-mem sync
 mem sync --dry-run
 mem sync --no-push
+mem sync
 mem sync --remote origin --message "weekly retro updates"
 ```
 
-`sync` moves the runtime store through its own git repository: it checkpoints the SQLite WAL, maintains `.gitignore` for rebuildable files, commits local changes, fetches and merges the remote, and pushes. Git moves bytes; `mem` resolves meaning — when both machines changed `memory.db`, the binary conflict is resolved by keeping the local database and merging the remote copy through the same logic as `mem merge`, so same-name conflicts become pending ambiguity records instead of lost rows. `sync` requires the store root to be its own git repository (it refuses to commit into an enclosing repo), stops on conflicts outside `memory.db`, and reports every action as JSON. Without a configured remote it commits locally and reports `local_only`.
+`sync` moves the runtime store through its own git repository: it checkpoints the SQLite WAL, maintains `.gitignore` for rebuildable files, commits local changes, fetches and merges the remote, and pushes. Agents should start with `mem sync --dry-run` and should not push unless the user explicitly asked to sync/push or approved the dry-run result; use `mem sync --no-push` for approved local-only checkpoints. Git moves bytes; `mem` resolves meaning — when both machines changed `memory.db`, the binary conflict is resolved by keeping the local database and merging the remote copy through the same logic as `mem merge`, so same-name conflicts become pending ambiguity records instead of lost rows. `sync` requires the store root to be its own git repository (it refuses to commit into an enclosing repo), stops on conflicts outside `memory.db`, and reports every action as JSON. Without a configured remote it commits locally and reports `local_only`.
 
 ## Install or Build
 

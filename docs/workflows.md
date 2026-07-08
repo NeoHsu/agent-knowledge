@@ -34,6 +34,8 @@ For agent execution semantics, see `skills/mnemark/references/workflow-rules.md`
 
 Reusable executable logic belongs either in the current repository, such as `scripts/build-release.sh`, or in `artifacts/` under the active knowledge store when it is cross-project knowledge-store material. Workflow content should reference those paths and record checks, safety gates, and expected outputs instead of embedding script bodies.
 
+When a workflow run repeatedly needs generated helper code, agents should propose extracting it instead of rewriting it inline: use a repository script for project-specific logic, or a knowledge-store artifact for cross-project helpers. Keep truly one-off code temporary, and do not store secrets in scripts or artifacts.
+
 ```bash
 mem artifact list
 mem artifact check

@@ -1,6 +1,6 @@
 ---
 name: mnemark
-description: Use mnemark to persist, recall, audit, migrate, and retrospect durable agent memory through the local `mem` CLI and its active SQLite + Tantivy knowledge store. ALWAYS use this skill when the user says "remember this", "記住", "幫我存", "save this", asks to recall prior preferences/decisions, runs a daily or weekly retrospective, mentions workflow runbooks, or asks to query/update/supersede/delete/export/import/merge/audit memory — even if the word "memory" is not explicitly used.
+description: Use mnemark to persist, recall, audit, migrate, sync, and retrospect durable agent memory through the local `mem` CLI and its active SQLite + Tantivy knowledge store. ALWAYS use this skill when the user says "remember this", "記住", "幫我存", "save this", asks to recall prior preferences/decisions, runs a daily or weekly retrospective, mentions workflow runbooks, artifacts, bundles, manifests, `mem doctor`, `mem setup`, `mem sync`, memory-store install/health/migration, or asks to query/update/supersede/delete/export/import/merge/audit memory — even if the word "memory" is not explicitly used. Also trigger on Chinese phrases like "記憶庫", "工作流程", "回顧", "匯出", "匯入", or "同步".
 ---
 
 # mnemark Skill
@@ -13,9 +13,15 @@ Use this skill when the user asks to save, recall, update, clean up, review, or 
 - A task needs prior preferences, project facts, or recurring decisions.
 - A task appears to be a recurring procedure that may have a workflow runbook.
 - The user asks for daily or weekly retrospective.
-- The user asks to export, import, audit, or merge memory.
+- The user asks to export, import, audit, merge, sync, bundle, inspect artifacts, or set up mnemark.
 
 Do not store raw secrets, transient chat filler, or one-off facts that will not help future work.
+
+## Safety Gates
+
+Before any command that writes to the store or changes agent wiring (`mem init`, `save`, `update`, `supersede`, `delete`, `import`, `merge`, `sync`, `artifact add/update/remove`, `bundle import`, or `setup`), verify the active target with `mem config show` or the command's dry-run. If the active root is a mnemark source checkout (it contains `schema/memory-schema.sql`) and the user did not explicitly intend to use it as the runtime store, stop and rerun with `--home <runtime-store>` or ask.
+
+For sync, run `mem sync --dry-run` first. Do not push unless the user explicitly asked to sync/push or approved the dry-run result. Use `mem sync --no-push` for approved local-only checkpoints.
 
 ## Setup
 
@@ -52,16 +58,17 @@ Write memory content in the trigger/action/why shape from `references/memory-qua
 3. Choose `scope`: `global` or `project:<owner/repo>`.
 4. Extract tags.
 5. Run `mem save`. Defaults: `--type reference`, `--scope global`, `--source agent`, `--tags '[]'`.
-6. If `duplicate_found` or `similar_found` is returned, decide whether to update, supersede, or skip. Use `--force` only when you intend to overwrite an existing same-name memory (subject to the source-trust rule).
+6. If `duplicate_found` or `similar_found` is returned, decide whether to update, supersede, or skip. Use `--force` only when you intend to overwrite an existing same-name memory and the incoming source is at least as trusted as the stored one (`manual` > `agent` > `daily_retro`/`weekly_retro`).
 7. If the result carries `warnings` (`no_tags`, `content_long`, `relative_date_language`, `vague_name` — mechanically checked by `mem save`, see `references/memory-quality.md`), fix the memory with `mem update` instead of leaving it degraded.
-8. Run `mem sync` when the work unit is complete to commit and push the store through its git repository.
+8. At the end of the work unit, offer to sync. If approved, run `mem sync --dry-run` first, then `mem sync --no-push` unless the user explicitly approves a remote push.
 
 ```bash
 mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
 mem update no_emoji --content "不要在回覆中使用 emoji"
 mem supersede old_name new_name --content "replacement memory"
 mem delete old_name
-mem sync
+mem sync --dry-run
+mem sync --no-push
 ```
 
 `source=manual` is protected and high confidence. `source=agent` is medium confidence. `source=daily_retro` and `source=weekly_retro` are low confidence. Confidence can be set explicitly with `--confidence high|medium|low`.
@@ -85,7 +92,7 @@ mem query "<task intent>" --scope auto --type workflow
 
 Load only relevant memories into the answer context.
 
-For recurring tasks, read `references/workflow-rules.md`. Prefer project-scoped workflows over global workflows, treat workflow content as a runbook, and ask before risky steps. Workflow memories may reference repository scripts or knowledge-store artifacts, but they should not embed script bodies. Run `mem workflow validate --check-artifacts` only after referenced knowledge-store artifact files and manifest entries exist. Propose updates to manual workflow records instead of silently editing them.
+For recurring tasks, read `references/workflow-rules.md` before executing. Prefer project-scoped workflows, treat workflow content as a runbook, and ask before risky steps. The reusable-script extraction rule lives there: repeated helper code should become a repo script or knowledge-store artifact rather than inline workflow content. Run `mem workflow validate --check-artifacts` only after referenced knowledge-store artifact files and manifest entries exist. Propose updates to manual workflow records instead of silently editing them.
 
 ```bash
 mem workflow find release --scope auto
@@ -120,7 +127,7 @@ Use `references/daily-retro.md` when the user asks for daily review. The short f
 3. Compare available platform context against existing memory.
 4. Save new durable knowledge, update stale knowledge, detect repeated manual procedures that should become workflow memories, and record ambiguities.
 5. Report counts and pending questions.
-6. Commit and push.
+6. Offer sync per Safety Gates; do not push without explicit approval.
 
 ## Weekly Retrospective
 

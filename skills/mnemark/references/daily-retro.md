@@ -9,12 +9,12 @@ Goal: extract durable knowledge missed during the day and keep `memory.db` curre
 3. Compare available platform context with existing memory.
 4. Save new facts with `source=daily_retro`.
 5. Detect repeated manual procedures and suggest or save `type=workflow` memories when they are durable.
-6. Notice repeated shell snippets, pasted scripts, or helper templates that may be artifact candidates.
+6. Notice repeated helper code and classify it with `workflow-rules.md` Reusable Scripts.
 7. Update or supersede stale memories when evidence is clear.
 8. Add ambiguity records when two memories conflict or scope is unclear.
 9. Run `mem stats` and `mem audit`.
 10. Report concise counts and unresolved questions.
-11. Run `mem sync` to commit and push the store (falls back to a local commit when no remote is configured).
+11. Offer sync. If approved, run `mem sync --dry-run`, then `mem sync --no-push` unless the user explicitly approves a remote push.
 
 ## What to Save
 
@@ -23,11 +23,7 @@ Goal: extract durable knowledge missed during the day and keep `memory.db` curre
 - Project decisions, deadlines, owners, constraints.
 - Stable references to systems, repos, docs, or workflows.
 - Repeated project procedures as `type=workflow` with `workflow:*` and `intent:*` tags.
-- Artifact candidates:
-  - one-off scripts stay local and should not be stored
-  - project-specific reusable scripts belong in the project repo, such as `scripts/`
-  - cross-project reusable helpers belong in `artifacts/` under the active knowledge store root with `manifest.toml`
-  - do not move scripts or templates without user approval
+- Artifact candidates: apply `workflow-rules.md` Reusable Scripts; one-off helpers stay local, project-specific helpers belong in repo `scripts/`, cross-project helpers belong in knowledge-store `artifacts/`, and ownership changes need user approval.
 
 ## What Not to Save
 
