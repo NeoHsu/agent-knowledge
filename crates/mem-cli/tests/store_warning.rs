@@ -1,39 +1,51 @@
+use std::fs;
+use std::process::Command;
+
 mod support;
 
-use support::{TestRepo, TestRuntimeStore};
+use support::{mem_bin, temp_path, TestRepo, TestRuntimeStore};
 
 #[test]
-fn writes_into_a_source_checkout_carry_a_store_warning() {
-    let repo = TestRepo::new("store-warning-checkout");
-    repo.run(&["init"]);
-
-    let output = repo.run(&[
-        "save",
-        "--name",
-        "checkout_fact",
-        "--tags",
-        "[\"domain:test\"]",
-        "--content",
-        "Action: fact saved into a schema-discovered store. Why: 2026-07-09 test.",
-    ]);
-    let result: serde_json::Value = serde_json::from_str(&output).expect("save json");
-    assert_eq!(result["status"], "saved");
-    assert_eq!(result["store_source"], "current_directory");
+fn source_checkout_is_never_selected_implicitly() {
+    let checkout = TestRepo::new("store-warning-checkout");
+    let runtime = temp_path("store-warning-selected-runtime");
+    let init = Command::new(mem_bin())
+        .current_dir(checkout.path())
+        .env("MNEMARK_HOME", &runtime)
+        .arg("init")
+        .output()
+        .expect("init runtime store");
     assert!(
-        result["store_warning"]
-            .as_str()
-            .expect("store warning")
-            .contains("--home"),
-        "result: {result}"
+        init.status.success(),
+        "{}",
+        String::from_utf8_lossy(&init.stderr)
     );
 
-    let output = repo.run(&["update", "checkout_fact", "--content", "Action: updated."]);
-    let result: serde_json::Value = serde_json::from_str(&output).expect("update json");
-    assert_eq!(result["store_source"], "current_directory");
-
-    let output = repo.run(&["delete", "checkout_fact"]);
-    let result: serde_json::Value = serde_json::from_str(&output).expect("delete json");
-    assert_eq!(result["store_source"], "current_directory");
+    let output = Command::new(mem_bin())
+        .current_dir(checkout.path())
+        .env("MNEMARK_HOME", &runtime)
+        .args([
+            "save",
+            "--name",
+            "runtime_fact_from_checkout",
+            "--tags",
+            "[\"domain:test\"]",
+            "--content",
+            "Action: use the runtime store. Why: 2026-07-09 test.",
+        ])
+        .output()
+        .expect("save runtime memory");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).expect("save json");
+    assert_eq!(result["status"], "saved");
+    assert!(runtime.join("memory.db").exists());
+    assert!(!checkout.join("memory.db").exists());
+    assert!(result.get("store_warning").is_none(), "result: {result}");
+    fs::remove_dir_all(runtime).ok();
 }
 
 #[test]

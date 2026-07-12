@@ -71,6 +71,35 @@ fn audit_budget_can_be_disabled_and_defaults_to_thirty() {
 }
 
 #[test]
+fn audit_graph_health_marks_stale_derivations_and_reports_current_orphans() {
+    let repo = TestRepo::new("audit-graph-health");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--name",
+        "isolated_memory",
+        "--content",
+        "Action: retain one isolated fact.",
+        "--force",
+    ]);
+
+    let stale: serde_json::Value =
+        serde_json::from_str(&repo.run(&["audit"])).expect("stale audit json");
+    assert_eq!(stale["graph"]["derived_status"], "stale");
+    assert!(stale["graph"]["orphan_memories"].is_null());
+
+    repo.run(&["graph", "rebuild"]);
+    let current: serde_json::Value =
+        serde_json::from_str(&repo.run(&["audit"])).expect("current audit json");
+    assert_eq!(current["graph"]["derived_status"], "current");
+    assert!(current["graph"]["orphan_memories"]
+        .as_array()
+        .expect("orphan memories")
+        .iter()
+        .any(|memory| memory["id"] == "memory:isolated_memory"));
+}
+
+#[test]
 fn audit_budget_candidates_exclude_protected_memories() {
     let repo = TestRepo::new("audit-budget-protected");
     repo.run(&["init"]);
@@ -81,6 +110,7 @@ fn audit_budget_candidates_exclude_protected_memories() {
         "protected_fact",
         "--source",
         "manual",
+        "--user-confirmed",
         "--tags",
         "[\"domain:budget-test\"]",
         "--content",

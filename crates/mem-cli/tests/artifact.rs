@@ -196,6 +196,47 @@ fn write_file(path: impl AsRef<std::path::Path>, content: &str, executable: bool
     }
 }
 
+#[test]
+fn artifact_secret_policy_requires_explicit_redaction() {
+    let repo = TestRepo::new("artifact-secret-policy");
+    let artifact_path = repo.join("artifacts/snippets/credentials.txt");
+    let secret = "ghp_abcdefghijklmnop1234567890";
+    write_file(&artifact_path, &format!("token={secret}\n"), false);
+
+    let rejected = repo.run_fail(&[
+        "artifact",
+        "add",
+        "artifacts/snippets/credentials.txt",
+        "--kind",
+        "snippet",
+        "--scope",
+        "global",
+    ]);
+    assert!(rejected.contains("secret-like value detected in artifact file"));
+    assert!(!repo.join("manifest.toml").exists());
+
+    let added: serde_json::Value = serde_json::from_str(&repo.run(&[
+        "artifact",
+        "add",
+        "artifacts/snippets/credentials.txt",
+        "--kind",
+        "snippet",
+        "--scope",
+        "global",
+        "--description",
+        &format!("redact {secret}"),
+        "--redact-secrets",
+    ]))
+    .expect("redacted artifact json");
+    assert_eq!(added["name"], "snippets.credentials");
+    let content = fs::read_to_string(&artifact_path).expect("redacted artifact");
+    assert!(content.contains("[REDACTED]"));
+    assert!(!content.contains(secret));
+    let manifest = fs::read_to_string(repo.join("manifest.toml")).expect("manifest");
+    assert!(manifest.contains("[REDACTED]"));
+    assert!(!manifest.contains(secret));
+}
+
 fn array_contains(value: &serde_json::Value, wanted: &str) -> bool {
     value
         .as_array()

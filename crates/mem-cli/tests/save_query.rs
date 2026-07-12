@@ -18,6 +18,7 @@ fn save_query_and_version_conflict() {
         "global",
         "--source",
         "manual",
+        "--user-confirmed",
         "--tags",
         r#"["style:no-emoji"]"#,
         "--content",
@@ -35,6 +36,7 @@ fn save_query_and_version_conflict() {
         "99",
         "--source",
         "manual",
+        "--user-confirmed",
         "--content",
         "不要使用 emoji",
     ]);
@@ -245,7 +247,55 @@ fn filtered_query_is_not_crowded_out_before_filtering() {
 }
 
 #[test]
-fn query_no_touch_does_not_increment_access_count() {
+fn query_relevance_rerank_is_transparent_and_prefers_trusted_sources() {
+    let repo = TestRepo::new("query-rerank");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--name",
+        "trusted_candidate",
+        "--source",
+        "manual",
+        "--user-confirmed",
+        "--confidence",
+        "high",
+        "--content",
+        "shared deterministic retrieval payload",
+        "--force",
+    ]);
+    repo.run(&[
+        "save",
+        "--name",
+        "retro_candidate",
+        "--source",
+        "weekly_retro",
+        "--confidence",
+        "low",
+        "--content",
+        "shared deterministic retrieval payload",
+        "--force",
+    ]);
+
+    let output: serde_json::Value = serde_json::from_str(&repo.run(&[
+        "query",
+        "shared deterministic retrieval payload",
+        "--explain-score",
+    ]))
+    .expect("explained query json");
+    let rows = output.as_array().expect("query rows");
+    assert_eq!(rows[0]["name"], "trusted_candidate");
+    assert!(rows[0]["retrieval_score"]["lexical"].is_number());
+    assert!(rows[0]["retrieval_score"]["source_trust"].is_number());
+    assert!(rows[0]["retrieval_score"]["confidence"].is_number());
+    assert!(rows[0]["retrieval_score"]["scope_specificity"].is_number());
+    assert!(rows[0]["retrieval_score"]["recency"].is_number());
+    assert!(
+        rows[0]["retrieval_score"]["total"].as_f64() > rows[1]["retrieval_score"]["total"].as_f64()
+    );
+}
+
+#[test]
+fn query_is_no_touch_by_default_and_touch_is_explicit() {
     let repo = TestRepo::new("query-no-touch");
     repo.run(&["init"]);
     repo.run(&[
@@ -257,11 +307,11 @@ fn query_no_touch_does_not_increment_access_count() {
         "--force",
     ]);
 
-    repo.run(&["query", "quiet", "--no-touch"]);
+    repo.run(&["query", "quiet"]);
     let untouched = repo.run(&["export", "--format", "json"]);
     assert!(untouched.contains(r#""access_count": 0"#));
 
-    repo.run(&["query", "quiet"]);
+    repo.run(&["query", "quiet", "--touch"]);
     let touched = repo.run(&["export", "--format", "json"]);
     assert!(touched.contains(r#""access_count": 1"#));
 }
@@ -335,6 +385,7 @@ fn lower_trust_source_cannot_force_overwrite_manual_memory() {
         "manual_preference",
         "--source",
         "manual",
+        "--user-confirmed",
         "--content",
         "manual value",
         "--force",

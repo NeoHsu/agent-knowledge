@@ -45,6 +45,25 @@ impl TestRepo {
         run_fail(&self.path, args)
     }
 
+    pub fn run_fail_with_env(&self, args: &[&str], key: &str, value: &str) -> String {
+        let output = repo_command(&self.path, args)
+            .env(key, value)
+            .output()
+            .expect("run mem with environment");
+        assert!(
+            !output.status.success(),
+            "command unexpectedly succeeded: {:?}\nstdout={}\nstderr={}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
+    }
+
     pub fn insert_raw_memory(&self, id: &str, name: &str, content: &str) {
         insert_raw_memory(&self.path, id, name, content);
     }
@@ -161,12 +180,18 @@ pub fn temp_repo(name: &str) -> PathBuf {
     dir
 }
 
-pub fn run(repo: &PathBuf, args: &[&str]) -> String {
-    let output = Command::new(mem_bin())
-        .current_dir(repo)
-        .args(args)
-        .output()
-        .expect("run mem");
+fn repo_command(repo: &Path, args: &[&str]) -> Command {
+    let mut command = Command::new(mem_bin());
+    command.current_dir(repo);
+    if !args.contains(&"--home") {
+        command.arg("--home").arg(repo);
+    }
+    command.args(args);
+    command
+}
+
+pub fn run(repo: &Path, args: &[&str]) -> String {
+    let output = repo_command(repo, args).output().expect("run mem");
     assert!(
         output.status.success(),
         "command failed: {:?}\nstdout={}\nstderr={}",
@@ -178,12 +203,8 @@ pub fn run(repo: &PathBuf, args: &[&str]) -> String {
 }
 
 #[allow(dead_code)]
-pub fn run_fail(repo: &PathBuf, args: &[&str]) -> String {
-    let output = Command::new(mem_bin())
-        .current_dir(repo)
-        .args(args)
-        .output()
-        .expect("run mem");
+pub fn run_fail(repo: &Path, args: &[&str]) -> String {
+    let output = repo_command(repo, args).output().expect("run mem");
     assert!(
         !output.status.success(),
         "command unexpectedly succeeded: {:?}\nstdout={}\nstderr={}",

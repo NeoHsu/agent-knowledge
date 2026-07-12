@@ -1,6 +1,9 @@
 use std::fs;
 use std::process::{Command, Stdio};
 
+#[cfg(unix)]
+use std::os::unix::fs::symlink;
+
 use rusqlite::{params, Connection};
 
 mod support;
@@ -58,7 +61,7 @@ fn corrupt_memories_for_reindex(repo: &TestRepo) {
         INSERT INTO memories
         (id, type, name, content, tags, scope, source, confidence, protected, created_at, updated_at, version, access_count)
         VALUES ('bad_reindex', 'reference', 'bad_reindex', 'bad reindex content', '[]', 'global', 'manual', 'high', 'not-bool', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'not-an-int', '0');
-        PRAGMA user_version = 3;",
+        PRAGMA user_version = 5;",
     )
     .expect("corrupt memories table");
 }
@@ -185,6 +188,76 @@ fn context_without_detect_points_to_next_steps() {
 }
 
 #[test]
+fn write_rebuilds_a_missing_index_instead_of_creating_a_partial_one() {
+    let repo = TestRepo::new("write-missing-index");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--name",
+        "retained_index_memory",
+        "--content",
+        "Action: retain this memory across index rebuilds.",
+        "--force",
+    ]);
+    fs::remove_dir_all(repo.join("index")).expect("remove index");
+    repo.run(&[
+        "save",
+        "--name",
+        "new_index_memory",
+        "--content",
+        "Action: trigger a complete index rebuild.",
+        "--force",
+    ]);
+
+    assert!(repo
+        .run(&["query", "retain this memory", "--no-touch"])
+        .contains("retained_index_memory"));
+    assert!(repo
+        .run(&["query", "complete index rebuild", "--no-touch"])
+        .contains("new_index_memory"));
+}
+
+#[cfg(unix)]
+#[test]
+fn init_rejects_symlinked_database_path() {
+    let repo = TestRepo::new("init-symlink-db");
+    let outside = temp_path("init-symlink-db-outside");
+    symlink(&outside, repo.join("memory.db")).expect("create database symlink");
+
+    let error = repo.run_fail(&["init"]);
+    assert!(error.contains("refusing unsafe database path"));
+    assert!(!outside.exists(), "init followed the database symlink");
+}
+
+#[cfg(unix)]
+#[test]
+fn query_rejects_symlinked_index_path() {
+    let repo = TestRepo::new("query-symlink-index");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--name",
+        "symlink_index_probe",
+        "--content",
+        "Action: never follow a symlinked search index.",
+        "--force",
+    ]);
+    fs::remove_dir_all(repo.join("index")).expect("remove real index");
+    let outside = temp_path("query-symlink-index-outside");
+    fs::create_dir_all(&outside).expect("outside index directory");
+    fs::write(outside.join("sentinel"), "unchanged").expect("outside sentinel");
+    symlink(&outside, repo.join("index")).expect("create index symlink");
+
+    let error = repo.run_fail(&["query", "symlink", "--no-touch"]);
+    assert!(error.contains("refusing unsafe search index path"));
+    assert_eq!(
+        fs::read_to_string(outside.join("sentinel")).expect("sentinel"),
+        "unchanged"
+    );
+    fs::remove_dir_all(outside).ok();
+}
+
+#[test]
 fn config_show_reports_effective_paths_and_defaults() {
     let repo = TestRepo::new("config-show");
     let config_root = temp_path("config-show-root");
@@ -199,6 +272,8 @@ fn config_show_reports_effective_paths_and_defaults() {
         .current_dir(repo.path())
         .env("XDG_CONFIG_HOME", &config_root)
         .env_remove("MNEMARK_HOME")
+        .arg("--home")
+        .arg(repo.path())
         .args(["config", "show"])
         .output()
         .expect("run config show");
@@ -212,7 +287,7 @@ fn config_show_reports_effective_paths_and_defaults() {
     let shown: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("config show json");
     assert_eq!(shown_root(&shown), canonical_display(repo.path()));
-    assert_eq!(shown["store_source"], "current_directory");
+    assert_eq!(shown["store_source"], "cli");
     assert_eq!(shown["store_config_exists"], true);
     assert_eq!(shown["effective"]["schema"], "embedded");
     assert_eq!(shown["effective"]["query_default_scope"], "auto");
@@ -280,7 +355,7 @@ fn init_uses_embedded_schema_when_runtime_root_has_no_schema_file() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("schema version");
-    assert_eq!(version, 3);
+    assert_eq!(version, 5);
 }
 
 #[test]
@@ -290,7 +365,7 @@ fn query_repairs_stale_index_marker() {
     repo.insert_raw_memory("raw_stale", "raw_stale", "stale repair searchable content");
     mark_index_dirty(&repo);
 
-    let query = repo.run(&["query", "searchable"]);
+    let query = repo.run(&["query", "searchable", "--repair-index"]);
     assert!(query.contains("raw_stale"));
 }
 
@@ -305,7 +380,7 @@ fn missing_index_version_marker_triggers_rebuild() {
     );
     fs::remove_file(repo.join(INDEX_VERSION_MARKER)).expect("remove index version marker");
 
-    let query = repo.run(&["query", "missing marker searchable"]);
+    let query = repo.run(&["query", "missing marker searchable", "--repair-index"]);
 
     assert!(query.contains("raw_missing_marker"));
     assert_eq!(
@@ -325,7 +400,7 @@ fn old_index_version_marker_triggers_rebuild() {
     );
     fs::write(repo.join(INDEX_VERSION_MARKER), "1\n").expect("write old marker");
 
-    let query = repo.run(&["query", "old marker searchable"]);
+    let query = repo.run(&["query", "old marker searchable", "--repair-index"]);
 
     assert!(query.contains("raw_old_marker"));
     assert_eq!(
@@ -345,7 +420,7 @@ fn invalid_index_version_marker_triggers_rebuild() {
     );
     fs::write(repo.join(INDEX_VERSION_MARKER), "not-a-version\n").expect("write invalid marker");
 
-    let query = repo.run(&["query", "invalid marker searchable"]);
+    let query = repo.run(&["query", "invalid marker searchable", "--repair-index"]);
 
     assert!(query.contains("raw_invalid_marker"));
     assert_eq!(
@@ -387,10 +462,10 @@ fn failed_automatic_index_rebuild_returns_actionable_error() {
     fs::write(repo.join(INDEX_VERSION_MARKER), "1\n").expect("write old marker");
     corrupt_memories_for_reindex(&repo);
 
-    let output = repo.run_fail(&["query", "bad reindex"]);
+    let output = repo.run_fail(&["query", "bad reindex", "--repair-index"]);
 
     assert!(output.contains("index schema version mismatch"));
-    assert!(output.contains("automatic rebuild failed"));
+    assert!(output.contains("explicit rebuild failed"));
     assert!(output.contains("mem reindex"));
 }
 
@@ -423,6 +498,8 @@ fn concurrent_saves_are_serialized_by_lock() {
         let content = format!("concurrent unique payload {index}");
         let child = Command::new(mem_bin())
             .current_dir(repo.path())
+            .arg("--home")
+            .arg(repo.path())
             .args([
                 "save",
                 "--name",
@@ -463,7 +540,7 @@ fn init_sets_schema_version_and_constraints() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("schema version");
-    assert_eq!(version, 3);
+    assert_eq!(version, 5);
     let metadata_count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'metadata'",
@@ -515,12 +592,18 @@ fn init_migrates_v1_database_and_allows_workflow_type() {
     .expect("create v1 db");
     drop(conn);
 
-    repo.run(&["init"]);
+    let dry_run = repo.run(&["migrate", "--dry-run"]);
+    assert!(dry_run.contains("\"migration_required\": true"));
+    let migrated: serde_json::Value =
+        serde_json::from_str(&repo.run(&["migrate"])).expect("migration json");
+    assert_eq!(migrated["status"], "migrated");
+    let backup = migrated["backup"].as_str().expect("backup path");
+    assert!(std::path::Path::new(backup).exists());
     let conn = Connection::open(repo.join("memory.db")).expect("open migrated db");
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("schema version");
-    assert_eq!(version, 3);
+    assert_eq!(version, 5);
     let legacy_count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM memories WHERE name = 'legacy_ref'",
@@ -544,6 +627,55 @@ fn init_migrates_v1_database_and_allows_workflow_type() {
         ],
     );
     assert!(saved.contains(r#""status":"saved""#));
+}
+
+#[test]
+fn migrate_repairs_pre_release_current_schema_compatibility() {
+    let repo = TestRepo::new("schema-current-compatibility");
+    repo.run(&["init"]);
+    let conn = Connection::open(repo.join("memory.db")).expect("open store");
+    conn.execute_batch(
+        "DROP TRIGGER enforce_ambiguities_uid_insert;
+         ALTER TABLE graph_semantic_edges DROP COLUMN user_confirmed_at;",
+    )
+    .expect("simulate pre-release schema v5");
+    drop(conn);
+
+    let before_dry_run = fs::read(repo.join("memory.db")).expect("db before dry-run");
+    let dry_run: serde_json::Value =
+        serde_json::from_str(&repo.run(&["migrate", "--dry-run"])).expect("dry-run json");
+    assert_eq!(dry_run["migration_required"], true);
+    assert_eq!(dry_run["compatibility_repair_required"], true);
+    assert_eq!(
+        fs::read(repo.join("memory.db")).expect("db after dry-run"),
+        before_dry_run,
+        "compatibility dry-run changed memory.db bytes"
+    );
+
+    let migrated: serde_json::Value =
+        serde_json::from_str(&repo.run(&["migrate"])).expect("migration json");
+    assert_eq!(migrated["status"], "migrated");
+    assert!(std::path::Path::new(migrated["backup"].as_str().expect("backup path")).is_file());
+
+    let conn = Connection::open(repo.join("memory.db")).expect("open repaired store");
+    let column: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('graph_semantic_edges')
+             WHERE name = 'user_confirmed_at'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("compatibility column");
+    let trigger: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'trigger' AND name = 'enforce_ambiguities_uid_insert'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("compatibility trigger");
+    assert_eq!(column, 1);
+    assert_eq!(trigger, 1);
 }
 
 #[test]

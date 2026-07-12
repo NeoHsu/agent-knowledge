@@ -44,6 +44,7 @@ stop_conditions:
         "project:NeoHsu/mnemark",
         "--source",
         "manual",
+        "--user-confirmed",
         "--tags",
         r#"["workflow:release","intent:release","tool:git","risk:high","project:NeoHsu/mnemark"]"#,
         "--content-file",
