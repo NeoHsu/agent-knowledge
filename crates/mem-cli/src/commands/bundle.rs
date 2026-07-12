@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::Cursor;
 use std::path::{Component, Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[cfg(unix)]
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
@@ -20,6 +20,8 @@ const MAX_BUNDLE_ENTRIES: usize = 10_000;
 const MAX_BUNDLE_FILE_BYTES: u64 = 1_073_741_824;
 const MAX_BUNDLE_TOTAL_BYTES: u64 = 4_294_967_296;
 const MAX_BUNDLE_PATH_BYTES: usize = 4_096;
+const SNAPSHOT_PAGES_PER_STEP: i32 = 256;
+const SNAPSHOT_STEP_PAUSE: Duration = Duration::from_millis(5);
 
 pub(crate) fn cmd_bundle(app: &App, command: BundleCommand) -> Result<()> {
     match command {
@@ -30,7 +32,9 @@ pub(crate) fn cmd_bundle(app: &App, command: BundleCommand) -> Result<()> {
 }
 
 fn cmd_bundle_export(app: &App, args: BundleExportArgs) -> Result<()> {
+    let total_started = Instant::now();
     app.require_schema()?;
+    let snapshot_started = Instant::now();
     let conn = app.read_conn()?;
     let schema_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     let snapshot_root = temp_bundle_dir("export-snapshot")?;
@@ -39,7 +43,7 @@ fn cmd_bundle_export(app: &App, args: BundleExportArgs) -> Result<()> {
     let snapshot_db = snapshot_root.join("memory.db");
     let mut snapshot = Connection::open(&snapshot_db)?;
     let backup = rusqlite::backup::Backup::new(&conn, &mut snapshot)?;
-    backup.run_to_completion(5, Duration::from_millis(25), None)?;
+    backup.run_to_completion(SNAPSHOT_PAGES_PER_STEP, SNAPSHOT_STEP_PAUSE, None)?;
     drop(backup);
     drop(snapshot);
     drop(conn);
@@ -54,11 +58,16 @@ fn cmd_bundle_export(app: &App, args: BundleExportArgs) -> Result<()> {
         snapshot_root.join("manifest.toml"),
     )?;
     copy_dir_if_exists(app.root.join("artifacts"), snapshot_root.join("artifacts"))?;
-    validate_snapshot_bundle_limits(&snapshot_root)?;
+    let snapshot_ms = elapsed_ms(snapshot_started);
+    let validation_started = Instant::now();
+    let snapshot_bytes = validate_snapshot_bundle_limits(&snapshot_root)?;
     prepare_bundle_import(&snapshot_root, args.redact_secrets)?;
+    let validation_ms = elapsed_ms(validation_started);
 
     let artifacts = snapshot_root.join("artifacts");
+    let hash_started = Instant::now();
     let hashes = bundle_hashes(&snapshot_root, args.no_config)?;
+    let hash_ms = elapsed_ms(hash_started);
     let metadata = json!({
         "version": 2,
         "created_at": now(),
@@ -88,6 +97,7 @@ fn cmd_bundle_export(app: &App, args: BundleExportArgs) -> Result<()> {
         ".{output_name}.tmp-{}",
         uuid::Uuid::new_v4().simple()
     ));
+    let archive_started = Instant::now();
     let archive_result = (|| -> Result<()> {
         let mut options = OpenOptions::new();
         options.create_new(true).write(true);
@@ -122,6 +132,8 @@ fn cmd_bundle_export(app: &App, args: BundleExportArgs) -> Result<()> {
         fs::remove_file(&output_temp).ok();
         return Err(error);
     }
+    let archive_ms = elapsed_ms(archive_started);
+    let install_started = Instant::now();
     if let Err(error) = harden_bundle_permissions(&output_temp) {
         fs::remove_file(&output_temp).ok();
         return Err(error);
@@ -130,13 +142,28 @@ fn cmd_bundle_export(app: &App, args: BundleExportArgs) -> Result<()> {
         fs::remove_file(&output_temp).ok();
         return Err(error).with_context(|| format!("install bundle {}", args.file.display()));
     }
+    let output_bytes = fs::metadata(&args.file)?.len();
+    let install_ms = elapsed_ms(install_started);
     fs::remove_dir_all(&snapshot_root).ok();
 
-    print_json_pretty(&json!({
+    let mut result = json!({
         "status": "exported",
         "file": args.file.display().to_string(),
         "bundle": metadata
-    }))
+    });
+    if args.profile {
+        result["profile"] = json!({
+            "snapshot_ms": snapshot_ms,
+            "validation_ms": validation_ms,
+            "hash_ms": hash_ms,
+            "archive_ms": archive_ms,
+            "install_ms": install_ms,
+            "total_ms": elapsed_ms(total_started),
+            "snapshot_bytes": snapshot_bytes,
+            "output_bytes": output_bytes
+        });
+    }
+    print_json_pretty(&result)
 }
 
 fn cmd_bundle_inspect(args: BundleInspectArgs) -> Result<()> {
@@ -628,7 +655,7 @@ fn collect_artifact_hashes(
     Ok(())
 }
 
-fn validate_snapshot_bundle_limits(root: &Path) -> Result<()> {
+fn validate_snapshot_bundle_limits(root: &Path) -> Result<u64> {
     let mut paths = BTreeSet::new();
     collect_bundle_file_paths(root, root, &mut paths)?;
     if paths.len() + 1 > MAX_BUNDLE_ENTRIES {
@@ -654,7 +681,7 @@ fn validate_snapshot_bundle_limits(root: &Path) -> Result<()> {
             .filter(|total| *total <= MAX_BUNDLE_TOTAL_BYTES)
             .ok_or_else(|| anyhow!("bundle exceeds {MAX_BUNDLE_TOTAL_BYTES} unpacked bytes"))?;
     }
-    Ok(())
+    Ok(total_bytes)
 }
 
 fn validate_bundle_hashes(root: &Path, bundle: &Value) -> Result<()> {
@@ -762,7 +789,7 @@ fn snapshot_store_for_replace(app: &App) -> Result<PathBuf> {
         let source = app.read_conn()?;
         let mut destination = Connection::open(backup_root.join("memory.db"))?;
         let backup = rusqlite::backup::Backup::new(&source, &mut destination)?;
-        backup.run_to_completion(5, Duration::from_millis(25), None)?;
+        backup.run_to_completion(SNAPSHOT_PAGES_PER_STEP, SNAPSHOT_STEP_PAUSE, None)?;
         drop(backup);
         drop(destination);
         drop(source);
@@ -919,6 +946,10 @@ impl Drop for RemoveDirOnDrop {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.0).ok();
     }
+}
+
+fn elapsed_ms(started: Instant) -> f64 {
+    started.elapsed().as_secs_f64() * 1000.0
 }
 
 fn temp_bundle_dir(label: &str) -> Result<PathBuf> {

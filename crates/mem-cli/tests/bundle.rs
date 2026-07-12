@@ -111,6 +111,44 @@ fn bundle_export_can_omit_config() {
 }
 
 #[test]
+fn bundle_export_profile_reports_all_safe_pipeline_stages() {
+    let source = TestRepo::new("bundle-profile-source");
+    source.run(&["init"]);
+    source.run(&[
+        "save",
+        "--name",
+        "profile_memory",
+        "--content",
+        "bundle profile payload",
+        "--force",
+    ]);
+    let bundle = source.join("profile-store.tgz");
+    let report: serde_json::Value = serde_json::from_str(&source.run(&[
+        "bundle",
+        "export",
+        bundle.to_str().expect("bundle path"),
+        "--profile",
+    ]))
+    .expect("profile export json");
+
+    for stage in [
+        "snapshot_ms",
+        "validation_ms",
+        "hash_ms",
+        "archive_ms",
+        "install_ms",
+        "total_ms",
+    ] {
+        assert!(report["profile"][stage].as_f64().is_some(), "{stage}");
+    }
+    assert!(report["profile"]["snapshot_bytes"].as_u64().unwrap_or(0) > 0);
+    assert_eq!(
+        report["profile"]["output_bytes"].as_u64(),
+        Some(fs::metadata(&bundle).expect("bundle metadata").len())
+    );
+}
+
+#[test]
 fn bundle_import_refuses_non_empty_store_unless_replace_is_forced() {
     let source = TestRepo::new("bundle-replace-source");
     source.run(&["init"]);

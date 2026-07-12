@@ -624,6 +624,8 @@ pub(crate) struct BundleExportArgs {
         help = "Explicitly redact secret-like values in the exported copy"
     )]
     pub(crate) redact_secrets: bool,
+    #[arg(long, help = "Include per-stage timing and byte metrics in the result")]
+    pub(crate) profile: bool,
 }
 
 #[derive(Args)]
