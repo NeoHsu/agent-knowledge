@@ -5,10 +5,24 @@ use crate::app::App;
 use crate::db::{self, all_memories, memory_by_id, Memory};
 use crate::search_index::{self, IndexedMemory};
 
+#[derive(Debug, Clone)]
+pub struct MemorySearchHit {
+    pub id: String,
+    pub score: f64,
+}
+
 /// Returns true if the index is stale, using only the SQLite metadata key.
 /// The filesystem `.stale` marker is no longer used.
 pub fn is_stale(app: &App) -> bool {
     dirty_in_db(app).unwrap_or(false)
+}
+
+pub fn validate_physical_index(app: &App) -> Result<()> {
+    search_index::validate_existing(&app.index_path)
+}
+
+pub fn is_compatibility_error(error: &anyhow::Error) -> bool {
+    search_index::is_compatibility_error(error)
 }
 
 pub fn mark_stale(app: &App, reason: &str) -> Result<()> {
@@ -27,7 +41,7 @@ pub fn set_dirty(app: &App, dirty: bool) -> Result<()> {
 }
 
 pub fn dirty_in_db(app: &App) -> Result<bool> {
-    let conn = app.conn()?;
+    let conn = app.read_conn()?;
     db::index_dirty(&conn)
 }
 
@@ -45,6 +59,9 @@ pub fn reindex_or_mark_stale(app: &App, action: &str) -> Result<()> {
 }
 
 pub fn upsert_or_mark_stale(app: &App, conn: &Connection, id: &str) -> Result<()> {
+    if is_stale(app) || validate_physical_index(app).is_err() {
+        return reindex_or_mark_stale(app, "rebuild stale or missing index after write");
+    }
     match upsert(app, conn, id) {
         Ok(()) => Ok(()),
         Err(err) => {
@@ -61,6 +78,9 @@ pub fn upsert_or_mark_stale(app: &App, conn: &Connection, id: &str) -> Result<()
 pub fn upsert_batch_or_mark_stale(app: &App, conn: &Connection, ids: &[String]) -> Result<()> {
     if ids.is_empty() {
         return Ok(());
+    }
+    if is_stale(app) || validate_physical_index(app).is_err() {
+        return reindex_or_mark_stale(app, "rebuild stale or missing index after batch write");
     }
     let memories: Vec<IndexedMemory> = ids
         .iter()
@@ -105,6 +125,7 @@ pub fn upsert(app: &App, conn: &Connection, id: &str) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn search_ids(
     app: &App,
     query: &str,
@@ -113,37 +134,70 @@ pub fn search_ids(
     limit: usize,
     type_filter: Option<&str>,
     scope_filter: Option<&[&str]>,
+    allow_repair: bool,
 ) -> Result<Vec<String>> {
-    match search_index::search(
-        &app.index_path,
+    search_hits(
+        app,
         query,
         fuzzy,
         raw_query,
         limit,
         type_filter,
         scope_filter,
-    ) {
-        Ok(ids) => Ok(ids),
-        Err(err) if search_index::is_compatibility_error(&err) => {
+        allow_repair,
+    )
+    .map(|hits| hits.into_iter().map(|hit| hit.id).collect())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn search_hits(
+    app: &App,
+    query: &str,
+    fuzzy: bool,
+    raw_query: bool,
+    limit: usize,
+    type_filter: Option<&str>,
+    scope_filter: Option<&[&str]>,
+    allow_repair: bool,
+) -> Result<Vec<MemorySearchHit>> {
+    let search = || {
+        search_index::search_hits(
+            &app.index_path,
+            query,
+            fuzzy,
+            raw_query,
+            limit,
+            type_filter,
+            scope_filter,
+        )
+    };
+    let hits = match search() {
+        Ok(hits) => hits,
+        Err(err) if search_index::is_compatibility_error(&err) && allow_repair => {
             mark_stale(app, &format!("index compatibility: {err:#}"))
                 .context("mark index stale")?;
             reindex(app).map_err(|rebuild_err| {
                 anyhow!(
-                    "index schema version mismatch; automatic rebuild failed; run `mem reindex`: {rebuild_err:#}"
+                    "index schema version mismatch; explicit rebuild failed; run `mem reindex`: {rebuild_err:#}"
                 )
             })?;
-            search_index::search(
-                &app.index_path,
-                query,
-                fuzzy,
-                raw_query,
-                limit,
-                type_filter,
-                scope_filter,
-            )
+            search()?
         }
-        Err(err) => Err(err),
-    }
+        Err(err) if search_index::is_compatibility_error(&err) => {
+            return Err(err).context(
+                "index schema version mismatch; read-only query will not rebuild it. \
+                 Run `mem reindex` or retry with --repair-index",
+            );
+        }
+        Err(err) => return Err(err),
+    };
+    Ok(hits
+        .into_iter()
+        .map(|hit| MemorySearchHit {
+            id: hit.id,
+            score: hit.score,
+        })
+        .collect())
 }
 
 fn indexed_memory(memory: &Memory) -> IndexedMemory {

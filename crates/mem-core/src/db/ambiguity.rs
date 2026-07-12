@@ -6,14 +6,25 @@ pub fn add_ambiguity_record(
     query: &str,
     memory_ids: &[String],
     context: Option<&str>,
-) -> Result<()> {
+) -> Result<i64> {
     let memory_ids = serde_json::to_string(memory_ids)?;
+    let uid = new_event_uid(conn, "ambiguity")?;
     conn.execute(
-        "INSERT INTO ambiguities (query, memory_ids, context, resolution)
-         VALUES (?1, ?2, ?3, 'pending')",
-        params![query, memory_ids, context],
+        "INSERT INTO ambiguities (uid, query, memory_ids, context, resolution)
+         VALUES (?1, ?2, ?3, ?4, 'pending')",
+        params![uid, query, memory_ids, context],
     )?;
-    Ok(())
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn resolve_ambiguity_record(conn: &Connection, id: i64, resolution: &Value) -> Result<bool> {
+    let changed = conn.execute(
+        "UPDATE ambiguities
+         SET resolution = ?1, resolved_at = ?2
+         WHERE id = ?3 AND resolution = 'pending'",
+        params![serde_json::to_string(resolution)?, now(), id],
+    )?;
+    Ok(changed > 0)
 }
 
 pub fn ambiguity_rows(conn: &Connection, pending_only: bool) -> Result<Vec<Value>> {

@@ -2,9 +2,33 @@ use std::collections::HashMap;
 
 use super::*;
 
+pub const ACTIVE_MEMORY_SQL: &str =
+    "valid_until IS NULL AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))";
+
+pub fn memory_is_active(memory: &Memory) -> bool {
+    memory.valid_until.is_none() && !crate::util::is_expired(memory.expires_at.as_deref())
+}
+
 pub fn memory_by_name(conn: &Connection, name: &str) -> Result<Option<Memory>> {
-    let mut stmt = conn.prepare("SELECT * FROM memories WHERE name = ?1")?;
-    stmt.query_row(params![name], row_to_memory)
+    let mut stmt = conn.prepare("SELECT * FROM memories WHERE name = ?1 ORDER BY scope LIMIT 2")?;
+    let rows = stmt.query_map(params![name], row_to_memory)?;
+    let memories = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    match memories.as_slice() {
+        [] => Ok(None),
+        [memory] => Ok(Some(memory.clone())),
+        _ => bail!(
+            "memory name is ambiguous across scopes: {name}; pass --scope or use id:<memory-id>"
+        ),
+    }
+}
+
+pub fn memory_by_name_in_scope(
+    conn: &Connection,
+    name: &str,
+    scope: &str,
+) -> Result<Option<Memory>> {
+    let mut stmt = conn.prepare("SELECT * FROM memories WHERE name = ?1 AND scope = ?2")?;
+    stmt.query_row(params![name, scope], row_to_memory)
         .optional()
         .map_err(Into::into)
 }
@@ -39,17 +63,110 @@ pub fn memories_by_ids(conn: &Connection, ids: &[String]) -> Result<HashMap<Stri
 }
 
 pub fn resolve_memory_ref(conn: &Connection, reference: &str) -> Result<String> {
-    if let Some(memory) = memory_by_id(conn, reference)? {
-        return Ok(memory.id);
+    resolve_memory_ref_in_scopes(conn, reference, None)
+}
+
+pub fn resolve_memory_ref_in_scopes(
+    conn: &Connection,
+    reference: &str,
+    scopes: Option<&[&str]>,
+) -> Result<String> {
+    if let Some(id) = reference.strip_prefix("id:") {
+        return memory_by_id(conn, id)?
+            .map(|memory| memory.id)
+            .ok_or_else(|| anyhow::anyhow!("memory id not found: {id}"));
     }
-    if let Some(memory) = memory_by_name(conn, reference)? {
-        return Ok(memory.id);
+    let Some(scopes) = scopes else {
+        if let Some(memory) = memory_by_id(conn, reference)? {
+            return Ok(memory.id);
+        }
+        return memory_by_name(conn, reference)?
+            .map(|memory| memory.id)
+            .ok_or_else(|| anyhow::anyhow!("memory not found: {reference}"));
+    };
+    let mut project_matches = Vec::new();
+    let mut global_match = None;
+    for scope in scopes {
+        if let Some(memory) = memory_by_name_in_scope(conn, reference, scope)? {
+            if *scope == "global" {
+                global_match = Some(memory);
+            } else {
+                project_matches.push(memory);
+            }
+        }
     }
-    bail!("memory not found: {reference}")
+    match project_matches.as_slice() {
+        [memory] => Ok(memory.id.clone()),
+        [] => {
+            if let Some(memory) = global_match {
+                return Ok(memory.id);
+            }
+            memory_by_id(conn, reference)?
+                .map(|memory| memory.id)
+                .ok_or_else(|| anyhow::anyhow!("memory not found: {reference}"))
+        }
+        _ => {
+            bail!("memory name is ambiguous across project scopes: {reference}; use id:<memory-id>")
+        }
+    }
 }
 
 pub fn all_memories(conn: &Connection) -> Result<Vec<Memory>> {
     let mut stmt = conn.prepare("SELECT * FROM memories ORDER BY created_at DESC")?;
+    let rows = stmt.query_map([], row_to_memory)?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
+}
+
+pub fn all_memories_compatible(conn: &Connection) -> Result<Vec<Memory>> {
+    let origin = if memory_column_exists(conn, "origin")? {
+        "origin"
+    } else {
+        "'migration' AS origin"
+    };
+    let origin_ref = if memory_column_exists(conn, "origin_ref")? {
+        "origin_ref"
+    } else {
+        "NULL AS origin_ref"
+    };
+    let user_confirmed_at = if memory_column_exists(conn, "user_confirmed_at")? {
+        "user_confirmed_at"
+    } else {
+        "CASE WHEN source = 'manual' THEN created_at ELSE NULL END AS user_confirmed_at"
+    };
+    let sql = format!(
+        "SELECT id, type, name, description, content, tags, COALESCE(scope, 'global') AS scope,
+                source, confidence, protected, created_at, updated_at, expires_at, valid_until,
+                superseded_by, version, access_count, last_accessed_at,
+                {origin}, {origin_ref}, {user_confirmed_at}
+         FROM memories ORDER BY created_at DESC"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map([], row_to_memory)?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
+}
+
+fn memory_column_exists(conn: &Connection, column: &str) -> Result<bool> {
+    let mut stmt = conn.prepare("PRAGMA table_info(memories)")?;
+    let columns = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(columns.iter().any(|candidate| candidate == column))
+}
+
+/// Memories eligible for graph materialization. Active, unexpired rows are
+/// included together with superseded tombstones needed to preserve lineage.
+pub fn graph_memories(conn: &Connection) -> Result<Vec<Memory>> {
+    let mut stmt = conn.prepare(
+        "SELECT * FROM memories
+         WHERE (
+             valid_until IS NULL
+             AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))
+         )
+         OR superseded_by IS NOT NULL
+         ORDER BY created_at DESC",
+    )?;
     let rows = stmt.query_map([], row_to_memory)?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
         .map_err(Into::into)
@@ -68,13 +185,15 @@ pub fn list_memories_filtered(
     let mut conditions: Vec<String> = Vec::new();
     let mut params_vec: Vec<&str> = Vec::new();
 
-    if !include_superseded && !expired {
-        conditions.push("valid_until IS NULL".to_string());
-    }
     if expired {
         conditions.push("expires_at IS NOT NULL".to_string());
         conditions.push("datetime(expires_at) < datetime('now')".to_string());
         conditions.push("valid_until IS NULL".to_string());
+    } else if include_superseded {
+        conditions
+            .push("(expires_at IS NULL OR datetime(expires_at) >= datetime('now'))".to_string());
+    } else {
+        conditions.push(ACTIVE_MEMORY_SQL.to_string());
     }
     if let Some(t) = r#type {
         conditions.push(format!("type = ?{}", params_vec.len() + 1));
@@ -125,9 +244,16 @@ pub fn memory_count(conn: &Connection) -> Result<usize> {
 
 pub fn all_workflows(conn: &Connection, include_superseded: bool) -> Result<Vec<Memory>> {
     let sql = if include_superseded {
-        "SELECT * FROM memories WHERE type = 'workflow' ORDER BY updated_at DESC"
+        "SELECT * FROM memories
+         WHERE type = 'workflow'
+           AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))
+         ORDER BY updated_at DESC"
     } else {
-        "SELECT * FROM memories WHERE type = 'workflow' AND valid_until IS NULL ORDER BY updated_at DESC"
+        "SELECT * FROM memories
+         WHERE type = 'workflow'
+           AND valid_until IS NULL
+           AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))
+         ORDER BY updated_at DESC"
     };
     let mut stmt = conn.prepare(sql)?;
     let rows = stmt.query_map([], row_to_memory)?;
@@ -136,12 +262,26 @@ pub fn all_workflows(conn: &Connection, include_superseded: bool) -> Result<Vec<
 }
 
 pub fn workflow_by_ref(conn: &Connection, reference: &str) -> Result<Memory> {
-    let memory_id = resolve_memory_ref(conn, reference)?;
+    workflow_by_ref_in_scopes(conn, reference, None)
+}
+
+pub fn workflow_by_ref_in_scopes(
+    conn: &Connection,
+    reference: &str,
+    scopes: Option<&[&str]>,
+) -> Result<Memory> {
+    let memory_id = resolve_memory_ref_in_scopes(conn, reference, scopes)?;
     let Some(memory) = memory_by_id(conn, &memory_id)? else {
         bail!("memory not found: {reference}");
     };
     if memory.r#type != "workflow" {
         bail!("memory is not a workflow: {}", memory.name);
+    }
+    if !memory_is_active(&memory) {
+        bail!(
+            "workflow is expired, deleted, or superseded: {}",
+            memory.name
+        );
     }
     Ok(memory)
 }
@@ -173,8 +313,10 @@ pub fn insert_memory_record(conn: &Connection, memory: &Memory) -> Result<()> {
     conn.execute(
         "INSERT INTO memories
         (id, type, name, description, content, tags, scope, source, confidence, protected,
-         created_at, updated_at, expires_at, valid_until, superseded_by, version, access_count, last_accessed_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+         created_at, updated_at, expires_at, valid_until, superseded_by, version, access_count,
+         last_accessed_at, origin, origin_ref, user_confirmed_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
+                ?16, ?17, ?18, ?19, ?20, ?21)",
         params![
             memory.id,
             memory.r#type,
@@ -194,6 +336,9 @@ pub fn insert_memory_record(conn: &Connection, memory: &Memory) -> Result<()> {
             memory.version,
             memory.access_count,
             memory.last_accessed_at,
+            memory.origin,
+            memory.origin_ref,
+            memory.user_confirmed_at,
         ],
     )?;
     Ok(())
@@ -210,8 +355,16 @@ pub fn update_memory_from_merge(
          SET type = ?1, description = ?2, content = ?3, tags = ?4, scope = ?5,
              source = ?6, confidence = ?7, protected = ?8, updated_at = ?9,
              expires_at = ?10, valid_until = ?11, superseded_by = ?12,
+             access_count = MAX(access_count, ?13),
+             last_accessed_at = CASE
+                 WHEN last_accessed_at IS NULL THEN ?14
+                 WHEN ?14 IS NULL THEN last_accessed_at
+                 WHEN datetime(?14) > datetime(last_accessed_at) THEN ?14
+                 ELSE last_accessed_at
+             END,
+             origin = 'merge', origin_ref = ?15, user_confirmed_at = ?16,
              version = version + 1
-         WHERE id = ?13",
+         WHERE id = ?17",
         params![
             &incoming.r#type,
             &incoming.description,
@@ -225,6 +378,10 @@ pub fn update_memory_from_merge(
             &incoming.expires_at,
             &incoming.valid_until,
             &incoming.superseded_by,
+            incoming.access_count,
+            &incoming.last_accessed_at,
+            &incoming.origin_ref,
+            &incoming.user_confirmed_at,
             &existing.id,
         ],
     )?;
@@ -277,5 +434,8 @@ fn row_to_memory(row: &rusqlite::Row<'_>) -> rusqlite::Result<Memory> {
         version: row.get("version")?,
         access_count: row.get("access_count")?,
         last_accessed_at: row.get("last_accessed_at")?,
+        origin: row.get("origin")?,
+        origin_ref: row.get("origin_ref")?,
+        user_confirmed_at: row.get("user_confirmed_at")?,
     })
 }

@@ -9,10 +9,11 @@ pub fn log_workflow_run(
     note: Option<&str>,
     source: &str,
 ) -> Result<i64> {
+    let uid = new_event_uid(conn, "workflow-run")?;
     conn.execute(
-        "INSERT INTO workflow_runs (memory_id, result, note, source, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![memory_id, result, note, source, crate::util::now()],
+        "INSERT INTO workflow_runs (uid, memory_id, result, note, source, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![uid, memory_id, result, note, source, crate::util::now()],
     )
     .context("insert workflow run")?;
     Ok(conn.last_insert_rowid())

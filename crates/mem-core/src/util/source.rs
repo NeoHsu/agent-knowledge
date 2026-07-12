@@ -58,6 +58,9 @@ mod tests {
             version,
             access_count: 0,
             last_accessed_at: None,
+            origin: "direct".to_string(),
+            origin_ref: None,
+            user_confirmed_at: Some(now()),
         }
     }
 

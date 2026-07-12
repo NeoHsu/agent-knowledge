@@ -122,6 +122,12 @@ fn read_config(path: &Path) -> Result<Config> {
     if !path.exists() {
         return Ok(Config::default());
     }
+    let bytes = fs::metadata(path)
+        .with_context(|| format!("inspect config {}", path.display()))?
+        .len();
+    if bytes > 1_048_576 {
+        anyhow::bail!("config exceeds 1048576 bytes: {}", path.display());
+    }
     let content =
         fs::read_to_string(path).with_context(|| format!("read config {}", path.display()))?;
     toml::from_str(&content).with_context(|| format!("parse config {}", path.display()))

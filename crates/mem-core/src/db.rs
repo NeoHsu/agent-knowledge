@@ -5,7 +5,11 @@ use serde_json::{json, Value};
 
 use crate::{util::now, INDEX_DIRTY_KEY};
 
-pub(crate) const SCHEMA_VERSION: i64 = 3;
+pub(crate) const SCHEMA_VERSION: i64 = 5;
+
+pub fn supported_schema_version() -> i64 {
+    SCHEMA_VERSION
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Memory {
@@ -27,6 +31,9 @@ pub struct Memory {
     pub version: i64,
     pub access_count: i64,
     pub last_accessed_at: Option<String>,
+    pub origin: String,
+    pub origin_ref: Option<String>,
+    pub user_confirmed_at: Option<String>,
 }
 
 mod ambiguity;
@@ -35,18 +42,26 @@ mod memory;
 mod metadata;
 mod migration;
 mod reporting;
+mod security;
 mod workflow_runs;
 
-pub use ambiguity::{add_ambiguity_record, ambiguity_by_id, ambiguity_rows};
+pub use ambiguity::{
+    add_ambiguity_record, ambiguity_by_id, ambiguity_rows, resolve_ambiguity_record,
+};
 pub use changelog::log_change;
 pub use memory::{
-    active_expired_memories, all_memories, all_workflows, gc_candidate_memories,
-    insert_memory_record, list_memories_filtered, memories_by_ids, memory_by_id, memory_by_name,
-    memory_count, resolve_memory_ref, unique_memory_id, update_memory_from_merge, workflow_by_ref,
+    active_expired_memories, all_memories, all_memories_compatible, all_workflows,
+    gc_candidate_memories, graph_memories, insert_memory_record, list_memories_filtered,
+    memories_by_ids, memory_by_id, memory_by_name, memory_by_name_in_scope, memory_count,
+    memory_is_active, resolve_memory_ref, resolve_memory_ref_in_scopes, unique_memory_id,
+    update_memory_from_merge, workflow_by_ref, workflow_by_ref_in_scopes, ACTIVE_MEMORY_SQL,
 };
-pub use metadata::{index_dirty, set_index_dirty};
-pub use migration::migrate_schema;
+pub use metadata::{
+    ensure_store_id, index_dirty, new_event_uid, set_index_dirty, store_id, STORE_ID_KEY,
+};
+pub use migration::{migrate_schema, schema_compatibility_required};
 pub use reporting::{grouped_count, query_json_rows};
+pub use security::{redact_store_secrets, validate_store_schema_objects, validate_store_secrets};
 pub use workflow_runs::{log_workflow_run, workflow_run_counts, workflow_run_stats};
 
 pub fn with_transaction<T, F>(conn: &Connection, f: F) -> Result<T>
@@ -103,6 +118,9 @@ mod tests {
             version: 1,
             access_count: 0,
             last_accessed_at: None,
+            origin: "direct".to_string(),
+            origin_ref: None,
+            user_confirmed_at: Some("2026-05-27T00:00:00Z".to_string()),
         }
     }
 
@@ -143,10 +161,36 @@ mod tests {
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
         assert_eq!(version, SCHEMA_VERSION);
-        let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM metadata", [], |row| row.get(0))
-            .expect("metadata count");
-        assert_eq!(count, 0);
+        for key in [
+            STORE_ID_KEY,
+            INDEX_DIRTY_KEY,
+            "graph_dirty",
+            "graph_schema_version",
+        ] {
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM metadata WHERE key = ?1",
+                    [key],
+                    |row| row.get(0),
+                )
+                .expect("metadata key count");
+            assert_eq!(count, 1, "missing metadata key {key}");
+        }
+        for table in [
+            "graph_nodes",
+            "graph_edges",
+            "graph_semantic_edges",
+            "graph_semantic_edge_revisions",
+        ] {
+            let exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    params![table],
+                    |row| row.get(0),
+                )
+                .expect("graph table exists");
+            assert_eq!(exists, 1, "missing {table}");
+        }
         assert!(memory_by_name(&conn, "legacy").expect("legacy").is_some());
         conn.execute(
             "INSERT INTO memories
@@ -155,6 +199,55 @@ mod tests {
             [],
         )
         .expect("workflow type allowed");
+        let missing_uid = conn.execute(
+            "INSERT INTO ambiguities (query, memory_ids) VALUES ('query', '[]')",
+            [],
+        );
+        assert!(missing_uid.is_err(), "durable event UID must be required");
+    }
+
+    #[test]
+    fn migrates_pre_release_v4_graph_table_without_ambiguity_column() {
+        let conn = initialized_conn();
+        conn.execute_batch(
+            "DROP TABLE graph_semantic_edges;
+             CREATE TABLE graph_semantic_edges (
+                 id TEXT PRIMARY KEY,
+                 source_ref TEXT NOT NULL,
+                 target_ref TEXT NOT NULL,
+                 relation TEXT NOT NULL,
+                 confidence TEXT NOT NULL CHECK (confidence IN ('EXTRACTED', 'INFERRED', 'AMBIGUOUS')),
+                 status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'rejected', 'superseded')),
+                 evidence TEXT NOT NULL,
+                 rationale TEXT,
+                 source_spans TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(source_spans) AND json_type(source_spans) = 'array'),
+                 tags TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(tags) AND json_type(tags) = 'array'),
+                 generated_by TEXT NOT NULL DEFAULT 'agent' CHECK (generated_by IN ('agent', 'manual', 'import')),
+                 source TEXT NOT NULL DEFAULT 'agent' CHECK (source IN ('manual', 'agent', 'daily_retro', 'weekly_retro')),
+                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                 valid_until DATETIME,
+                 version INTEGER DEFAULT 1 CHECK (version >= 1)
+             );
+             PRAGMA user_version = 4;",
+        )
+        .expect("create pre-release v4 graph shape");
+
+        migrate_schema(&conn).expect("migrate pre-release v4 schema");
+
+        let columns = conn
+            .prepare("PRAGMA table_info(graph_semantic_edges)")
+            .expect("graph table info")
+            .query_map([], |row| row.get::<_, String>(1))
+            .expect("graph columns")
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .expect("collect graph columns");
+        assert!(columns.iter().any(|column| column == "ambiguity_id"));
+        assert!(columns.iter().any(|column| column == "user_confirmed_at"));
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("schema version");
+        assert_eq!(version, SCHEMA_VERSION);
     }
 
     #[test]
@@ -204,7 +297,7 @@ mod tests {
     fn index_dirty_round_trips_through_metadata() {
         let conn = initialized_conn();
 
-        assert!(!index_dirty(&conn).expect("initial dirty"));
+        assert!(index_dirty(&conn).expect("migration marks index dirty"));
         set_index_dirty(&conn, true).expect("set dirty");
         assert!(index_dirty(&conn).expect("dirty"));
         set_index_dirty(&conn, false).expect("clear dirty");

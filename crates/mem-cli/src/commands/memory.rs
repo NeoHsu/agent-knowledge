@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::*;
 
 pub(crate) fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
@@ -15,21 +17,49 @@ pub(crate) fn cmd_save(app: &App, args: SaveArgs) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
-    app.ensure_schema()?;
+fn prepare_save_args(mut args: SaveArgs) -> Result<(SaveArgs, String)> {
+    args.scope = scope::resolve_write_scope(&args.scope)?;
+    if args.source == "manual" && !args.user_confirmed {
+        bail!("source=manual requires --user-confirmed");
+    }
+    args.name = sanitize_secret_field(&args.name, "name", args.redact_secrets)?;
+    args.description = args
+        .description
+        .as_deref()
+        .map(|value| sanitize_secret_field(value, "description", args.redact_secrets))
+        .transpose()?;
+    args.why = args
+        .why
+        .as_deref()
+        .map(|value| sanitize_secret_field(value, "why", args.redact_secrets))
+        .transpose()?;
+    args.tags = sanitize_secret_field(&args.tags, "tags", args.redact_secrets)?;
     validate_tags(&args.tags)?;
     let raw_content = required_content(args.content.take(), args.content_file.as_deref())?;
+    let content = sanitize_secret_field(&raw_content, "content", args.redact_secrets)?;
+    validate_memory_resource_limits(
+        &args.name,
+        args.description.as_deref(),
+        &content,
+        &args.tags,
+        &args.scope,
+        args.why.as_deref(),
+    )?;
     workflow_core::validate_memory(
         &args.r#type,
-        &raw_content,
+        &content,
         &args.tags,
         &args.scope,
         args.no_validate_workflow,
     )?;
+    Ok((args, content))
+}
 
+pub(crate) fn save_memory(app: &App, args: SaveArgs) -> Result<Value> {
+    app.require_schema()?;
+    let (args, content) = prepare_save_args(args)?;
     let conn = app.conn()?;
-    if let Some(existing) = memory_by_name(&conn, &args.name)? {
-        let content = strip_secrets(&raw_content)?;
+    if let Some(existing) = memory_by_name_in_scope(&conn, &args.name, &args.scope)? {
         if args.force {
             if source_priority(&args.source) < source_priority(&existing.source) {
                 return Ok(json!({
@@ -40,6 +70,7 @@ pub(crate) fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
                 }));
             }
             let now = now();
+            let user_confirmed_at = (args.source == "manual").then(|| now.clone());
             let description = args
                 .description
                 .or(args.why)
@@ -52,8 +83,10 @@ pub(crate) fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
                     "UPDATE memories
                      SET type = ?1, description = ?2, content = ?3, tags = ?4, scope = ?5,
                          source = ?6, confidence = ?7, protected = ?8, updated_at = ?9,
-                         expires_at = ?10, version = version + 1
-                     WHERE id = ?11",
+                         expires_at = ?10, origin = ?11, origin_ref = ?12,
+                         user_confirmed_at = COALESCE(?13, user_confirmed_at),
+                         version = version + 1
+                     WHERE id = ?14",
                     params![
                         args.r#type,
                         description,
@@ -65,6 +98,9 @@ pub(crate) fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
                         args.source == "manual",
                         now,
                         args.expires_at,
+                        args.origin.as_deref().unwrap_or("direct"),
+                        args.origin_ref,
+                        user_confirmed_at,
                         existing.id
                     ],
                 )?;
@@ -76,7 +112,7 @@ pub(crate) fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
                     Some(&content),
                     &args.source,
                 )?;
-                Ok(())
+                mem_core::graph::set_graph_dirty(conn, true)
             })?;
             memory_index::upsert_or_mark_stale(app, &conn, &existing.id)?;
             let updated = memory_by_id(&conn, &existing.id)?
@@ -96,10 +132,9 @@ pub(crate) fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
         }));
     }
 
-    let content = strip_secrets(&raw_content)?;
     if !args.force {
         memory_index::repair_stale(app)?;
-        let candidates = similar_candidates(app, &conn, &content, 5)?;
+        let candidates = similar_candidates(app, &conn, &content, &args.scope, 5)?;
         if !candidates.is_empty() {
             return Ok(json!({
                 "status": "similar_found",
@@ -116,13 +151,16 @@ pub(crate) fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
         .confidence
         .unwrap_or_else(|| confidence_for_source(&args.source).to_string());
     let protected = args.source == "manual";
+    let user_confirmed_at = protected.then(|| now.clone());
     let description = args.description.or(args.why);
+    let origin = args.origin.as_deref().unwrap_or("direct");
 
     with_transaction(&conn, |conn| {
         conn.execute(
             "INSERT INTO memories
-            (id, type, name, description, content, tags, scope, source, confidence, protected, created_at, updated_at, expires_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12)",
+            (id, type, name, description, content, tags, scope, source, confidence, protected,
+             created_at, updated_at, expires_at, origin, origin_ref, user_confirmed_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13, ?14, ?15)",
             params![
                 id,
                 args.r#type,
@@ -135,12 +173,15 @@ pub(crate) fn save_memory(app: &App, mut args: SaveArgs) -> Result<Value> {
                 confidence,
                 protected,
                 now,
-                args.expires_at
+                args.expires_at,
+                origin,
+                args.origin_ref,
+                user_confirmed_at
             ],
         )
         .context("insert memory")?;
         log_change(conn, &id, "save", None, Some(&content), &args.source)?;
-        Ok(())
+        mem_core::graph::set_graph_dirty(conn, true)
     })?;
     memory_index::upsert_or_mark_stale(app, &conn, &id)?;
 
@@ -226,24 +267,11 @@ fn lint_memory(r#type: &str, name: &str, content: &str, tags: &str) -> Vec<Value
 /// Like `save_memory` but skips all index operations (no upsert, no repair_stale).
 /// Returns `(json_result, Option<saved_id>)` — `Some(id)` when the record was saved or updated,
 /// `None` for duplicates and similar-found results that produce no new/changed record.
-pub(crate) fn save_memory_no_index(
-    app: &App,
-    mut args: SaveArgs,
-) -> Result<(Value, Option<String>)> {
-    app.ensure_schema()?;
-    validate_tags(&args.tags)?;
-    let raw_content = required_content(args.content.take(), args.content_file.as_deref())?;
-    workflow_core::validate_memory(
-        &args.r#type,
-        &raw_content,
-        &args.tags,
-        &args.scope,
-        args.no_validate_workflow,
-    )?;
-
+pub(crate) fn save_memory_no_index(app: &App, args: SaveArgs) -> Result<(Value, Option<String>)> {
+    app.require_schema()?;
+    let (args, content) = prepare_save_args(args)?;
     let conn = app.conn()?;
-    if let Some(existing) = memory_by_name(&conn, &args.name)? {
-        let content = strip_secrets(&raw_content)?;
+    if let Some(existing) = memory_by_name_in_scope(&conn, &args.name, &args.scope)? {
         if args.force {
             if source_priority(&args.source) < source_priority(&existing.source) {
                 return Ok((
@@ -257,6 +285,7 @@ pub(crate) fn save_memory_no_index(
                 ));
             }
             let now = now();
+            let user_confirmed_at = (args.source == "manual").then(|| now.clone());
             let description = args
                 .description
                 .or(args.why)
@@ -269,8 +298,10 @@ pub(crate) fn save_memory_no_index(
                     "UPDATE memories
                      SET type = ?1, description = ?2, content = ?3, tags = ?4, scope = ?5,
                          source = ?6, confidence = ?7, protected = ?8, updated_at = ?9,
-                         expires_at = ?10, version = version + 1
-                     WHERE id = ?11",
+                         expires_at = ?10, origin = ?11, origin_ref = ?12,
+                         user_confirmed_at = COALESCE(?13, user_confirmed_at),
+                         version = version + 1
+                     WHERE id = ?14",
                     params![
                         args.r#type,
                         description,
@@ -282,6 +313,9 @@ pub(crate) fn save_memory_no_index(
                         args.source == "manual",
                         now,
                         args.expires_at,
+                        args.origin.as_deref().unwrap_or("direct"),
+                        args.origin_ref,
+                        user_confirmed_at,
                         existing.id
                     ],
                 )?;
@@ -293,7 +327,7 @@ pub(crate) fn save_memory_no_index(
                     Some(&content),
                     &args.source,
                 )?;
-                Ok(())
+                mem_core::graph::set_graph_dirty(conn, true)
             })?;
             let updated = memory_by_id(&conn, &existing.id)?
                 .ok_or_else(|| anyhow!("updated memory missing: {}", existing.id))?;
@@ -318,7 +352,6 @@ pub(crate) fn save_memory_no_index(
         ));
     }
 
-    let content = strip_secrets(&raw_content)?;
     // Note: no repair_stale or similar_candidates check — caller manages index.
 
     let id = unique_memory_id(&conn, &slugify(&args.name))?;
@@ -327,13 +360,16 @@ pub(crate) fn save_memory_no_index(
         .confidence
         .unwrap_or_else(|| confidence_for_source(&args.source).to_string());
     let protected = args.source == "manual";
+    let user_confirmed_at = protected.then(|| now.clone());
     let description = args.description.or(args.why);
+    let origin = args.origin.as_deref().unwrap_or("direct");
 
     with_transaction(&conn, |conn| {
         conn.execute(
             "INSERT INTO memories
-            (id, type, name, description, content, tags, scope, source, confidence, protected, created_at, updated_at, expires_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12)",
+            (id, type, name, description, content, tags, scope, source, confidence, protected,
+             created_at, updated_at, expires_at, origin, origin_ref, user_confirmed_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13, ?14, ?15)",
             params![
                 id,
                 args.r#type,
@@ -346,62 +382,189 @@ pub(crate) fn save_memory_no_index(
                 confidence,
                 protected,
                 now,
-                args.expires_at
+                args.expires_at,
+                origin,
+                args.origin_ref,
+                user_confirmed_at
             ],
         )
         .context("insert memory")?;
         log_change(conn, &id, "save", None, Some(&content), &args.source)?;
-        Ok(())
+        mem_core::graph::set_graph_dirty(conn, true)
     })?;
 
     Ok((json!({"status": "saved", "id": id, "version": 1}), Some(id)))
 }
 
+fn resolve_mutation_memory(
+    conn: &Connection,
+    reference: &str,
+    scope_value: &str,
+) -> Result<Memory> {
+    let scopes = if scope_value == "auto" {
+        scope::detect_scope_set()?
+    } else {
+        scope::validate_scope(scope_value)?;
+        vec![scope_value.to_string()]
+    };
+    let scope_refs = scopes.iter().map(String::as_str).collect::<Vec<_>>();
+    let id = resolve_memory_ref_in_scopes(conn, reference, Some(&scope_refs))?;
+    memory_by_id(conn, &id)?.ok_or_else(|| anyhow!("memory not found: {reference}"))
+}
+
+fn update_tag_set(
+    current: &str,
+    set: Option<&str>,
+    add: Option<&str>,
+    remove: Option<&str>,
+) -> Result<String> {
+    let base = set.unwrap_or(current);
+    let mut tags = parse_string_array(base)?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    if let Some(add) = add {
+        tags.extend(parse_string_array(add)?);
+    }
+    if let Some(remove) = remove {
+        for tag in parse_string_array(remove)? {
+            tags.remove(&tag);
+        }
+    }
+    serde_json::to_string(&tags.into_iter().collect::<Vec<_>>()).map_err(Into::into)
+}
+
 pub(crate) fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
-    app.ensure_schema()?;
+    app.require_schema()?;
     let conn = app.conn()?;
-    let old = memory_by_name(&conn, &args.name)?
-        .ok_or_else(|| anyhow!("memory not found: {}", args.name))?;
+    let old = resolve_mutation_memory(&conn, &args.name, &args.scope)?;
     if let Some(expected) = args.expected_version {
         if let Some(conflict) = version_conflict(&old, expected) {
             print_json(&conflict)?;
             return Ok(());
         }
     }
-    if source_priority(&args.source) < source_priority(&old.source) {
+
+    let update_source = args.source.as_deref().unwrap_or(&old.source).to_string();
+    if update_source == "manual" && !args.user_confirmed {
+        bail!("source=manual requires --user-confirmed");
+    }
+    if source_priority(&update_source) < source_priority(&old.source) {
         print_json(&json!({
-                "status": "rejected",
-                "reason": "lower_trust_source_cannot_update",
-                "existing_source": old.source,
-                "new_source": args.source,
-                "id": old.id
+            "status": "rejected",
+            "reason": "lower_trust_source_cannot_update",
+            "existing_source": old.source,
+            "new_source": update_source,
+            "id": old.id
         }))?;
         return Ok(());
     }
+
+    let new_type = args.r#type.as_deref().unwrap_or(&old.r#type).to_string();
+    let new_scope = match args.set_scope.as_deref() {
+        Some(scope) => scope::resolve_write_scope(scope)?,
+        None => old.scope.clone(),
+    };
+    if let Some(collision) = memory_by_name_in_scope(&conn, &old.name, &new_scope)? {
+        if collision.id != old.id {
+            bail!(
+                "memory name already exists in destination scope {}: {}",
+                new_scope,
+                old.name
+            );
+        }
+    }
     let new_content = match optional_content(args.content, args.content_file.as_deref())? {
-        Some(content) => Some(strip_secrets(&content)?),
+        Some(content) => Some(sanitize_secret_field(
+            &content,
+            "content",
+            args.redact_secrets,
+        )?),
         None => old.content.clone(),
     };
-    let description = args.description.or(old.description.clone());
-    let tags = match args.add_tags {
-        Some(add) => merge_tags(&old.tags, &add)?,
-        None => old.tags.clone(),
+    let description = if args.clear_description {
+        None
+    } else {
+        match args.description.as_deref() {
+            Some(value) => Some(sanitize_secret_field(
+                value,
+                "description",
+                args.redact_secrets,
+            )?),
+            None => old.description.clone(),
+        }
     };
-    workflow_core::validate_memory(
-        &old.r#type,
+    let set_tags = args
+        .set_tags
+        .as_deref()
+        .map(|value| sanitize_secret_field(value, "set_tags", args.redact_secrets))
+        .transpose()?;
+    let add_tags = args
+        .add_tags
+        .as_deref()
+        .map(|value| sanitize_secret_field(value, "add_tags", args.redact_secrets))
+        .transpose()?;
+    let remove_tags = args
+        .remove_tags
+        .as_deref()
+        .map(|value| sanitize_secret_field(value, "remove_tags", args.redact_secrets))
+        .transpose()?;
+    let tags = update_tag_set(
+        &old.tags,
+        set_tags.as_deref(),
+        add_tags.as_deref(),
+        remove_tags.as_deref(),
+    )?;
+    let expires_at = if args.clear_expires_at {
+        None
+    } else {
+        args.expires_at.clone().or(old.expires_at.clone())
+    };
+    let confidence = args
+        .confidence
+        .as_deref()
+        .unwrap_or(&old.confidence)
+        .to_string();
+    validate_memory_resource_limits(
+        &old.name,
+        description.as_deref(),
         new_content.as_deref().unwrap_or_default(),
         &tags,
-        &old.scope,
+        &new_scope,
+        None,
+    )?;
+    workflow_core::validate_memory(
+        &new_type,
+        new_content.as_deref().unwrap_or_default(),
+        &tags,
+        &new_scope,
         args.no_validate_workflow,
     )?;
     let now = now();
+    let user_confirmed_at = (update_source == "manual").then(|| now.clone());
 
     with_transaction(&conn, |conn| {
         conn.execute(
             "UPDATE memories
-            SET description = ?1, content = ?2, tags = ?3, updated_at = ?4, version = version + 1
-            WHERE id = ?5",
-            params![description, new_content, tags, now, old.id],
+             SET type = ?1, description = ?2, content = ?3, tags = ?4, scope = ?5,
+                 source = ?6, confidence = ?7, protected = ?8, expires_at = ?9,
+                 origin = 'direct', origin_ref = NULL,
+                 user_confirmed_at = COALESCE(?10, user_confirmed_at),
+                 updated_at = ?11, version = version + 1
+             WHERE id = ?12",
+            params![
+                new_type,
+                description,
+                new_content,
+                tags,
+                new_scope,
+                update_source,
+                confidence,
+                update_source == "manual",
+                expires_at,
+                user_confirmed_at,
+                now,
+                old.id
+            ],
         )?;
         log_change(
             conn,
@@ -409,73 +572,114 @@ pub(crate) fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
             "update",
             old.content.as_deref(),
             new_content.as_deref(),
-            &args.source,
+            &update_source,
         )?;
-        Ok(())
+        mem_core::graph::set_graph_dirty(conn, true)
     })?;
     memory_index::upsert_or_mark_stale(app, &conn, &old.id)?;
 
     let updated = memory_by_id(&conn, &old.id)?
         .ok_or_else(|| anyhow!("updated memory missing: {}", old.id))?;
+    let warnings = lint_memory(
+        &updated.r#type,
+        &updated.name,
+        updated.content.as_deref().unwrap_or_default(),
+        &updated.tags,
+    );
     print_write_json(
         app,
-        json!({"status": "updated", "id": updated.id, "version": updated.version}),
+        json!({
+            "status": "updated",
+            "id": updated.id,
+            "scope": updated.scope,
+            "version": updated.version,
+            "warnings": warnings
+        }),
     )?;
     Ok(())
 }
 
 pub(crate) fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
-    app.ensure_schema()?;
+    app.require_schema()?;
     let conn = app.conn()?;
-    let old = memory_by_name(&conn, &args.old_name)?
-        .ok_or_else(|| anyhow!("memory not found: {}", args.old_name))?;
+    let old = resolve_mutation_memory(&conn, &args.old_name, &args.scope)?;
     if let Some(expected) = args.expected_version {
         if let Some(conflict) = version_conflict(&old, expected) {
             print_json(&conflict)?;
             return Ok(());
         }
     }
+    if args.source == "manual" && !args.user_confirmed {
+        bail!("source=manual requires --user-confirmed");
+    }
     if source_priority(&args.source) < source_priority(&old.source) {
         print_json(&json!({
-                "status": "rejected",
-                "reason": "lower_trust_source_cannot_supersede",
-                "existing_source": old.source,
-                "new_source": args.source,
-                "id": old.id
+            "status": "rejected",
+            "reason": "lower_trust_source_cannot_supersede",
+            "existing_source": old.source,
+            "new_source": args.source,
+            "id": old.id
         }))?;
         return Ok(());
     }
-    let new_id = unique_memory_id(&conn, &slugify(&args.new_name))?;
+    let new_scope = match args.new_scope.as_deref() {
+        Some(scope) => scope::resolve_write_scope(scope)?,
+        None => old.scope.clone(),
+    };
+    let new_name = sanitize_secret_field(&args.new_name, "name", args.redact_secrets)?;
+    if memory_by_name_in_scope(&conn, &new_name, &new_scope)?.is_some() {
+        bail!("memory already exists in scope {new_scope}: {new_name}");
+    }
+    let new_id = unique_memory_id(&conn, &slugify(&new_name))?;
     let now = now();
     let raw_content = required_content(args.content, args.content_file.as_deref())?;
+    let content = sanitize_secret_field(&raw_content, "content", args.redact_secrets)?;
+    let description = match args.description.as_deref() {
+        Some(value) => Some(sanitize_secret_field(
+            value,
+            "description",
+            args.redact_secrets,
+        )?),
+        None => old.description.clone(),
+    };
+    validate_memory_resource_limits(
+        &new_name,
+        description.as_deref(),
+        &content,
+        &old.tags,
+        &new_scope,
+        None,
+    )?;
     workflow_core::validate_memory(
         &old.r#type,
-        &raw_content,
+        &content,
         &old.tags,
-        &old.scope,
+        &new_scope,
         args.no_validate_workflow,
     )?;
-    let content = strip_secrets(&raw_content)?;
     let confidence = confidence_for_source(&args.source);
     let protected = args.source == "manual";
+    let user_confirmed_at = protected.then(|| now.clone());
 
     with_transaction(&conn, |conn| {
         conn.execute(
             "INSERT INTO memories
-            (id, type, name, description, content, tags, scope, source, confidence, protected, created_at, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11)",
+            (id, type, name, description, content, tags, scope, source, confidence, protected,
+             created_at, updated_at, origin, user_confirmed_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, 'direct', ?12)",
             params![
                 new_id,
                 old.r#type,
-                args.new_name,
-                args.description.or(old.description),
+                new_name,
+                description,
                 content,
                 old.tags,
-                old.scope,
+                new_scope,
                 args.source,
                 confidence,
                 protected,
-                now
+                now,
+                user_confirmed_at
             ],
         )?;
         conn.execute(
@@ -490,23 +694,40 @@ pub(crate) fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
             Some(&content),
             &args.source,
         )?;
-        Ok(())
+        mem_core::graph::set_graph_dirty(conn, true)
     })?;
     memory_index::upsert_or_mark_stale(app, &conn, &new_id)?;
     memory_index::reindex_or_mark_stale(app, "rebuild index after supersede")?;
 
     print_write_json(
         app,
-        json!({"status": "superseded", "old_id": old.id, "new_id": new_id}),
+        json!({
+            "status": "superseded",
+            "old_id": old.id,
+            "new_id": new_id,
+            "scope": new_scope
+        }),
     )?;
     Ok(())
 }
 
 pub(crate) fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
-    app.ensure_schema()?;
+    app.require_schema()?;
     let conn = app.conn()?;
-    let old = memory_by_name(&conn, &args.name)?
-        .ok_or_else(|| anyhow!("memory not found: {}", args.name))?;
+    let old = resolve_mutation_memory(&conn, &args.name, &args.scope)?;
+    if args.source == "manual" && !args.user_confirmed {
+        bail!("source=manual requires --user-confirmed");
+    }
+    if source_priority(&args.source) < source_priority(&old.source) {
+        print_json(&json!({
+            "status": "rejected",
+            "reason": "lower_trust_source_cannot_delete",
+            "existing_source": old.source,
+            "new_source": args.source,
+            "id": old.id
+        }))?;
+        return Ok(());
+    }
     if let Some(expected) = args.expected_version {
         if let Some(conflict) = version_conflict(&old, expected) {
             print_json(&conflict)?;
@@ -531,7 +752,7 @@ pub(crate) fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
                 None,
                 &args.source,
             )?;
-            Ok(())
+            mem_core::graph::set_graph_dirty(conn, true)
         })?;
         memory_index::reindex_or_mark_stale(app, "rebuild index after delete")?;
         print_write_json(
@@ -553,7 +774,7 @@ pub(crate) fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
                 None,
                 &args.source,
             )?;
-            Ok(())
+            mem_core::graph::set_graph_dirty(conn, true)
         })?;
         memory_index::reindex_or_mark_stale(app, "rebuild index after delete")?;
         print_write_json(
@@ -568,15 +789,16 @@ fn similar_candidates(
     app: &App,
     conn: &Connection,
     content: &str,
+    scope: &str,
     limit: usize,
 ) -> Result<Vec<Value>> {
-    let ids = memory_index::search_ids(app, content, false, false, 25, None, None)?;
+    let ids = memory_index::search_ids(app, content, false, false, 25, None, None, true)?;
     let mut candidates = Vec::new();
     for id in ids {
         let Some(memory) = memory_by_id(conn, &id)? else {
             continue;
         };
-        if memory.valid_until.is_some() {
+        if !memory_is_active(&memory) || memory.scope != scope {
             continue;
         }
         let score = content_similarity(content, memory.content.as_deref().unwrap_or_default());

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use tantivy::collector::TopDocs;
 use tantivy::query::{
     AllQuery, BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, Query, QueryParser, TermQuery,
@@ -61,6 +61,12 @@ impl std::fmt::Display for IndexCompatibilityError {
 impl std::error::Error for IndexCompatibilityError {}
 
 #[derive(Debug, Clone)]
+pub struct SearchHit {
+    pub id: String,
+    pub score: f64,
+}
+
+#[derive(Debug, Clone)]
 pub struct IndexedMemory {
     pub id: String,
     pub name: String,
@@ -82,7 +88,7 @@ pub(crate) struct IndexFields {
 }
 
 pub fn rebuild(index_path: &Path, memories: &[IndexedMemory]) -> Result<()> {
-    if index_path.exists() {
+    if validate_index_directory(index_path)? {
         fs::remove_dir_all(index_path)?;
     }
     fs::create_dir_all(index_path)?;
@@ -135,7 +141,7 @@ pub fn upsert_batch(index_path: &Path, memories: &[IndexedMemory]) -> Result<()>
     Ok(())
 }
 
-pub fn search(
+pub fn search_hits(
     index_path: &Path,
     query: &str,
     fuzzy: bool,
@@ -143,8 +149,8 @@ pub fn search(
     limit: usize,
     type_filter: Option<&str>,
     scope_filter: Option<&[&str]>,
-) -> Result<Vec<String>> {
-    let index = ensure_index(index_path)?;
+) -> Result<Vec<SearchHit>> {
+    let index = open_existing_index(index_path)?;
     let fields = fields_from_schema(index.schema())?;
     let reader = index.reader()?;
     let searcher = reader.searcher();
@@ -213,21 +219,33 @@ pub fn search(
     };
 
     let docs = searcher.search(&boxed_query, &TopDocs::with_limit(limit).order_by_score())?;
-    let mut ids = Vec::new();
-    for (_score, address) in docs {
+    let max_score = docs
+        .first()
+        .map(|(score, _)| *score)
+        .unwrap_or(1.0)
+        .max(0.000_001);
+    let mut hits = Vec::new();
+    for (score, address) in docs {
         let retrieved = searcher.doc::<TantivyDocument>(address)?;
         if let Some(value) = retrieved
             .get_first(fields.id)
             .and_then(|value| value.as_str())
         {
-            ids.push(value.to_string());
+            hits.push(SearchHit {
+                id: value.to_string(),
+                score: f64::from(score / max_score),
+            });
         }
     }
-    Ok(ids)
+    Ok(hits)
 }
 
 pub fn ensure(index_path: &Path) -> Result<()> {
     ensure_index(index_path).map(|_| ())
+}
+
+pub fn validate_existing(index_path: &Path) -> Result<()> {
+    open_existing_index(index_path).map(|_| ())
 }
 
 pub(crate) fn is_compatibility_error(err: &anyhow::Error) -> bool {
@@ -262,6 +280,7 @@ fn build_schema() -> (Schema, IndexFields) {
 }
 
 fn ensure_index(path: &Path) -> Result<Index> {
+    validate_index_directory(path)?;
     fs::create_dir_all(path)?;
     let index = match Index::open_in_dir(path) {
         Ok(index) => {
@@ -277,6 +296,36 @@ fn ensure_index(path: &Path) -> Result<Index> {
     };
     register_tokenizers(&index)?;
     Ok(index)
+}
+
+fn open_existing_index(path: &Path) -> Result<Index> {
+    if !validate_index_directory(path)? {
+        return Err(IndexCompatibilityError {
+            marker_path: index_version_marker_path(path),
+            expected: INDEX_SCHEMA_VERSION,
+            found: IndexVersionFound::Missing,
+        }
+        .into());
+    }
+    let index = Index::open_in_dir(path).map_err(|error| IndexCompatibilityError {
+        marker_path: index_version_marker_path(path),
+        expected: INDEX_SCHEMA_VERSION,
+        found: IndexVersionFound::Invalid(format!("unreadable Tantivy index: {error}")),
+    })?;
+    read_index_version(path)?;
+    register_tokenizers(&index)?;
+    Ok(index)
+}
+
+fn validate_index_directory(path: &Path) -> Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            bail!("refusing unsafe search index path: {}", path.display())
+        }
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn index_version_marker_path(index_path: &Path) -> PathBuf {

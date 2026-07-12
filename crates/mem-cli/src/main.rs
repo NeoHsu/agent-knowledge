@@ -7,36 +7,40 @@ mod commands;
 
 use args::*;
 use commands::*;
-use mem_core::app::{with_lock, App};
+use mem_core::app::{with_lock, with_shared_lock, App};
 use mem_core::index as memory_index;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    // prime/doctor/sync always target the runtime store; everything else uses
-    // full discovery (which includes source checkouts for development).
-    let app = match &cli.command {
-        Command::Prime(_) | Command::Doctor(_) | Command::Sync(_) => {
-            App::discover_runtime_with_home(cli.home.as_deref())?
-        }
-        _ => App::discover_with_home(cli.home.as_deref())?,
-    };
+    // Every command uses explicit/runtime discovery. A source checkout is never
+    // selected implicitly; development stores must use --home or MNEMARK_HOME.
+    let app = App::discover_runtime_with_home(cli.home.as_deref())?;
 
     match cli.command {
-        Command::Init => {
+        Command::Init => with_lock(&app, || {
             app.init()?;
             print_json(&json!({"status": "initialized", "root": app.root}))?;
-        }
+            Ok(())
+        })?,
+        Command::Migrate(args) if args.dry_run => cmd_migrate(&app, args)?,
+        Command::Migrate(args) => with_lock(&app, || cmd_migrate(&app, args))?,
         Command::Save(args) => with_lock(&app, || cmd_save(&app, args))?,
-        Command::Query(args) if args.no_touch => cmd_query(&app, args)?,
-        Command::Query(args) => with_lock(&app, || cmd_query(&app, args))?,
+        Command::Query(args) if args.touch || args.repair_index => {
+            with_lock(&app, || cmd_query(&app, args))?
+        }
+        Command::Query(args) => cmd_query(&app, args)?,
+        Command::Prime(args) if args.focus.is_some() && app.db_path.exists() => {
+            with_lock(&app, || cmd_prime(&app, args))?
+        }
         Command::Prime(args) => cmd_prime(&app, args)?,
         Command::Doctor(args) => cmd_doctor(&app, args)?,
+        Command::Sync(args) if args.dry_run => cmd_sync(&app, args)?,
         Command::Sync(args) => with_lock(&app, || cmd_sync(&app, args))?,
         Command::Update(args) => with_lock(&app, || cmd_update(&app, args))?,
         Command::Supersede(args) => with_lock(&app, || cmd_supersede(&app, args))?,
         Command::Delete(args) => with_lock(&app, || cmd_delete(&app, args))?,
         Command::Reindex => with_lock(&app, || {
-            app.ensure_schema()?;
+            app.require_schema()?;
             memory_index::reindex_or_mark_stale(&app, "rebuild index")?;
             print_json(&json!({"status": "reindexed"}))?;
             Ok(())
@@ -46,7 +50,8 @@ fn main() -> Result<()> {
         Command::Setup { command } => cmd_setup(command)?,
         Command::History(args) => cmd_history(&app, args)?,
         Command::Stats(args) => cmd_stats(&app, args)?,
-        Command::Audit(args) => with_lock(&app, || cmd_audit(&app, args))?,
+        Command::Audit(args) if args.fix => with_lock(&app, || cmd_audit(&app, args))?,
+        Command::Audit(args) => cmd_audit(&app, args)?,
         // Read-only: verifies claims against the filesystem, never writes.
         Command::Reconcile(args) => cmd_reconcile(&app, args)?,
         Command::Gc(args) => with_lock(&app, || cmd_gc(&app, args))?,
@@ -55,12 +60,18 @@ fn main() -> Result<()> {
         Command::Merge(args) => with_lock(&app, || cmd_merge(&app, args))?,
         Command::Bundle { command } => match command {
             BundleCommand::Inspect(args) => cmd_bundle(&app, BundleCommand::Inspect(args))?,
+            BundleCommand::Export(args) => {
+                with_shared_lock(&app, || cmd_bundle(&app, BundleCommand::Export(args)))?
+            }
             other => with_lock(&app, || cmd_bundle(&app, other))?,
         },
         Command::Retro { command } => cmd_retro(&app, command)?,
         Command::Workflow { command } => match command {
             WorkflowCommand::Record(args) => {
                 with_lock(&app, || cmd_workflow(&app, WorkflowCommand::Record(args)))?
+            }
+            WorkflowCommand::Show(args) if args.with_graph_context => {
+                with_lock(&app, || cmd_workflow(&app, WorkflowCommand::Show(args)))?
             }
             other => cmd_workflow(&app, other)?,
         },
@@ -75,7 +86,20 @@ fn main() -> Result<()> {
                 cmd_artifact(&app, command)?;
             }
         }
+        Command::Ambiguity {
+            command: AmbiguityCommand::List(args),
+        } => cmd_ambiguity(&app, AmbiguityCommand::List(args))?,
         Command::Ambiguity { command } => with_lock(&app, || cmd_ambiguity(&app, command))?,
+        Command::Graph {
+            command: GraphCommand::Stats,
+        } => cmd_graph(&app, GraphCommand::Stats)?,
+        Command::Graph {
+            command: GraphCommand::Review(args),
+        } => cmd_graph(&app, GraphCommand::Review(args))?,
+        Command::Graph {
+            command: GraphCommand::Candidates(args),
+        } if !args.unlinked => cmd_graph(&app, GraphCommand::Candidates(args))?,
+        Command::Graph { command } => with_lock(&app, || cmd_graph(&app, command))?,
     }
 
     Ok(())

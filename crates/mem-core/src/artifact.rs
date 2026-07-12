@@ -1,6 +1,10 @@
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Component, Path};
+
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -91,8 +95,16 @@ impl ArtifactManifest {
 
     pub fn load(root: &Path) -> Result<Option<Self>> {
         let path = root.join(MANIFEST_FILE);
-        if !path.exists() {
-            return Ok(None);
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                bail!("refusing unsafe artifact manifest path: {}", path.display())
+            }
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+        if metadata.len() > 8_388_608 {
+            bail!("artifact manifest exceeds 8388608 bytes");
         }
         let content =
             fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
@@ -109,8 +121,28 @@ impl ArtifactManifest {
         fs::create_dir_all(root).with_context(|| format!("create {}", root.display()))?;
         let path = root.join(MANIFEST_FILE);
         let content = toml::to_string_pretty(self).context("serialize artifact manifest")?;
-        fs::write(&path, content).with_context(|| format!("write {}", path.display()))?;
-        Ok(())
+        if content.len() > 8_388_608 {
+            bail!("artifact manifest exceeds 8388608 bytes");
+        }
+        let temporary = root.join(format!(
+            ".manifest.toml.tmp-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let write_result = (|| -> Result<()> {
+            let mut options = fs::OpenOptions::new();
+            options.create_new(true).write(true);
+            #[cfg(unix)]
+            options.mode(0o600);
+            let mut file = options.open(&temporary)?;
+            file.write_all(content.as_bytes())?;
+            file.sync_all()?;
+            install_atomic_file(&temporary, &path)?;
+            Ok(())
+        })();
+        if write_result.is_err() {
+            fs::remove_file(&temporary).ok();
+        }
+        write_result.with_context(|| format!("write {}", path.display()))
     }
 
     pub fn entries(&self) -> Vec<ArtifactEntry> {
@@ -308,7 +340,33 @@ pub fn remove_artifact(root: &Path, reference: &str, delete_file: bool) -> Resul
     })
 }
 
+#[cfg(not(windows))]
+fn install_atomic_file(temporary: &Path, target: &Path) -> Result<()> {
+    fs::rename(temporary, target)?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn install_atomic_file(temporary: &Path, target: &Path) -> Result<()> {
+    if !target.exists() {
+        fs::rename(temporary, target)?;
+        return Ok(());
+    }
+    let backup =
+        target.with_extension(format!("mnemark-replace-{}", uuid::Uuid::new_v4().simple()));
+    fs::rename(target, &backup)?;
+    if let Err(error) = fs::rename(temporary, target) {
+        let _ = fs::rename(&backup, target);
+        return Err(error.into());
+    }
+    fs::remove_file(backup).ok();
+    Ok(())
+}
+
 pub fn validate_artifact_path(path: &str) -> std::result::Result<(), String> {
+    if path.len() > 4_096 || path.chars().any(char::is_control) {
+        return Err("path exceeds 4096 bytes or contains control characters".to_string());
+    }
     let path = Path::new(path);
     if path.as_os_str().is_empty() {
         return Err("path is empty".to_string());
@@ -374,6 +432,9 @@ fn validate_artifact_name(name: &str) -> Result<String> {
     let name = name.trim();
     if name.is_empty() {
         bail!("artifact name is empty");
+    }
+    if name.len() > 256 || name.chars().any(char::is_control) {
+        bail!("artifact name exceeds 256 bytes or contains control characters");
     }
     if name.contains('.') || name.contains('/') || name.contains('\\') {
         bail!("artifact name must not contain '.', '/', or '\\'");
@@ -451,8 +512,27 @@ fn valid_sha256_checksum(value: &str) -> bool {
 }
 
 fn file_sha256(path: &Path) -> Result<String> {
-    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    Ok(format!("{SHA256_PREFIX}{}", sha256_hex(&bytes)))
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        bail!("refusing to hash non-regular file: {}", path.display());
+    }
+    let mut file = fs::File::open(path).with_context(|| format!("read {}", path.display()))?;
+    let mut state = sha256_initial_state();
+    let mut remaining = metadata.len();
+    let mut block = [0_u8; 64];
+    while remaining >= 64 {
+        file.read_exact(&mut block)?;
+        compress_sha256(&mut state, &block);
+        remaining -= 64;
+    }
+    let mut tail = vec![0_u8; remaining as usize];
+    file.read_exact(&mut tail)?;
+    let mut extra = [0_u8; 1];
+    if file.read(&mut extra)? != 0 {
+        bail!("file changed while hashing: {}", path.display());
+    }
+    finalize_sha256(&mut state, &tail, metadata.len())?;
+    Ok(format!("{SHA256_PREFIX}{}", format_sha256(&state)))
 }
 
 pub fn artifact_file_checksum(path: &Path) -> Result<String> {
@@ -477,8 +557,21 @@ fn is_executable(path: &Path) -> Result<bool> {
     Ok(metadata.is_file())
 }
 
+#[cfg(test)]
 fn sha256_hex(input: &[u8]) -> String {
-    let mut state = [
+    let mut state = sha256_initial_state();
+    let mut chunks = input.chunks_exact(64);
+    for chunk in &mut chunks {
+        let block: &[u8; 64] = chunk.try_into().expect("SHA-256 block length");
+        compress_sha256(&mut state, block);
+    }
+    finalize_sha256(&mut state, chunks.remainder(), input.len() as u64)
+        .expect("in-memory SHA-256 input length");
+    format_sha256(&state)
+}
+
+fn sha256_initial_state() -> [u32; 8] {
+    [
         0x6a09e667u32,
         0xbb67ae85,
         0x3c6ef372,
@@ -487,74 +580,88 @@ fn sha256_hex(input: &[u8]) -> String {
         0x9b05688c,
         0x1f83d9ab,
         0x5be0cd19,
-    ];
-    let mut data = input.to_vec();
-    let bit_len = (data.len() as u64) * 8;
-    data.push(0x80);
-    while data.len() % 64 != 56 {
-        data.push(0);
+    ]
+}
+
+fn finalize_sha256(state: &mut [u32; 8], tail: &[u8], total_bytes: u64) -> Result<()> {
+    if tail.len() >= 64 {
+        bail!("invalid SHA-256 tail length");
     }
-    data.extend_from_slice(&bit_len.to_be_bytes());
+    let bit_len = total_bytes
+        .checked_mul(8)
+        .ok_or_else(|| anyhow::anyhow!("file is too large to hash with SHA-256"))?;
+    let mut padding = Vec::with_capacity(128);
+    padding.extend_from_slice(tail);
+    padding.push(0x80);
+    while padding.len() % 64 != 56 {
+        padding.push(0);
+    }
+    padding.extend_from_slice(&bit_len.to_be_bytes());
+    for chunk in padding.chunks_exact(64) {
+        let block: &[u8; 64] = chunk.try_into().expect("SHA-256 padding block length");
+        compress_sha256(state, block);
+    }
+    Ok(())
+}
 
-    for chunk in data.chunks_exact(64) {
-        let mut w = [0u32; 64];
-        for (index, word) in chunk.chunks_exact(4).take(16).enumerate() {
-            w[index] = u32::from_be_bytes([word[0], word[1], word[2], word[3]]);
-        }
-        for index in 16..64 {
-            let s0 = w[index - 15].rotate_right(7)
-                ^ w[index - 15].rotate_right(18)
-                ^ (w[index - 15] >> 3);
-            let s1 = w[index - 2].rotate_right(17)
-                ^ w[index - 2].rotate_right(19)
-                ^ (w[index - 2] >> 10);
-            w[index] = w[index - 16]
-                .wrapping_add(s0)
-                .wrapping_add(w[index - 7])
-                .wrapping_add(s1);
-        }
-
-        let mut a = state[0];
-        let mut b = state[1];
-        let mut c = state[2];
-        let mut d = state[3];
-        let mut e = state[4];
-        let mut f = state[5];
-        let mut g = state[6];
-        let mut h = state[7];
-
-        for index in 0..64 {
-            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let ch = (e & f) ^ ((!e) & g);
-            let temp1 = h
-                .wrapping_add(s1)
-                .wrapping_add(ch)
-                .wrapping_add(K[index])
-                .wrapping_add(w[index]);
-            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
-            let maj = (a & b) ^ (a & c) ^ (b & c);
-            let temp2 = s0.wrapping_add(maj);
-
-            h = g;
-            g = f;
-            f = e;
-            e = d.wrapping_add(temp1);
-            d = c;
-            c = b;
-            b = a;
-            a = temp1.wrapping_add(temp2);
-        }
-
-        state[0] = state[0].wrapping_add(a);
-        state[1] = state[1].wrapping_add(b);
-        state[2] = state[2].wrapping_add(c);
-        state[3] = state[3].wrapping_add(d);
-        state[4] = state[4].wrapping_add(e);
-        state[5] = state[5].wrapping_add(f);
-        state[6] = state[6].wrapping_add(g);
-        state[7] = state[7].wrapping_add(h);
+fn compress_sha256(state: &mut [u32; 8], chunk: &[u8; 64]) {
+    let mut w = [0u32; 64];
+    for (index, word) in chunk.chunks_exact(4).take(16).enumerate() {
+        w[index] = u32::from_be_bytes([word[0], word[1], word[2], word[3]]);
+    }
+    for index in 16..64 {
+        let s0 =
+            w[index - 15].rotate_right(7) ^ w[index - 15].rotate_right(18) ^ (w[index - 15] >> 3);
+        let s1 =
+            w[index - 2].rotate_right(17) ^ w[index - 2].rotate_right(19) ^ (w[index - 2] >> 10);
+        w[index] = w[index - 16]
+            .wrapping_add(s0)
+            .wrapping_add(w[index - 7])
+            .wrapping_add(s1);
     }
 
+    let mut a = state[0];
+    let mut b = state[1];
+    let mut c = state[2];
+    let mut d = state[3];
+    let mut e = state[4];
+    let mut f = state[5];
+    let mut g = state[6];
+    let mut h = state[7];
+
+    for index in 0..64 {
+        let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+        let ch = (e & f) ^ ((!e) & g);
+        let temp1 = h
+            .wrapping_add(s1)
+            .wrapping_add(ch)
+            .wrapping_add(K[index])
+            .wrapping_add(w[index]);
+        let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+        let maj = (a & b) ^ (a & c) ^ (b & c);
+        let temp2 = s0.wrapping_add(maj);
+
+        h = g;
+        g = f;
+        f = e;
+        e = d.wrapping_add(temp1);
+        d = c;
+        c = b;
+        b = a;
+        a = temp1.wrapping_add(temp2);
+    }
+
+    state[0] = state[0].wrapping_add(a);
+    state[1] = state[1].wrapping_add(b);
+    state[2] = state[2].wrapping_add(c);
+    state[3] = state[3].wrapping_add(d);
+    state[4] = state[4].wrapping_add(e);
+    state[5] = state[5].wrapping_add(f);
+    state[6] = state[6].wrapping_add(g);
+    state[7] = state[7].wrapping_add(h);
+}
+
+fn format_sha256(state: &[u32; 8]) -> String {
     state
         .iter()
         .map(|word| format!("{word:08x}"))
@@ -590,6 +697,14 @@ mod tests {
         assert_eq!(
             sha256_hex(b"abc"),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(
+            sha256_hex(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
+            "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+        );
+        assert_eq!(
+            sha256_hex(&vec![b'a'; 1_000_000]),
+            "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
         );
     }
 

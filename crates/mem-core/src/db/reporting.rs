@@ -33,8 +33,9 @@ pub fn grouped_count(conn: &Connection, column: &str) -> Result<Value> {
     let col = GroupColumn::from_str(column)
         .ok_or_else(|| anyhow::anyhow!("grouped_count: unsupported column '{column}'; expected one of: type, scope, source, confidence"))?;
     let sql = format!(
-        "SELECT {}, COUNT(*) FROM memories WHERE valid_until IS NULL GROUP BY {}",
+        "SELECT {}, COUNT(*) FROM memories WHERE {} GROUP BY {}",
         col.as_sql_column(),
+        ACTIVE_MEMORY_SQL,
         col.as_sql_column()
     );
     let mut stmt = conn.prepare(&sql)?;

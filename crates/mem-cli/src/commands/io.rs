@@ -2,11 +2,32 @@ use super::*;
 use std::fmt::Write as _;
 
 pub(crate) fn cmd_export(app: &App, args: ExportArgs) -> Result<()> {
-    app.ensure_schema()?;
-    let conn = app.conn()?;
+    app.require_schema()?;
+    let conn = app.read_conn()?;
+    let estimated_bytes: i64 = conn.query_row(
+        "SELECT COALESCE(SUM(
+             length(CAST(id AS BLOB)) + length(CAST(type AS BLOB))
+             + length(CAST(name AS BLOB))
+             + length(CAST(COALESCE(description, '') AS BLOB))
+             + length(CAST(COALESCE(content, '') AS BLOB))
+             + length(CAST(tags AS BLOB)) + length(CAST(scope AS BLOB))
+             + length(CAST(source AS BLOB))
+         ), 0)
+         FROM memories",
+        [],
+        |row| row.get(0),
+    )?;
+    if estimated_bytes > 268_435_456 {
+        bail!(
+            "memory export exceeds the 268435456-byte in-memory limit; use `mem bundle export` \
+             for a complete large-store snapshot or `mem query` for bounded results"
+        );
+    }
     let mut memories = all_memories(&conn)?;
-    if !args.include_superseded {
-        memories.retain(|m| m.valid_until.is_none());
+    if args.include_superseded {
+        memories.retain(|memory| !is_expired(memory.expires_at.as_deref()));
+    } else {
+        memories.retain(memory_is_active);
     }
 
     match args.format {
@@ -40,6 +61,9 @@ fn render_export_markdown(memories: &[mem_core::db::Memory]) -> String {
 fn save_args_from_import_value(
     value: Value,
     source: &str,
+    user_confirmed: bool,
+    redact_secrets: bool,
+    origin_ref: &str,
     no_validate_workflow: bool,
 ) -> Result<SaveArgs> {
     let name = value
@@ -77,7 +101,11 @@ fn save_args_from_import_value(
             .map(str::to_string),
         why: None,
         force: false,
+        user_confirmed,
+        redact_secrets,
         no_validate_workflow,
+        origin: Some("import".to_string()),
+        origin_ref: Some(origin_ref.to_string()),
     })
 }
 
@@ -110,7 +138,13 @@ fn increment_count(counts: &mut serde_json::Map<String, Value>, status: &str) {
 }
 
 pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
-    app.ensure_schema()?;
+    app.require_schema()?;
+    let import_bytes = fs::metadata(&args.file)
+        .with_context(|| format!("inspect {}", args.file.display()))?
+        .len();
+    if import_bytes > 268_435_456 {
+        bail!("import file exceeds 268435456 bytes");
+    }
     let text =
         fs::read_to_string(&args.file).with_context(|| format!("read {}", args.file.display()))?;
     let mut results = Vec::new();
@@ -121,9 +155,15 @@ pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
         let conn = app.conn()?;
         let mut saved_ids: Vec<String> = Vec::new();
         for (index, value) in values.into_iter().enumerate() {
-            let import_result =
-                save_args_from_import_value(value, &args.source, args.no_validate_workflow)
-                    .and_then(|save_args| save_memory_no_index(app, save_args));
+            let import_result = save_args_from_import_value(
+                value,
+                &args.source,
+                args.user_confirmed,
+                args.redact_secrets,
+                &args.file.display().to_string(),
+                args.no_validate_workflow,
+            )
+            .and_then(|save_args| save_memory_no_index(app, save_args));
             match import_result {
                 Ok((result, maybe_id)) => {
                     let status = result_status(&result);
@@ -170,7 +210,11 @@ pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
                 expires_at: None,
                 why: None,
                 force: false,
+                user_confirmed: args.user_confirmed,
+                redact_secrets: args.redact_secrets,
                 no_validate_workflow: args.no_validate_workflow,
+                origin: Some("import".to_string()),
+                origin_ref: Some(args.file.display().to_string()),
             },
         )?;
         let status = result_status(&result);

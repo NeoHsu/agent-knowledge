@@ -1,6 +1,46 @@
 use super::*;
 use mem_core::config::user_config_path;
 
+pub(crate) fn cmd_migrate(app: &App, args: MigrateArgs) -> Result<()> {
+    let current = app.schema_version()?;
+    let target = mem_core::db::supported_schema_version();
+    if current > target {
+        bail!("database schema v{current} is newer than this binary supports (v{target})");
+    }
+    if args.dry_run {
+        let compatibility_required = if current == target {
+            let conn = app.read_conn()?;
+            let required = mem_core::db::schema_compatibility_required(&conn)?;
+            if !required {
+                mem_core::db::validate_store_schema_objects(&conn).context(
+                    "store contains unexpected schema objects; migration cannot repair untrusted DDL",
+                )?;
+            }
+            required
+        } else {
+            false
+        };
+        let migration_required = current < target || compatibility_required;
+        return print_json_pretty(&json!({
+            "status": "dry_run",
+            "root": app.root.display().to_string(),
+            "current_schema": current,
+            "target_schema": target,
+            "migration_required": migration_required,
+            "compatibility_repair_required": compatibility_required,
+            "backup_required": migration_required,
+        }));
+    }
+    let backup = app.migrate()?;
+    print_json_pretty(&json!({
+        "status": if backup.is_some() { "migrated" } else { "up_to_date" },
+        "root": app.root.display().to_string(),
+        "from_schema": current,
+        "to_schema": target,
+        "backup": backup.map(|path| path.display().to_string()),
+    }))
+}
+
 pub(crate) fn cmd_context(args: ContextArgs) -> Result<()> {
     if !args.detect {
         bail!("missing required action. Try `mem context --detect` to show the detected project scope, or `mem context --help` for options.");
@@ -42,8 +82,8 @@ pub(crate) fn cmd_config(app: &App, command: ConfigCommand) -> Result<()> {
 }
 
 pub(crate) fn cmd_history(app: &App, args: HistoryArgs) -> Result<()> {
-    app.ensure_schema()?;
-    let conn = app.conn()?;
+    app.require_schema()?;
+    let conn = app.read_conn()?;
     let mut sql = String::from(
         "SELECT changelog.id, memory_id, action, old_content, new_content, source, changelog.created_at
          FROM changelog",
@@ -51,9 +91,14 @@ pub(crate) fn cmd_history(app: &App, args: HistoryArgs) -> Result<()> {
     let mut clauses = Vec::new();
     let mut bind_values = Vec::new();
     if let Some(name) = args.name {
-        let memory_id = memory_by_name(&conn, &name)?
-            .map(|m| m.id)
-            .ok_or_else(|| anyhow!("memory not found: {name}"))?;
+        let scopes = if args.scope == "auto" {
+            scope::detect_scope_set()?
+        } else {
+            scope::validate_scope(&args.scope)?;
+            vec![args.scope.clone()]
+        };
+        let scope_refs = scopes.iter().map(String::as_str).collect::<Vec<_>>();
+        let memory_id = resolve_memory_ref_in_scopes(&conn, &name, Some(&scope_refs))?;
         clauses.push("memory_id = ?");
         bind_values.push(rusqlite::types::Value::Text(memory_id));
     }
@@ -92,8 +137,8 @@ pub(crate) fn cmd_history(app: &App, args: HistoryArgs) -> Result<()> {
 }
 
 pub(crate) fn cmd_stats(app: &App, args: StatsArgs) -> Result<()> {
-    app.ensure_schema()?;
-    let conn = app.conn()?;
+    app.require_schema()?;
+    let conn = app.read_conn()?;
     let report = stats_report(&conn)?;
     match args.format {
         OutputFormat::Json => print_json_pretty(&report)?,
@@ -104,25 +149,29 @@ pub(crate) fn cmd_stats(app: &App, args: StatsArgs) -> Result<()> {
 }
 
 pub(crate) fn cmd_audit(app: &App, args: AuditArgs) -> Result<()> {
-    app.ensure_schema()?;
-    let conn = app.conn()?;
+    app.require_schema()?;
+    let conn = if args.fix {
+        app.conn()?
+    } else {
+        app.read_conn()?
+    };
     let report = audit_report(&conn, app, args.fix)?;
     print_json_pretty(&report)?;
     Ok(())
 }
 
 pub(crate) fn stats_report(conn: &Connection) -> Result<Value> {
-    let total: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM memories WHERE valid_until IS NULL",
-        [],
-        |r| r.get(0),
-    )?;
+    let total_sql = format!("SELECT COUNT(*) FROM memories WHERE {ACTIVE_MEMORY_SQL}");
+    let total: i64 = conn.query_row(&total_sql, [], |r| r.get(0))?;
     let by_type = grouped_count(conn, "type")?;
     let by_scope = grouped_count(conn, "scope")?;
     let by_confidence = grouped_count(conn, "confidence")?;
     let top_accessed = query_json_rows(
         conn,
-        "SELECT name, access_count, last_accessed_at FROM memories WHERE valid_until IS NULL ORDER BY access_count DESC LIMIT 10",
+        &format!(
+            "SELECT name, access_count, last_accessed_at FROM memories \
+             WHERE {ACTIVE_MEMORY_SQL} ORDER BY access_count DESC LIMIT 10"
+        ),
     )?;
     Ok(json!({
         "total_active": total,
@@ -148,12 +197,15 @@ pub(crate) fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Va
     let stale_low_access = query_json_rows(
         conn,
         "SELECT name, created_at, access_count FROM memories
-         WHERE access_count = 0 AND datetime(created_at) < datetime('now', '-30 day') AND valid_until IS NULL",
+         WHERE access_count = 0 AND datetime(created_at) < datetime('now', '-30 day')
+           AND valid_until IS NULL
+           AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))",
     )?;
     let low_confidence_high_access = query_json_rows(
         conn,
         "SELECT name, confidence, access_count, last_accessed_at FROM memories
          WHERE confidence = 'low' AND access_count >= 3 AND valid_until IS NULL
+           AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))
          ORDER BY access_count DESC",
     )?;
     let cleanup_candidates = query_json_rows(
@@ -163,6 +215,7 @@ pub(crate) fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Va
          AND confidence IN ('low', 'medium')
          AND datetime(created_at) < datetime('now', '-60 day')
          AND valid_until IS NULL
+         AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))
          ORDER BY created_at ASC",
     )?;
 
@@ -172,6 +225,7 @@ pub(crate) fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Va
     } else {
         over_budget_scope_rows(conn, per_scope_max)?
     };
+    let graph = mem_core::graph::graph_health(conn)?;
 
     let mut fixed_expired = 0;
     let mut fixed_broken_links = 0;
@@ -203,6 +257,7 @@ pub(crate) fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Va
             )?;
             Ok(())
         })?;
+        mem_core::graph::set_graph_dirty(conn, true)?;
         memory_index::reindex_or_mark_stale(app, "rebuild index after audit --fix")?;
     }
 
@@ -214,6 +269,7 @@ pub(crate) fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Va
         "cleanup_candidates": cleanup_candidates,
         "per_scope_max": per_scope_max,
         "over_budget_scopes": over_budget_scopes,
+        "graph": graph,
         "fixed": fix,
         "fixed_expired": fixed_expired,
         "fixed_broken_links": fixed_broken_links
@@ -230,6 +286,7 @@ fn over_budget_scope_rows(conn: &Connection, per_scope_max: usize) -> Result<Vec
         &format!(
             "SELECT scope, COUNT(*) AS count FROM memories
              WHERE valid_until IS NULL
+               AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))
              GROUP BY scope
              HAVING COUNT(*) > {per_scope_max}
              ORDER BY count DESC"
@@ -241,6 +298,7 @@ fn over_budget_scope_rows(conn: &Connection, per_scope_max: usize) -> Result<Vec
         let mut stmt = conn.prepare(
             "SELECT name, confidence, access_count, created_at FROM memories
              WHERE valid_until IS NULL AND scope = ?1 AND protected = 0
+               AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))
              ORDER BY access_count ASC, created_at ASC
              LIMIT 10",
         )?;
@@ -265,7 +323,7 @@ fn over_budget_scope_rows(conn: &Connection, per_scope_max: usize) -> Result<Vec
 }
 
 pub(crate) fn cmd_gc(app: &App, args: GcArgs) -> Result<()> {
-    app.ensure_schema()?;
+    app.require_schema()?;
     let conn = app.conn()?;
     let cutoff = (Utc::now() - Duration::days(args.days)).to_rfc3339();
     let changed = with_transaction(&conn, |conn| {
@@ -286,6 +344,7 @@ pub(crate) fn cmd_gc(app: &App, args: GcArgs) -> Result<()> {
         )?;
         Ok(changed)
     })?;
+    mem_core::graph::set_graph_dirty(&conn, true)?;
     memory_index::reindex_or_mark_stale(app, "rebuild index after gc")?;
     print_json(&json!({"status": "gc_complete", "deleted": changed}))?;
     Ok(())

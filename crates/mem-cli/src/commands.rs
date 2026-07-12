@@ -56,34 +56,15 @@ pub(crate) fn print_json<T: Serialize + ?Sized>(value: &T) -> Result<()> {
     Output::Json.json(value)
 }
 
-/// Print a write-command response, attaching store provenance when the active
-/// store was discovered through a source checkout (schema-file discovery).
-/// This puts the Safety Gates evidence directly into the caller's context
-/// instead of relying on it to run `mem config show` first.
-pub(crate) fn print_write_json(app: &App, value: Value) -> Result<()> {
-    let value = attach_store_warning(app, value);
+/// Print a write-command response. Store selection is explicit/runtime-only;
+/// use `mem config show` when the target needs to be audited.
+pub(crate) fn print_write_json(_app: &App, value: Value) -> Result<()> {
     print_json(&value)
 }
 
 /// Pretty variant of `print_write_json` for multi-record responses.
-pub(crate) fn print_write_json_pretty(app: &App, value: Value) -> Result<()> {
-    let value = attach_store_warning(app, value);
+pub(crate) fn print_write_json_pretty(_app: &App, value: Value) -> Result<()> {
     print_json_pretty(&value)
-}
-
-fn attach_store_warning(app: &App, mut value: Value) -> Value {
-    use mem_core::app::StoreSource;
-    if matches!(
-        app.store_source,
-        StoreSource::CurrentDirectory | StoreSource::ExecutableParent
-    ) {
-        value["store_source"] = json!(app.store_source.as_str());
-        value["store_warning"] = json!(format!(
-            "active store {} was discovered from a source checkout; pass --home <runtime-store> if this is not intended",
-            app.root.display()
-        ));
-    }
-    value
 }
 
 pub(crate) fn print_json_pretty<T: Serialize + ?Sized>(value: &T) -> Result<()> {
@@ -121,7 +102,10 @@ pub(crate) fn render_table(headers: &[&str], rows: &[Vec<String>]) -> String {
 }
 
 pub(crate) fn truncate_text(value: &str, max_chars: usize) -> String {
-    let trimmed = value.replace(['\n', '\r', '\t'], " ");
+    let trimmed = value
+        .chars()
+        .map(|ch| if ch.is_control() { ' ' } else { ch })
+        .collect::<String>();
     let mut chars = trimmed.chars();
     let mut output = String::new();
     for _ in 0..max_chars {
@@ -153,6 +137,7 @@ mod ambiguity;
 mod artifact;
 mod bundle;
 mod doctor;
+mod graph;
 mod io;
 mod memory;
 mod merge;
@@ -165,12 +150,14 @@ mod sync;
 mod workflow;
 
 pub(crate) use admin::{
-    audit_report, cmd_audit, cmd_config, cmd_context, cmd_gc, cmd_history, cmd_stats, stats_report,
+    audit_report, cmd_audit, cmd_config, cmd_context, cmd_gc, cmd_history, cmd_migrate, cmd_stats,
+    stats_report,
 };
 pub(crate) use ambiguity::cmd_ambiguity;
 pub(crate) use artifact::cmd_artifact;
 pub(crate) use bundle::cmd_bundle;
 pub(crate) use doctor::cmd_doctor;
+pub(crate) use graph::cmd_graph;
 pub(crate) use io::{cmd_export, cmd_import};
 pub(crate) use memory::{
     cmd_delete, cmd_save, cmd_supersede, cmd_update, save_memory, save_memory_no_index,
@@ -207,7 +194,7 @@ mod tests {
             index_path: root.join("index"),
             root,
             config: Config::default(),
-            store_source: StoreSource::CurrentDirectory,
+            store_source: StoreSource::CliOverride,
         }
     }
 
@@ -225,12 +212,7 @@ mod tests {
         .expect("insert memory");
 
         fs::remove_dir_all(&app.index_path).expect("remove index");
-        fs::create_dir_all(&app.index_path).expect("index dir");
-        fs::write(
-            app.index_path.join("meta.json"),
-            "not valid tantivy metadata",
-        )
-        .expect("corrupt index");
+        fs::write(&app.index_path, "not a directory").expect("unsafe index path");
 
         let result = memory_index::upsert_or_mark_stale(&app, &conn, "broken_index");
 

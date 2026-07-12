@@ -572,6 +572,9 @@ mod tests {
             version: 1,
             access_count: 0,
             last_accessed_at: None,
+            origin: "direct".to_string(),
+            origin_ref: None,
+            user_confirmed_at: Some("2026-05-27T00:00:00Z".to_string()),
         };
 
         assert!(matches_intent(&memory, "fix ci"));
@@ -599,6 +602,9 @@ mod tests {
             version: 1,
             access_count: 0,
             last_accessed_at: None,
+            origin: "direct".to_string(),
+            origin_ref: None,
+            user_confirmed_at: Some("2026-05-27T00:00:00Z".to_string()),
         };
         let precise = Memory {
             id: "precise".to_string(),

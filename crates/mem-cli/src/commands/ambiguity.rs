@@ -1,20 +1,42 @@
 use super::*;
 
 pub(crate) fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> {
-    app.ensure_schema()?;
-    let conn = app.conn()?;
+    app.require_schema()?;
     match command {
         AmbiguityCommand::Add(args) => {
+            let conn = app.conn()?;
             validate_tags(&args.memory_ids)?;
+            sanitize_secret_field(&args.memory_ids, "ambiguity memory ids", false)?;
             let memory_ids = parse_string_array(&args.memory_ids)?;
-            add_ambiguity_record(&conn, &args.query, &memory_ids, args.context.as_deref())?;
-            print_json(&json!({"status": "ambiguity_added", "id": conn.last_insert_rowid()}))?;
+            if memory_ids.len() > 1_000 {
+                bail!("ambiguity memory_ids cannot exceed 1000 entries");
+            }
+            if args.query.len() > 10_000 {
+                bail!("ambiguity query exceeds 10000 bytes");
+            }
+            if args
+                .context
+                .as_deref()
+                .is_some_and(|value| value.len() > 4_194_304)
+            {
+                bail!("ambiguity context exceeds 4194304 bytes");
+            }
+            let query = sanitize_secret_field(&args.query, "ambiguity query", args.redact_secrets)?;
+            let context = args
+                .context
+                .as_deref()
+                .map(|value| sanitize_secret_field(value, "ambiguity context", args.redact_secrets))
+                .transpose()?;
+            let id = add_ambiguity_record(&conn, &query, &memory_ids, context.as_deref())?;
+            print_json(&json!({"status": "ambiguity_added", "id": id}))?;
         }
         AmbiguityCommand::List(args) => {
+            let conn = app.read_conn()?;
             let rows = ambiguity_rows(&conn, args.pending)?;
             print_json_pretty(&rows)?;
         }
         AmbiguityCommand::Resolve(args) => {
+            let conn = app.conn()?;
             let now = now();
             let ambiguity = ambiguity_by_id(&conn, args.id)?
                 .ok_or_else(|| anyhow!("ambiguity not found: {}", args.id))?;
@@ -25,8 +47,36 @@ pub(crate) fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> 
             let memory_ids = parse_string_array(raw_memory_ids)?;
             let mut soft_deleted = Vec::new();
             let mut skipped_protected = Vec::new();
+            let scopes = if args.scope == "auto" {
+                scope::detect_scope_set()?
+            } else {
+                scope::validate_scope(&args.scope)?;
+                vec![args.scope.clone()]
+            };
+            let scope_refs = scopes.iter().map(String::as_str).collect::<Vec<_>>();
+            if let Some(reference) = args.keep.as_deref() {
+                sanitize_secret_field(reference, "ambiguity keep reference", false)?;
+            }
+            if args
+                .note
+                .as_deref()
+                .is_some_and(|value| value.len() > 65_536)
+            {
+                bail!("ambiguity resolution note exceeds 65536 bytes");
+            }
+            let note = args
+                .note
+                .as_deref()
+                .map(|value| {
+                    sanitize_secret_field(value, "ambiguity resolution note", args.redact_secrets)
+                })
+                .transpose()?;
             let keep_id = match args.keep.as_deref() {
-                Some(reference) => Some(resolve_memory_ref(&conn, reference)?),
+                Some(reference) => Some(resolve_memory_ref_in_scopes(
+                    &conn,
+                    reference,
+                    Some(&scope_refs),
+                )?),
                 None => None,
             };
             let reindex_needed = with_transaction(&conn, |conn| {
@@ -60,7 +110,7 @@ pub(crate) fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> 
 
                 let resolution = json!({
                     "status": "resolved",
-                    "note": args.note,
+                    "note": &note,
                     "keep": keep_id,
                     "soft_deleted": soft_deleted,
                     "skipped_protected": skipped_protected
@@ -70,6 +120,9 @@ pub(crate) fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> 
                     "UPDATE ambiguities SET resolution = ?1, resolved_at = ?2 WHERE id = ?3",
                     params![resolution, now, args.id],
                 )?;
+                if !soft_deleted.is_empty() {
+                    mem_core::graph::set_graph_dirty(conn, true)?;
+                }
                 Ok(!soft_deleted.is_empty())
             })?;
             if reindex_needed {
@@ -83,7 +136,7 @@ pub(crate) fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> 
                 "id": args.id,
                 "resolution": {
                     "status": "resolved",
-                    "note": args.note,
+                    "note": &note,
                     "keep": keep_id,
                     "soft_deleted": soft_deleted,
                     "skipped_protected": skipped_protected

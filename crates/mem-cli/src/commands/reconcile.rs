@@ -5,7 +5,7 @@ use mem_core::config::expand_home;
 use mem_core::util::{Claim, ClaimKind};
 
 pub(crate) fn cmd_reconcile(app: &App, args: ReconcileArgs) -> Result<()> {
-    app.ensure_schema()?;
+    app.require_schema()?;
     let repo_root = match args.repo {
         Some(dir) => dir,
         None => std::env::current_dir().context("resolve current directory")?,
@@ -17,11 +17,12 @@ pub(crate) fn cmd_reconcile(app: &App, args: ReconcileArgs) -> Result<()> {
     let scopes = if args.scope == "auto" {
         scope::detect_scope_set()?
     } else {
+        scope::validate_scope(&args.scope)?;
         vec![args.scope.clone()]
     };
     let scope_refs = scopes.iter().map(String::as_str).collect::<Vec<_>>();
 
-    let conn = app.conn()?;
+    let conn = app.read_conn()?;
     let mut memories = list_memories_filtered(
         &conn,
         false,
