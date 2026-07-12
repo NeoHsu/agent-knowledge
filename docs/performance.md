@@ -1,33 +1,67 @@
 # Performance Baseline
 
-`mnemark` includes a deterministic scale benchmark for production canary work:
+`mnemark` includes an isolated, deterministic scale benchmark for regression and
+production-canary work:
 
 ```bash
 scripts/build-release.sh
-scripts/benchmark-scale.sh
+REPORT_FILE=/tmp/mnemark-benchmark.json scripts/benchmark-scale.sh
 ```
 
-The benchmark creates isolated temporary stores, imports generated memories, and
-measures release-binary import, lexical query, prime, graph rebuild, and bundle
-export. It performs no network access and removes the stores afterward.
+The benchmark generates mixed Prime-visible and reference memories, creates a
+fresh store for every import sample, and measures the optimized release binary.
+Interactive operations receive one warmup by default and run in separate
+processes while retaining the operating system cache. Scale order is
+seed-randomized. Every measured operation also runs a correctness assertion.
+
+The CSV summary reports median, p95 (only when at least 20 samples exist),
+minimum, maximum, peak RSS, and input/output sizes. The JSON report additionally
+records:
+
+- platform, Rust and Python versions;
+- Git commit and dirty state;
+- binary and benchmark-script SHA-256 hashes;
+- seed, execution order, run counts, and cache model;
+- database, Tantivy index, and bundle sizes;
+- bundle snapshot, validation, hashing, archive, and install stage timings.
 
 ## 0.6.0 local baseline
 
-Measured on 2026-07-11 with an Apple M2 Max (`arm64`, Darwin 25.5.0), Rust
-1.97.0, SQLite bundled through `rusqlite`, and the optimized release profile:
+Measured on 2026-07-13 with an Apple M2 Max (`arm64`), macOS 26.5.1, Rust
+1.97.0, bundled SQLite, and the optimized release profile. Interactive values
+are p50 / p95 across 20 samples; maintenance values are p50 across 5 fresh or
+repeated samples as appropriate.
 
-| Memories | Import | Query (20) | Prime (4,000 chars) | Graph rebuild | Bundle export |
+| Memories | Import p50 | Query p50 / p95 | Prime p50 / p95 | Graph rebuild p50 | Bundle export p50 |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | 727 ms | 45 ms | 37 ms | 57 ms | 1.06 s |
-| 1,000 | 5.06 s | 48 ms | 41 ms | 468 ms | 7.13 s |
-| 10,000 | 52.54 s | 159 ms | 201 ms | 4.76 s | 68.22 s |
+| 100 | 306 ms | 20 / 23 ms | 32 / 38 ms | 43 ms | 45 ms |
+| 1,000 | 417 ms | 20 / 23 ms | 31 / 34 ms | 357 ms | 239 ms |
+| 10,000 | 1.66 s | 39 / 50 ms | 51 / 63 ms | 3.58 s | 2.25 s |
 
 These figures are a regression baseline, not a cross-machine service-level
-objective. Query and prime remain interactive at 10,000 memories. Bulk import
-and bundle export are maintenance operations; bundle export includes an online
-SQLite snapshot, full durable-field secret scan, artifact scan, and SHA-256 for
-every bundled file.
+objective. Query uses bounded adaptive over-fetch and deterministic reranking;
+`[query].candidate_limit` defaults to 10,000 and may be set from 200 to 100,000
+when a larger lexical candidate set is required. Prime applies ranking and
+`LIMIT` in SQLite. Import uses 500-row chunk transactions with per-item
+savepoints. Bundle export includes an online SQLite snapshot, full durable-field
+secret scan, artifact validation, SHA-256, and gzip archive creation.
 
-Use `SCALES="100 1000" scripts/benchmark-scale.sh` for bounded development runs.
-Record hardware, operating system, Rust version, and profile when comparing
-results.
+The earlier benchmark populated only `reference` memories, so its Prime numbers
+did not exercise Prime retrieval. It also measured the intentionally throttled
+SQLite backup loop that previously dominated bundle export. Do not compare those
+figures directly with this corrected mixed-data baseline.
+
+For bounded development or CI runs:
+
+```bash
+SCALES="100 1000" \
+INTERACTIVE_RUNS=2 \
+MAINTENANCE_RUNS=1 \
+WARMUP_RUNS=0 \
+REPORT_FILE=/tmp/mnemark-benchmark.json \
+scripts/benchmark-scale.sh
+```
+
+Run the default 20 interactive samples and 3-5 maintenance samples before
+publishing performance claims. Keep the JSON report so results remain tied to a
+binary hash, commit, cache model, and correctness checks.

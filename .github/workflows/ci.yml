@@ -42,3 +42,12 @@ jobs:
         run: ls -lh target/release/mem
       - if: matrix.rust == 'stable'
         run: scripts/smoke-release.sh
+      - name: Benchmark correctness smoke
+        if: matrix.rust == 'stable'
+        env:
+          SCALES: "100 1000"
+          INTERACTIVE_RUNS: "2"
+          MAINTENANCE_RUNS: "1"
+          WARMUP_RUNS: "0"
+          REPORT_FILE: ${{ runner.temp }}/benchmark-report.json
+        run: scripts/benchmark-scale.sh | tee "$RUNNER_TEMP/benchmark.csv"
