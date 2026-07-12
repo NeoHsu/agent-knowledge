@@ -44,9 +44,9 @@ Runtime memory data is not stored in this source repository. See `docs/runtime-m
 ## Save and query the first memory
 
 ```bash
-mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
+mem save --type feedback --name no_emoji --scope global --source manual --user-confirmed --tags '["style"]' --content "不要使用 emoji"
 mem query "emoji"
-mem query "name:no_emoji" --raw-query --no-touch
+mem query "name:no_emoji" --raw-query
 ```
 
 Supported memory types are:
@@ -58,7 +58,7 @@ Supported memory types are:
 - `preference`
 - `workflow`
 
-`--no-touch` skips `access_count` and `last_accessed_at` updates, so it is safe for read-only agent context loading.
+Query is read-only and no-touch by default. Use `--touch` only when access telemetry is intentional. Secret-like values reject writes unless `--redact-secrets` is explicit; manual provenance requires `--user-confirmed`.
 
 ## Wire mnemark into your coding agents
 
@@ -68,12 +68,13 @@ One command per agent platform wires the whole institution — policy block, bun
 mem setup list
 mem setup claude-code
 mem setup codex
+mem setup pi
 mem setup gemini-cli
 mem setup opencode
 mem doctor
 ```
 
-`mem doctor` verifies every layer afterwards and prints a fix hint for anything missing. All setup commands are idempotent; use `--dry-run` to preview. See the capability matrix and overrides in `skills/mnemark/references/cli-guide.md`.
+The bundled skill is installed once at `~/.agents/skills/mnemark`. Pi reads that Agent Skills location directly; Claude Code and Codex use per-skill symlinks from their platform directories. `mem doctor` verifies the shared files and links as well as policy and session-start wiring. All setup commands are idempotent; use `--dry-run` to preview. See the capability matrix and overrides in `skills/mnemark/references/cli-guide.md`.
 
 For multi-machine durability, make the store its own git repository and use `mem sync`:
 
@@ -81,12 +82,14 @@ For multi-machine durability, make the store its own git repository and use `mem
 cd ~/.mnemark
 git init -b main
 git remote add origin <private-repo-url>
-mem sync
+mem sync --dry-run
+mem sync          # local checkpoint + fetch/merge, no push
+mem sync --push   # only after explicit approval
 ```
 
 ## Install the mnemark skill manually
 
-`mem setup <platform>` already installs the bundled skill for platforms with a skill directory. Alternatively, install from the repository with the open agent skills CLI:
+`mem setup <platform>` already installs the bundled skill into the shared Agent Skills directory and links platform-specific skill paths when needed. Alternatively, install from the repository with the open agent skills CLI:
 
 ```bash
 npx skills add https://github.com/NeoHsu/mnemark/tree/main/skills/mnemark
@@ -120,7 +123,7 @@ mem setup agent-policy --target CLAUDE.md
 mem setup agent-policy --target AGENTS.md --dry-run
 ```
 
-The command is idempotent. If the `mnemark memory policy` block already exists, it will not insert a duplicate.
+The command is idempotent. It upgrades recognized older policy blocks, verifies the complete managed v5 content, and reports drift instead of trusting the marker alone.
 
 ## Next steps
 

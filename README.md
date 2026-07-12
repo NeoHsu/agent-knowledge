@@ -45,11 +45,13 @@ Checksums are published next to the release assets. See the [latest release](htt
 ```bash
 mem init
 mem config show
-mem save --type feedback --name no_emoji --scope global --source manual --tags '["style"]' --content "不要使用 emoji"
+mem save --type feedback --name no_emoji --scope global --source manual --user-confirmed --tags '["style"]' --content "不要使用 emoji"
 mem query "emoji"
-mem query "name:no_emoji" --raw-query --no-touch
+mem query "name:no_emoji" --raw-query
 mem setup agent-policy
-mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
+mem setup claude-code
+mem setup pi
+mem save --type workflow --name release_runbook --scope global --source manual --user-confirmed --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
 mem workflow find release --scope auto
 mem workflow validate release_runbook
 mem artifact check
@@ -65,10 +67,13 @@ mem retro daily
 | [Getting Started](docs/getting-started.md) | Install, initialize, first save/query, and mnemark skill install |
 | [Workflows](docs/workflows.md) | Workflow memories, artifacts, bundles, import/export, merge, and retrospectives |
 | [Runtime Model](docs/runtime-model.md) | Store discovery, config priority, runtime files, artifact layout, and index behavior |
+| [Graph Memory](docs/graph-memory.md) | Deterministic local graph index, explain/path/export commands, and non-RAG stance |
 | [mnemark Skill CLI Guide](skills/mnemark/references/cli-guide.md) | Complete current `mem` CLI command reference |
 | [Workflow Rules](skills/mnemark/references/workflow-rules.md) | How agents should interpret and safely execute workflow memory runbooks |
 | [Agent Reference](docs/agent-reference.md) | Canonical instructions for agents changing this repo: safety rules, repo map, task routing, validation |
 | [Development](docs/development.md) | Local setup, source commands, validation, release smoke tests, developer notes |
+| [Performance](docs/performance.md) | Reproducible 100/1,000/10,000-memory release baseline |
+| [Changelog](CHANGELOG.md) | Breaking changes, features, and fixes by release |
 
 ## Agent Skill
 
@@ -89,20 +94,21 @@ npx skills add ./skills/mnemark
 | Area | Feature | Commands / Files |
 | --- | --- | --- |
 | Memory | Save, query, update, supersede, delete | `mem save`, `query`, `update`, `supersede`, `delete` |
-| Memory types | User, feedback, project, reference, preference, workflow | `--type user|feedback|project|reference|preference|workflow` |
-| Search | Multilingual Tantivy search, fuzzy matching, raw query syntax | `mem query`, `--fuzzy`, `--raw-query`, `--no-touch` |
+| Memory types | User, feedback, project, reference, preference, workflow | `--type user\|feedback\|project\|reference\|preference\|workflow` |
+| Search | Multilingual Tantivy search, deterministic trust-aware reranking, fuzzy/raw syntax | `mem query`, `--fuzzy`, `--raw-query`, `--explain-score`, `--touch` |
 | Scope | Global and project-aware context | `mem context --detect`, `--scope auto` |
 | Lifecycle | Soft delete, protected manual memories, version conflicts | `valid_until`, `protected`, `--expected-version` |
 | History | Changelog and stats | `mem history`, `mem stats` |
 | Health | Audit and garbage collection | `mem audit`, `mem audit --fix`, `mem gc` |
 | Reconcile | Verify path/command claims in memories against the filesystem | `mem reconcile`, `--scope`, `--repo` |
-| Workflow | Store recurring runbooks as validated memory | `mem workflow list|find|show|validate` |
-| Artifacts | Portable helper file metadata and safety checks | `mem artifact list|show|check|add|update|remove`, `manifest.toml` |
-| Bundles | Portable store export/import/inspect | `mem bundle export|inspect|import` |
-| Migration | JSON/Markdown import, JSON/Markdown export, DB merge | `mem import`, `mem export`, `mem merge` |
-| Retrospective | Daily/weekly orchestration bundles for agents | `mem retro daily|weekly` |
-| Agent setup | Coding-agent entrypoint memory policy | `mem setup agent-policy` |
-| Agent skill | Project-shipped mnemark skill | `skills/mnemark` |
+| Graph | Rebuild, traverse, query, review relationship graph, and focused priming | `mem graph rebuild\|stats\|explain\|path\|query\|ingest\|review\|export` / `mem prime --focus` |
+| Workflow | Store recurring runbooks as validated memory | `mem workflow list\|find\|show\|validate` |
+| Artifacts | Portable helper file metadata and safety checks | `mem artifact list\|show\|check\|add\|update\|remove` / `manifest.toml` |
+| Bundles | Portable store export/import/inspect | `mem bundle export\|inspect\|import` |
+| Migration | Explicit schema migration, JSON/Markdown import/export, idempotent durable-state DB merge | `mem migrate`, `mem import`, `mem export`, `mem merge` |
+| Retrospective | Daily/weekly orchestration bundles for agents | `mem retro daily\|weekly` |
+| Agent setup | Platform policy, shared skill links, and startup adapters | `mem setup agent-policy\|claude-code\|codex\|pi\|gemini-cli\|opencode` |
+| Agent skill | Versioned source plus shared installation | `skills/mnemark` → `~/.agents/skills/mnemark` |
 
 ## Runtime Store
 

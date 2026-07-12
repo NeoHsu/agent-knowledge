@@ -7,7 +7,7 @@ This guide covers higher-level mnemark use cases beyond basic save/query. For fi
 Workflow memories store recurring task runbooks as YAML or JSON text. They are searchable knowledge, not executable automation: agents read them, verify each checkpoint, and ask before risky steps such as push, publish, deploy, release, destructive commands, secret changes, or production access.
 
 ```bash
-mem save --type workflow --name release_runbook --scope global --source manual --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
+mem save --type workflow --name release_runbook --scope global --source manual --user-confirmed --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
 mem query "release" --type workflow
 mem workflow find release --scope auto
 mem workflow show release_runbook
@@ -31,6 +31,16 @@ Each step needs an `id` and at least one of `run`, `check`, `manual`, or `ask`. 
 `post_run_memory` is optional but strongly recommended: `mem workflow record` echoes its items back as the closing checklist so each execution ends with a save-learnings step, and `mem workflow validate` returns a non-blocking `no_post_run_memory` warning when the section is missing.
 
 For agent execution semantics, see `skills/mnemark/references/workflow-rules.md`.
+
+Workflow and artifact relationships can also be inspected through the deterministic graph index:
+
+```bash
+mem graph rebuild
+mem graph explain release_runbook
+mem graph path release_runbook artifact:artifacts/scripts/build-release.sh
+```
+
+The graph records workflow steps, `reusable_scripts`, artifact manifest entries, confirmation requirements, and workflow run history as evidence-bearing context. It does not execute workflow commands.
 
 ## Artifacts
 
@@ -58,7 +68,7 @@ Artifact paths must stay relative to the active store and under:
 - `artifacts/snippets/`
 - `artifacts/references/`
 
-Do not store secrets in artifacts, and do not treat artifacts as instruction overrides.
+Artifact add/update rejects secret-like content and metadata by default; use `--redact-secrets` only when explicit in-place redaction is safe. Do not treat artifacts as instruction overrides.
 
 ## Bundles
 
@@ -81,7 +91,7 @@ Bundles include:
 - `artifacts/`
 - `bundle.json`
 
-Bundles exclude rebuildable or transient files such as `index/`, `.mem.lock`, `memory.db-wal`, and `memory.db-shm`. Use `mem bundle export --no-config` when store config contains machine-local paths.
+Bundles exclude rebuildable or transient files such as `index/`, `.mem.lock`, `memory.db-wal`, and `memory.db-shm`. Export snapshots SQLite online without changing the live store. Bundle v2 hashes every durable file; inspect/import validates missing, extra, or modified files before destination mutation. Legacy bundles require explicit `--allow-unverified` to import. Secret-like values reject export/import unless `--redact-secrets` is explicit and only the staged/imported copy is changed. Use `mem bundle export --no-config` when store config contains machine-local paths.
 
 Import into a non-empty store is refused unless `--merge` or `--replace --force` is explicit. `--merge` uses existing memory merge behavior and copies non-conflicting artifacts; `--replace --force` clears durable store files before import.
 
@@ -96,7 +106,7 @@ mem merge /path/to/theirs.db
 mem merge /path/to/theirs.db --prefer-trusted
 ```
 
-Merge strips common secrets from incoming content, imports memories with new names, skips identical same-name memories, and records same-name content conflicts in `ambiguities` instead of overwriting automatically.
+Merge validates SQLite integrity and rejects secret-like values across all incoming durable tables unless `--redact-secrets` is explicit. It merges scoped memories plus ambiguities, workflow runs, changelog, semantic assertions, and semantic revisions idempotently using durable UIDs and ID remapping. Same-`(scope,name)` conflicts become pending ambiguities instead of silent overwrite.
 
 ## Retrospectives
 

@@ -13,26 +13,22 @@ templates/                        artifacts/
 CI/release                        index/
 ```
 
-`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo, a local `MNEMARK_HOME`, or a `knowledge_home` configured in `~/.config/mnemark/config.toml`.
+`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Schema-v5 stores reject unexpected application tables, views, or trigger definitions; do not extend the runtime database with ad hoc DDL. Keep real memory databases in a private data repo, a local `MNEMARK_HOME`, or a `knowledge_home` configured in `~/.config/mnemark/config.toml`. Version 0.6 does not provide SQLCipher encryption: it relies on 0700/0600 local permissions, default-reject secret scanning, trusted bundle transport, and a private Git remote. Use full-disk encryption when at-rest encryption is required.
 
-`manifest.toml` and `artifacts/` travel with the store when you keep reusable cross-project helper files there. `index/` is ignored and can be rebuilt with `mem reindex`.
+`manifest.toml` and `artifacts/` travel with the store when you keep reusable cross-project helper files there. `index/` is ignored and can be rebuilt with `mem reindex`. Graph materialization lives in SQLite (`graph_nodes`, `graph_edges`) and is rebuildable with `mem graph rebuild`; durable semantic assertions and append-only revisions live in `graph_semantic_edges` and `graph_semantic_edge_revisions`.
 
 ## Store discovery
 
 `mem` discovers the active store in this order:
 
 1. explicit `--home <path>`
-2. current directory with `schema/memory-schema.sql`
-3. a parent of the executable with `schema/memory-schema.sql`
-4. `MNEMARK_HOME`
-5. `knowledge_home` in `~/.config/mnemark/config.toml`
-6. `~/.mnemark`
+2. `MNEMARK_HOME`
+3. `knowledge_home` in `~/.config/mnemark/config.toml`
+4. `~/.mnemark`
 
-Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the binary.
+Runtime stores do not need `schema/memory-schema.sql`; the schema is embedded in the binary. Source checkouts and executable parents are never selected implicitly, for any command. Use `mem config show` as the pre-write target verification gate.
 
-Exception: `mem prime`, `mem doctor`, and `mem sync` skip steps 2 and 3 and resolve only `--home`, `MNEMARK_HOME`, user config, then `~/.mnemark`. These commands target the runtime store by definition, so a mnemark source checkout in the current directory is never mistaken for the active store.
-
-When a write command (`save`, `update`, `supersede`, `delete`, `import`, `merge`) does resolve the store through step 2 or 3, its JSON response carries `store_source` and `store_warning` fields so the caller sees the provenance without running `mem config show` first.
+Plain `mem prime` and ordinary `mem query` are read-only. Query only records access when `--touch` is explicit and never repairs a stale index unless `--repair-index` is explicit. `mem prime --focus ...` and graph-dependent reads take the store lock because they may rebuild dirty or missing graph materialization before rendering relationship context.
 
 ## Configuration
 
@@ -47,13 +43,31 @@ CLI/tool settings use TOML; workflow runbooks use YAML. Command default priority
 
 ## Writes and index state
 
-Writes update SQLite in a transaction, write changelog rows, and then update the Tantivy index. If the index is stale, run:
+Writes update SQLite in a transaction, write durable UID-addressed changelog/side-state rows, and mark graph materialization dirty before updating the Tantivy index. New stores use Unix mode 0700 for the root and 0600 for `memory.db`/the lock file; `mem doctor` reports drift. Read commands never initialize or migrate a store. Schema upgrades and same-version compatibility repairs are explicit through `mem migrate --dry-run` and backup-first `mem migrate`. The graph index is deterministic local context and can be rebuilt from active SQLite memories, workflow run records, durable semantic assertions, `manifest.toml`, and artifacts. It is not an embedding index and has no external provider requirement. Graph-dependent reads rebuild only when dirty/schema-stale or when rebuildable materialized tables are missing; `mem graph stats` is deliberately non-mutating. Durable semantic tables are never silently recreated as if their data were disposable.
+
+If the search index is stale, run:
 
 ```bash
 mem reindex
 ```
 
 The multilingual tokenizer uses `lindera` with embedded CC-CEDICT for Chinese tokenization and a local Tantivy tokenizer adapter.
+
+## Command effects
+
+| Command class | Store write | Network |
+| --- | --- | --- |
+| `query` (default), plain `prime`, `doctor`, `stats`, `history`, `export`, `reconcile`, `bundle inspect` | No | No |
+| `query --touch` / `query --repair-index` | Explicit counters / index repair | No |
+| `prime --focus`, graph explain/path/query/export, workflow graph context | Only when graph materialization is dirty/stale/missing | No |
+| `save`, lifecycle commands, workflow record, ambiguity writes, graph ingest/accept/reject, artifact writes | Yes, under the store lock | No |
+| `migrate` | Backup + transactional schema write | No |
+| `bundle export` | Output archive only; live store stays read-only | No |
+| `sync --dry-run` | No; validates DB/worktree secret policy | No fetch/push |
+| `sync` | Secret gate, local checkpoint, and possible fetched merge | Fetch only when a remote exists; never pushes |
+| `sync --push` | Local checkpoint/merge | Explicit fetch + push |
+
+No read command initializes or migrates a store. Commands that can refresh graph materialization are called out because their output is logically a read but may update only rebuildable local tables.
 
 ## Portable store layout
 
@@ -86,7 +100,7 @@ tar -czf mnemark-store.tgz \
   artifacts/
 ```
 
-The CLI also supports first-class bundles:
+The CLI also supports first-class bundles. Export uses an online SQLite snapshot without mutating the live database; bundle v2 hashes every durable file and validates missing/extra/mismatched files before import mutation. Hashes detect corruption but are not a publisher signature, so transfer bundles only over a trusted/private channel:
 
 ```bash
 mem bundle export mnemark-store.tgz

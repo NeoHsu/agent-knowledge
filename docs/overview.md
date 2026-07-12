@@ -22,13 +22,14 @@ and the active knowledge store.
                      "記住…" / "幫我存" / recall / retro
                                v
  +-------------------------------------------------------------------+
- |  CODING AGENT   Claude Code / Codex / Gemini CLI / opencode       |
+ |  CODING AGENT   Claude Code / Codex / pi / Gemini / opencode      |
  |                                                                   |
  |  `mem setup <platform>` wires 3 idempotent layers:                |
  |    [1] policy block  -> CLAUDE.md / AGENTS.md                      |
  |          "use mem, not built-in memory; run `mem prime` at start" |
- |    [2] session hook  -> SessionStart runs `mem prime`             |
- |    [3] skill files   -> skills/mnemark/ (SKILL.md + references)   |
+ |    [2] session hook  -> native hook where available               |
+ |    [3] shared skill  -> ~/.agents/skills/mnemark                  |
+ |          platform-specific directories link to the shared copy    |
  +-------------------------------------------------------------------+
                                |
                                | shells out to
@@ -48,14 +49,11 @@ and the active knowledge store.
  |    manifest.toml  <- artifact metadata                            |
  |    artifacts/     <- portable helper scripts / templates / ...    |
  |    config.toml    <- store-local defaults                         |
- |    .git/          <- versioned and pushed by `mem sync`           |
+ |    .git/          <- private versioning; push only with `mem sync --push` |
  +-------------------------------------------------------------------+
 ```
 
-Store discovery order (the runtime resolves the first that matches): `--home`
--> cwd with `schema/memory-schema.sql` -> executable-near repo -> `MNEMARK_HOME`
--> user config `knowledge_home` -> `~/.mnemark`. `prime`, `doctor`, and `sync`
-skip the cwd/executable steps so a source checkout is never mistaken for a store.
+Store discovery order is runtime-only for every command: `--home` -> `MNEMARK_HOME` -> user config `knowledge_home` -> `~/.mnemark`. A source checkout and executable parent are never selected implicitly.
 
 ## 2. Session lifecycle — the core loop
 
@@ -89,7 +87,9 @@ What a normal coding session looks like once mnemark is wired in.
   work unit complete
        |
        v
-  [ mem sync ]  commit + merge + push the store
+  [ mem sync ]  local checkpoint + fetch/merge (no push by default)
+       |
+       +--> mem sync --push only after explicit user approval
 ```
 
 ## 3. Inside `mem save`
@@ -100,7 +100,11 @@ Every write runs the same pipeline. Warnings never block the save.
   mem save --type … --scope … --tags … --content "…"
        |
        v
-  strip secrets    (API keys, bearer tokens, password=/secret= assignments)
+  secret gate across durable fields
+       | detected + no --redact-secrets -> reject without persistence
+       | explicit --redact-secrets      -> replace with [REDACTED]
+       v
+  provenance gate  (--source manual requires --user-confirmed)
        |
        v
   duplicate / similar check
@@ -133,7 +137,7 @@ Source sets confidence and trust: `manual` = high/protected, `agent` = medium,
        +-- project:<owner/repo> ---------------+   (detected from git remote)
                                                |
                                                v
-        rank each section:  confidence  ->  access_count  ->  recency
+        rank each section: project scope -> source trust -> confidence -> telemetry -> recency
                                                |
         section priority:  user > feedback > preference > project > workflow
                                                |
@@ -145,8 +149,9 @@ Source sets confidence and trust: `manual` = high/protected, `agent` = medium,
 ```
 
 Workflows prime with their `goal` line only; load the full runbook on demand
-with `mem workflow show`. Use `mem query … --no-touch` for read-only loads that
-must not bump access counters.
+with `mem workflow show`. `mem prime --focus "<task>"` additionally ensures the
+local graph is current and adds budget-capped, scored graph neighborhood context
+for task starts that need relationship context. Ordinary query is lock-free and no-touch by default; `--touch` is the explicit telemetry-writing mode. Query relevance combines lexical score, source trust, confidence, scope specificity, and recency; inspect it with `--explain-score`.
 
 ## 5. Workflow lifecycle — data, not automation
 
@@ -197,7 +202,7 @@ Rule of thumb: prose that agents keep violating should become a *mechanism*
 
 ```text
    Machine A                    remote (private git)                  Machine B
- ~/.mnemark/.git  --- push --->      (origin)      <--- push ---  ~/.mnemark/.git
+ ~/.mnemark/.git  -- --push -->      (origin)      <-- --push --  ~/.mnemark/.git
         ^                               |  |                              ^
         |                               v  v                              |
    mem sync  --- fetch / merge ---------+  +--------- fetch / merge --- mem sync
@@ -226,12 +231,13 @@ that explains it.
  SCENARIO                     COMMANDS (in order)                                   SEE
  --------                     -------------------                                   ---
  First-time wiring            mem init                                              #1
-   (new machine / platform)   mem setup claude-code   (or codex/gemini-cli/…)
+   (new machine / platform)   mem setup claude-code   (or codex/pi/gemini-cli/…)
                               mem doctor              (verify all layers)
 
  Everyday coding session      mem prime  ->  work  ->  mem save  ->  mem sync       #2
 
- Save a preference/decision   mem save --type feedback --source manual …            #3
+ Save a preference/decision   mem save --type feedback --source manual              #3
+                              --user-confirmed …
                               (fix any returned warnings with mem update)
 
  Recall for a task            mem query "<keywords>" --scope auto --format compact  #4
@@ -250,7 +256,8 @@ that explains it.
  Move a store between hosts    mem bundle export store.tgz                          #7
                               mem bundle import store.tgz --merge
 
- Sync across machines          mem sync            (git remote configured)          #7
+ Sync across machines          mem sync --dry-run -> mem sync  (no push)             #7
+                              mem sync --push       (only after approval)
                               mem ambiguity list --pending   (resolve conflicts)
 
  Health check / repair         mem doctor  ;  mem audit --fix  ;  mem reindex       #1,#3
