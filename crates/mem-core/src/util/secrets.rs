@@ -87,9 +87,12 @@ pub fn sanitize_secret_field(input: &str, field: &str, allow_redaction: bool) ->
 /// UTF-8 text in place. Binary data is never rewritten because doing so could
 /// silently corrupt an executable or archive.
 pub fn sanitize_secret_file(path: &Path, field: &str, allow_redaction: bool) -> Result<bool> {
-    let file_bytes = fs::metadata(path)
-        .with_context(|| format!("inspect {}", path.display()))?
-        .len();
+    let metadata =
+        fs::symlink_metadata(path).with_context(|| format!("inspect {}", path.display()))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        bail!("refusing to scan non-regular {field}: {}", path.display());
+    }
+    let file_bytes = metadata.len();
     if file_bytes > MAX_SECRET_SCAN_FILE_BYTES {
         bail!("{field} exceeds the {MAX_SECRET_SCAN_FILE_BYTES}-byte secret-scan limit");
     }

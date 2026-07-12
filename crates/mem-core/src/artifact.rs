@@ -205,10 +205,25 @@ pub fn check_artifacts(root: &Path) -> Result<ArtifactCheckReport> {
             continue;
         }
         let full_path = root.join(&entry.record.path);
-        if !full_path.exists() {
-            report.missing.push(entry.name.clone());
-            continue;
+        match fs::symlink_metadata(&full_path) {
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                report.missing.push(entry.name.clone());
+                continue;
+            }
+            Err(error) => return Err(error.into()),
         }
+        let full_path = match validate_artifact_file(root, &entry.record.path) {
+            Ok(path) => path,
+            Err(error) => {
+                report.unsafe_paths.push(ArtifactPathIssue {
+                    name: entry.name,
+                    path: entry.record.path,
+                    reason: error.to_string(),
+                });
+                continue;
+            }
+        };
         let actual = file_sha256(&full_path)?;
         if entry.record.checksum != actual {
             report.checksum_mismatch.push(ArtifactChecksumMismatch {
@@ -246,10 +261,7 @@ pub fn add_artifact(root: &Path, args: AddArtifact<'_>) -> Result<ArtifactEntry>
             args.kind
         );
     }
-    let full_path = root.join(&relative_path);
-    if !full_path.exists() {
-        bail!("artifact file does not exist: {}", full_path.display());
-    }
+    let full_path = validate_artifact_file(root, &relative_path)?;
     let short_name = match args.name {
         Some(name) => validate_artifact_name(&name)?,
         None => artifact_name(args.path)?,
@@ -298,10 +310,7 @@ pub fn update_artifact_checksum(root: &Path, reference: &str) -> Result<Artifact
         .and_then(|group| group.get_mut(&short_name))
         .ok_or_else(|| anyhow::anyhow!("artifact not found: {reference}"))?;
     validate_artifact_path(&record.path).map_err(|reason| anyhow::anyhow!(reason))?;
-    let full_path = root.join(&record.path);
-    if !full_path.exists() {
-        bail!("artifact file does not exist: {}", full_path.display());
-    }
+    let full_path = validate_artifact_file(root, &record.path)?;
     record.checksum = file_sha256(&full_path)?;
     record.updated_at = Some(now());
     manifest.save(root)?;
@@ -367,10 +376,16 @@ pub fn validate_artifact_path(path: &str) -> std::result::Result<(), String> {
     if path.len() > 4_096 || path.chars().any(char::is_control) {
         return Err("path exceeds 4096 bytes or contains control characters".to_string());
     }
-    let path = Path::new(path);
-    if path.as_os_str().is_empty() {
+    if path.is_empty() {
         return Err("path is empty".to_string());
     }
+    if path
+        .split(['/', '\\'])
+        .any(|segment| segment.is_empty() || matches!(segment, "." | ".."))
+    {
+        return Err("path must be normalized and must not escape the store".to_string());
+    }
+    let path = Path::new(path);
     if path.is_absolute() {
         return Err("absolute paths are not allowed".to_string());
     }
@@ -378,10 +393,10 @@ pub fn validate_artifact_path(path: &str) -> std::result::Result<(), String> {
     if components.iter().any(|component| {
         matches!(
             component,
-            Component::Prefix(_) | Component::RootDir | Component::ParentDir
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir | Component::CurDir
         )
     }) {
-        return Err("path must not escape the store".to_string());
+        return Err("path must be normalized and must not escape the store".to_string());
     }
     let mut iter = components.iter();
     if !matches!(iter.next(), Some(Component::Normal(value)) if value.to_string_lossy() == "artifacts")
@@ -399,6 +414,37 @@ pub fn validate_artifact_path(path: &str) -> std::result::Result<(), String> {
         return Err("path must include a file name".to_string());
     }
     Ok(())
+}
+
+/// Resolve an artifact path without following symlinks in any store-relative
+/// component. The returned path is guaranteed to name an existing regular
+/// file at validation time.
+pub fn validate_artifact_file(root: &Path, relative: &str) -> Result<std::path::PathBuf> {
+    validate_artifact_path(relative).map_err(anyhow::Error::msg)?;
+    let components = Path::new(relative).components().collect::<Vec<_>>();
+    let mut current = root.to_path_buf();
+    for (index, component) in components.iter().enumerate() {
+        let Component::Normal(component) = component else {
+            bail!("refusing unsafe artifact path: {relative}");
+        };
+        current.push(component);
+        let metadata = fs::symlink_metadata(&current)
+            .with_context(|| format!("inspect artifact path {}", current.display()))?;
+        if metadata.file_type().is_symlink() {
+            bail!("refusing artifact symlink: {}", current.display());
+        }
+        let is_last = index + 1 == components.len();
+        if is_last && !metadata.is_file() {
+            bail!("refusing non-regular artifact file: {}", current.display());
+        }
+        if !is_last && !metadata.is_dir() {
+            bail!(
+                "refusing non-directory artifact path: {}",
+                current.display()
+            );
+        }
+    }
+    Ok(current)
 }
 
 fn path_to_manifest_string(path: &Path) -> Result<String> {
@@ -689,6 +735,9 @@ mod tests {
         assert!(validate_artifact_path("/tmp/ci.sh").is_err());
         assert!(validate_artifact_path("../ci.sh").is_err());
         assert!(validate_artifact_path("artifacts/../../ci.sh").is_err());
+        assert!(validate_artifact_path("artifacts/scripts/./ci.sh").is_err());
+        assert!(validate_artifact_path("artifacts//scripts/ci.sh").is_err());
+        assert!(validate_artifact_path("artifacts/scripts/ci.sh/").is_err());
         assert!(validate_artifact_path("artifacts/bin/ci.sh").is_err());
     }
 

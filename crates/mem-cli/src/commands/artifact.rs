@@ -5,7 +5,7 @@ use crate::commands::print_json_pretty;
 use mem_core::app::App;
 use mem_core::artifact::{
     add_artifact, check_artifacts, remove_artifact, update_artifact_checksum,
-    validate_artifact_path, AddArtifact, ArtifactKind, ArtifactManifest,
+    validate_artifact_file, validate_artifact_path, AddArtifact, ArtifactKind, ArtifactManifest,
 };
 use mem_core::scope;
 use mem_core::util::{parse_string_array, sanitize_secret_field, sanitize_secret_file};
@@ -79,11 +79,8 @@ pub(crate) fn cmd_artifact(app: &App, command: ArtifactCommand) -> Result<()> {
             }) {
                 bail!("artifact tags exceed resource limits");
             }
-            sanitize_secret_file(
-                &app.root.join(&args.path),
-                "artifact file",
-                args.redact_secrets,
-            )?;
+            let artifact_file = validate_artifact_file(&app.root, &path_value)?;
+            sanitize_secret_file(&artifact_file, "artifact file", args.redact_secrets)?;
             let entry = add_artifact(
                 &app.root,
                 AddArtifact {
@@ -108,11 +105,8 @@ pub(crate) fn cmd_artifact(app: &App, command: ArtifactCommand) -> Result<()> {
                 .ok_or_else(|| anyhow::anyhow!("artifact manifest not found"))?;
             let existing = manifest.find_entry(&args.name)?;
             validate_artifact_path(&existing.record.path).map_err(anyhow::Error::msg)?;
-            sanitize_secret_file(
-                &app.root.join(&existing.record.path),
-                "artifact file",
-                args.redact_secrets,
-            )?;
+            let artifact_file = validate_artifact_file(&app.root, &existing.record.path)?;
+            sanitize_secret_file(&artifact_file, "artifact file", args.redact_secrets)?;
             let entry = update_artifact_checksum(&app.root, &args.name)?;
             mark_graph_dirty_if_store(app)?;
             print_json_pretty(&entry)

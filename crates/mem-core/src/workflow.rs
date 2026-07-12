@@ -7,7 +7,8 @@ use serde_json::Value;
 use serde_yaml::Value as YamlValue;
 
 use crate::artifact::{
-    artifact_file_checksum, artifact_file_is_executable, validate_artifact_path, ArtifactManifest,
+    artifact_file_checksum, artifact_file_is_executable, validate_artifact_file,
+    validate_artifact_path, ArtifactManifest,
 };
 use crate::{db::Memory, util::normalized_text};
 
@@ -188,7 +189,7 @@ fn validate_one_artifact_reference(
         return Ok(());
     };
     let full_path = store_root.join(path);
-    if !full_path.exists() {
+    if fs_metadata_missing(&full_path)? {
         if required {
             errors.push(format!(
                 "reusable_scripts[{index}] required artifact is missing: {path}"
@@ -203,6 +204,15 @@ fn validate_one_artifact_reference(
         });
         return Ok(());
     }
+    let full_path = match validate_artifact_file(store_root, path) {
+        Ok(path) => path,
+        Err(error) => {
+            errors.push(format!(
+                "reusable_scripts[{index}] unsafe artifact file {path}: {error}"
+            ));
+            return Ok(());
+        }
+    };
     let actual_checksum = artifact_file_checksum(&full_path)?;
     if actual_checksum != entry.record.checksum {
         errors.push(format!(
@@ -230,6 +240,14 @@ fn validate_one_artifact_reference(
         checksum: Some(actual_checksum),
     });
     Ok(())
+}
+
+fn fs_metadata_missing(path: &Path) -> Result<bool> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(false),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn step_artifact_runs(mapping: &serde_yaml::Mapping) -> Result<Vec<(usize, String)>> {
