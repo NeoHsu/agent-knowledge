@@ -36,7 +36,11 @@ default_limit = 20
 per_scope_max = 30
 ```
 
-`query.candidate_limit` bounds lexical candidates loaded for deterministic reranking (default 10,000; valid range 200-100,000). It must be at least as large as `query --limit`. `budget.per_scope_max` is a soft cap on active memories per scope (default 30; 0 disables). Exceeding it never blocks saves; `mem audit` and retro bundles flag the scope for curation instead.
+`query.candidate_limit` bounds lexical candidates loaded for deterministic
+reranking (default 10,000; valid range 200-100,000). It must be at least as
+large as `query --limit`. `budget.per_scope_max` is a soft cap on active
+memories per scope (default 30; 0 disables). Exceeding it never blocks saves;
+`mem audit` and retro bundles flag the scope for curation instead.
 
 ## Setup helpers
 

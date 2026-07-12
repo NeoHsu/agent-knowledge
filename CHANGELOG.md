@@ -29,8 +29,11 @@ All notable changes to mnemark are documented here.
 
 ### Fixed
 
-- Expired, deleted, and superseded memories no longer leak into ordinary query, prime, workflow, retro, or graph recall.
-- Query no longer repairs or recreates stale/missing indexes during read-only operation; writes rebuild incomplete indexes, and store/index symlinks are rejected.
+- Expired, deleted, and superseded memories no longer leak into ordinary query,
+  prime, workflow, retro, or graph recall.
+- Query no longer repairs or recreates stale/missing indexes during read-only
+  operation; writes rebuild incomplete indexes, and store/index symlinks are
+  rejected.
 - Secret validation now covers memory metadata, workflow runs, ambiguities,
   semantic graph state/revisions, artifacts, bundles, and merge side tables;
   artifact add/update/check rejects direct and intermediate symlinks before
@@ -55,8 +58,11 @@ All notable changes to mnemark are documented here.
 - Bundle SQLite snapshots use larger cooperative backup steps, removing the
   fixed throttling that dominated export time without weakening snapshot
   consistency.
-- Missing rebuildable graph tables are recreated and rebuilt without treating durable semantic tables as disposable.
+- Missing rebuildable graph tables are recreated and rebuilt without treating
+  durable semantic tables as disposable.
 - Release tags are gated by Linux/macOS/Windows tests and native binary smoke
   checks; release Actions are SHA-pinned and platform artifacts receive
   build-provenance attestations.
-- The installed skill includes every referenced file, including `references/graph-rules.md`, and policy v5 reflects explicit migration, redaction, and push gates.
+- The installed skill includes every referenced file, including
+  `references/graph-rules.md`, and policy v5 reflects explicit migration,
+  redaction, and push gates.

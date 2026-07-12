@@ -32,7 +32,7 @@ Measured on 2026-07-13 with an Apple M2 Max (`arm64`), macOS 26.5.1, Rust
 are p50 / p95 across 20 samples; maintenance values are p50 across 5 fresh or
 repeated samples as appropriate.
 
-| Memories | Import p50 | Query p50 / p95 | Prime p50 / p95 | Graph rebuild p50 | Bundle export p50 |
+| N | Import | Query p50/p95 | Prime p50/p95 | Graph | Bundle |
 | ---: | ---: | ---: | ---: | ---: | ---: |
 | 100 | 306 ms | 20 / 23 ms | 32 / 38 ms | 43 ms | 45 ms |
 | 1,000 | 417 ms | 20 / 23 ms | 31 / 34 ms | 357 ms | 239 ms |
