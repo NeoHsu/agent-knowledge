@@ -457,7 +457,10 @@ mod tests {
         assert_eq!(initial_candidate_limit(1, 50_000), QUERY_CANDIDATE_FLOOR);
         assert_eq!(initial_candidate_limit(50, 50_000), 500);
         assert_eq!(
-            initial_candidate_limit(mem_core::config::DEFAULT_QUERY_CANDIDATE_LIMIT, 50_000),
+            initial_candidate_limit(
+                mem_core::config::DEFAULT_QUERY_CANDIDATE_LIMIT,
+                mem_core::config::DEFAULT_QUERY_CANDIDATE_LIMIT,
+            ),
             mem_core::config::DEFAULT_QUERY_CANDIDATE_LIMIT
         );
         assert_eq!(initial_candidate_limit(50, 73), 73);
