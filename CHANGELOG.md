@@ -26,7 +26,23 @@ All notable changes to mnemark are documented here.
 
 - Expired, deleted, and superseded memories no longer leak into ordinary query, prime, workflow, retro, or graph recall.
 - Query no longer repairs or recreates stale/missing indexes during read-only operation; writes rebuild incomplete indexes, and store/index symlinks are rejected.
-- Secret validation now covers memory metadata, workflow runs, ambiguities, semantic graph state/revisions, artifacts, bundles, and merge side tables.
-- Merge, bundle merge, and sync conflict resolution preserve and idempotently remap ambiguities, changelog events, workflow runs, semantic edges, and semantic revisions; sync checkpoints merged WAL, disables Git hooks/signing/prompts, validates and rolls back unsafe pulls, and rebuilds the local index.
+- Secret validation now covers memory metadata, workflow runs, ambiguities,
+  semantic graph state/revisions, artifacts, bundles, and merge side tables;
+  artifact add/update/check rejects direct and intermediate symlinks before
+  scanning, redaction, or hashing.
+- Merge, bundle merge, and sync conflict resolution preserve and idempotently
+  remap ambiguities, changelog events, workflow runs, semantic edges, and
+  semantic revisions; sync checkpoints merged WAL, disables Git
+  hooks/signing/prompts, validates and rolls back unsafe pulls, rebuilds the
+  local index, and refuses residual bundle-replacement backups that could
+  bypass secret scanning.
+- Soft delete, supersede, ambiguity cleanup, and audit repair now increment
+  retained memory versions for reliable optimistic concurrency.
+- Prime text/JSON output now treats `--budget` as a hard character limit,
+  including focused graph context, and reports when the fixed envelope cannot
+  fit.
 - Missing rebuildable graph tables are recreated and rebuilt without treating durable semantic tables as disposable.
+- Release tags are gated by Linux/macOS/Windows tests and native binary smoke
+  checks; release Actions are SHA-pinned and platform artifacts receive
+  build-provenance attestations.
 - The installed skill includes every referenced file, including `references/graph-rules.md`, and policy v5 reflects explicit migration, redaction, and push gates.

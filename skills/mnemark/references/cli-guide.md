@@ -86,10 +86,13 @@ mem prime --per-section 5 --format json
 preference, and project memories plus workflow names for the detected scope,
 followed by the save-before-finishing protocol. It is read-only unless `--focus`
 is supplied; focused priming rebuilds the local graph index, then adds
-budget-capped graph neighborhood context for the task focus. Normal section
-content never touches access counters, fits output inside `--budget` characters
-by truncating and then dropping the lowest-priority entries, and primes workflows
-with their `goal` line only — load full runbooks with `mem workflow show`. Like
+budget-capped graph neighborhood context for the task focus. Text and JSON
+output, including focused graph context, never exceed `--budget`; entries are
+truncated and then dropped by priority. A budget too small for the fixed
+protocol/envelope fails with the required minimum instead of silently
+exceeding the requested limit. Normal section content never touches access
+counters, and workflows prime with
+their `goal` line only — load full runbooks with `mem workflow show`. Like
 `doctor`, it always targets the runtime store, so it is safe to run from any
 directory including a mnemark source checkout.
 
@@ -156,7 +159,12 @@ mem delete old_policy --hard --force
 
 `update`, `supersede`, and `delete` accept `--source`; manual source requires `--user-confirmed`. `update` can change type, destination scope, confidence, description, content, expiry, source, and tags (`--set-tags`, `--add-tags`, `--remove-tags`), with explicit clear flags for nullable fields. Bare names resolve within `--scope`; use `id:<memory-id>` to force an id when a scoped name collides with another memory's id.
 Soft delete sets `valid_until`. Expired, deleted, and superseded memories are excluded from ordinary query/prime/workflow/graph recall. Hard delete removes the row; protected memories require `--force`.
-`--expected-version` returns `version_conflict` if the stored memory changed after the caller read it.
+Every lifecycle or semantic mutation of a retained memory row increments
+`version`, including soft delete, superseding the old row, ambiguity soft-delete
+resolution, and `audit --fix` lifecycle/link repair. Access telemetry does not
+change the semantic version. `--expected-version` therefore returns
+`version_conflict` whenever any semantic change happened after the caller read
+the memory.
 
 ## Workflow
 
@@ -195,7 +203,15 @@ mem artifact remove ci-triage --delete-file
 
 Artifact commands inspect `manifest.toml` and files under `artifacts/` in the active knowledge store root. Select that root with `--home`, `MNEMARK_HOME`, user config, or the default `~/.mnemark`; source repositories are never discovered as stores. `artifact list` prints manifest entries as JSON. `artifact show <name>` accepts a short name when it is unique or a qualified name such as `scripts.ci-triage`. `artifact check` verifies manifest parsing, path containment, file presence, SHA-256 checksums, and executable bits for records marked `executable = true`; it reports missing files, checksum mismatches, unsafe paths, invalid checksums, invalid scopes, and non-executable scripts as JSON. Artifact commands never execute scripts.
 
-`artifact add` derives the manifest name from the file stem unless `--name` is provided, requires the artifact file to already exist under the active store, rejects secret-like content/metadata unless `--redact-secrets` is explicit, computes `sha256:<hex>`, and writes deterministic TOML. Existing name or path conflicts require `--force`. `artifact update <name> --checksum` rechecks the secret policy and refreshes the checksum after manual file edits. `artifact remove <name>` removes the manifest entry only; deleting the file requires `--delete-file`.
+`artifact add` derives the manifest name from the file stem unless `--name` is
+provided, requires a normalized path to an existing regular file under the
+active store, and rejects symlinks in the file or any intermediate path before
+secret scanning, redaction, or hashing. It rejects secret-like content/metadata
+unless `--redact-secrets` is explicit, computes `sha256:<hex>`, and writes
+deterministic TOML. Existing name or path conflicts require `--force`.
+`artifact update <name> --checksum` applies the same path and secret gates before
+refreshing the checksum after manual file edits. `artifact remove <name>`
+removes the manifest entry only; deleting the file requires `--delete-file`.
 
 ## Bundles
 
@@ -339,7 +355,27 @@ mem sync --push
 mem sync --remote origin --message "weekly retro updates" --push
 ```
 
-`sync` moves the runtime store through its own private git repository. Before any commit it scans durable SQLite text and every regular worktree file outside rebuildable/SQLite paths, rejecting secrets, non-UTF-8 files that cannot be scanned safely, symlinks, and special files. It then checkpoints the SQLite WAL for a real checkpoint, maintains `.gitignore` for rebuildable files, commits local changes with repository hooks/signing/fsmonitor disabled, and fetches/merges a configured remote. It does not push by default; `--push` is an explicit network side effect requiring user approval. `mem sync --dry-run` is lock-free and does not checkpoint, commit, fetch, merge, or push. Git moves bytes; `mem` resolves meaning — when both machines changed `memory.db`, the binary conflict is resolved by keeping the local database and merging the remote copy through the same logic as `mem merge`, so same-name conflicts become pending ambiguity records instead of lost rows. Pulled state is integrity/secret checked before use, unsafe pulls roll back to the pre-pull checkout, merged WAL is checkpointed before commit, and the local search index is rebuilt after a successful pull. `sync` requires the store root to be its own git repository (it refuses to commit into an enclosing repo), stops on conflicts outside `memory.db`, and reports every action as JSON. Without a configured remote it commits locally and reports `local_only`.
+`sync` moves the runtime store through its own private git repository. Before
+any commit it scans durable SQLite text and every regular worktree file outside
+rebuildable/SQLite paths, rejecting secrets, non-UTF-8 files that cannot be
+scanned safely, symlinks, and special files. A residual
+`.bundle-replace-backup-*` directory stops sync with a recovery hint and is
+always ignored by Git, preventing rollback data from bypassing validation. It
+then checkpoints the SQLite WAL for a real checkpoint, maintains `.gitignore`
+for rebuildable files, commits local changes with repository
+hooks/signing/fsmonitor disabled, and fetches/merges a configured remote. It does
+not push by default; `--push` is an explicit network side effect requiring user
+approval. `mem sync --dry-run` is lock-free and does not checkpoint, commit,
+fetch, merge, or push. Git moves bytes; `mem` resolves meaning — when both
+machines changed `memory.db`, the binary conflict is resolved by keeping the
+local database and merging the remote copy with `mem merge`, so same-name
+conflicts become pending ambiguity records instead of lost
+rows. Pulled state is integrity/secret checked before use, unsafe pulls roll
+back to the pre-pull checkout, merged WAL is checkpointed before commit, and
+the local search index is rebuilt after a successful pull. `sync` requires the
+store root to be its own git repository (it refuses to commit into an enclosing
+repo), stops on conflicts outside `memory.db`, and reports every action as JSON.
+Without a configured remote it commits locally and reports `local_only`.
 
 ## Install or Build
 
