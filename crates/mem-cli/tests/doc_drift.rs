@@ -3,6 +3,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use clap::{error::ErrorKind, Parser};
+
+#[allow(dead_code)]
+#[path = "../src/args.rs"]
+mod cli_args;
 mod support;
 
 use support::mem_bin;
@@ -240,5 +245,327 @@ fn skill_mem_examples_use_real_clap_commands() {
     assert!(
         unknown.is_empty(),
         "skill markdown documents commands clap does not provide: {unknown:?}"
+    );
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExampleKind {
+    ShellFence,
+    Inline,
+}
+
+struct DocExample {
+    line: usize,
+    command: String,
+    kind: ExampleKind,
+}
+
+fn repository_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn repository_markdown_files() -> Vec<PathBuf> {
+    fn collect(dir: &Path, files: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(dir).unwrap_or_else(|err| panic!("read {}: {err}", dir.display()))
+        {
+            let entry = entry.expect("read directory entry");
+            let path = entry.path();
+            if path.is_dir() {
+                collect(&path, files);
+            } else if path.extension().is_some_and(|extension| extension == "md") {
+                files.push(path);
+            }
+        }
+    }
+
+    let root = repository_root();
+    let mut files = fs::read_dir(&root)
+        .expect("read repository root")
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| {
+            path.is_file() && path.extension().is_some_and(|extension| extension == "md")
+        })
+        .collect::<Vec<_>>();
+    for directory in [root.join("docs"), root.join("skills")] {
+        collect(&directory, &mut files);
+    }
+    files.sort();
+    files
+}
+
+fn markdown_mem_examples(markdown: &str) -> Vec<DocExample> {
+    let mut examples = Vec::new();
+    let mut in_fence = false;
+    let mut shell_fence = false;
+    let mut pending = String::new();
+    let mut pending_line = 0;
+
+    for (index, line) in markdown.lines().enumerate() {
+        let line_number = index + 1;
+        let trimmed = line.trim_start();
+        if let Some(info) = trimmed.strip_prefix("```") {
+            if in_fence {
+                if shell_fence && !pending.is_empty() {
+                    push_shell_example(&mut examples, pending_line, &pending);
+                    pending.clear();
+                }
+                in_fence = false;
+                shell_fence = false;
+            } else {
+                in_fence = true;
+                shell_fence = matches!(
+                    info.trim().to_ascii_lowercase().as_str(),
+                    "bash" | "sh" | "shell" | "zsh" | "console"
+                );
+            }
+            continue;
+        }
+
+        if in_fence {
+            if !shell_fence {
+                continue;
+            }
+            let command_line = trimmed.strip_prefix("$ ").unwrap_or(trimmed).trim_end();
+            if pending.is_empty() {
+                pending_line = line_number;
+            }
+            if let Some(prefix) = command_line.strip_suffix('\\') {
+                pending.push_str(prefix.trim_end());
+                pending.push(' ');
+                continue;
+            }
+            pending.push_str(command_line);
+            push_shell_example(&mut examples, pending_line, &pending);
+            pending.clear();
+            continue;
+        }
+
+        for (span_index, span) in line.split('`').enumerate() {
+            if span_index % 2 == 1 && (span.trim() == "mem" || span.trim().starts_with("mem ")) {
+                examples.push(DocExample {
+                    line: line_number,
+                    command: span.trim().to_string(),
+                    kind: ExampleKind::Inline,
+                });
+            }
+        }
+    }
+    examples
+}
+
+fn push_shell_example(examples: &mut Vec<DocExample>, line: usize, command: &str) {
+    let command = command.trim();
+    if command.starts_with("mem ") || command == "mem" {
+        examples.push(DocExample {
+            line,
+            command: command.to_string(),
+            kind: ExampleKind::ShellFence,
+        });
+    }
+}
+
+fn placeholder_value(previous: Option<&str>, command: &[String], index: usize) -> &'static str {
+    match previous {
+        Some("--scope" | "--new-scope" | "--set-scope") => "global",
+        Some("--source") => "agent",
+        Some("--type") => "reference",
+        Some("--confidence") => "medium",
+        Some("--expires-at" | "--changed-since") => "2026-01-01T00:00:00Z",
+        Some("--tags" | "--set-tags" | "--add-tags" | "--remove-tags") => "[]",
+        Some("--memory-ids") => "[]",
+        Some("--result") => "success",
+        Some("--format") => "json",
+        Some("--expected-version" | "--limit" | "--depth" | "--max-depth" | "--days") => "1",
+        Some("--budget") => "4000",
+        _ if index == 1
+            && command
+                .get(index)
+                .is_some_and(|token| token == "<subcommand>") =>
+        {
+            "help"
+        }
+        _ if index == 2 && command.get(1).is_some_and(|token| token == "setup") => "pi",
+        _ => "dummy",
+    }
+}
+
+fn replace_placeholders(token: &str, replacement: &str) -> String {
+    let mut output = String::new();
+    let mut rest = token;
+    while let Some(start) = rest.find('<') {
+        output.push_str(&rest[..start]);
+        let after_start = &rest[start + 1..];
+        let Some(end) = after_start.find('>') else {
+            output.push_str(&rest[start..]);
+            return output;
+        };
+        output.push_str(replacement);
+        rest = &after_start[end + 1..];
+    }
+    output.push_str(rest);
+    if output == "..." || output == "…" {
+        replacement.to_string()
+    } else {
+        output
+    }
+}
+
+fn token_alternatives(token: &str) -> Vec<String> {
+    let separator = if token.contains('|') {
+        '|'
+    } else if token.contains('/')
+        && token
+            .chars()
+            .all(|character| character.is_ascii_lowercase() || matches!(character, '-' | '/'))
+    {
+        '/'
+    } else {
+        return vec![token.to_string()];
+    };
+    if token.contains(['[', '{', '"', '\'', '=']) || token.split(separator).any(str::is_empty) {
+        return vec![token.to_string()];
+    }
+    let alternatives = token
+        .split(separator)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    if alternatives.len() > 8 {
+        vec![token.to_string()]
+    } else {
+        alternatives
+    }
+}
+
+fn normalized_invocations(command: &str) -> Result<Vec<Vec<String>>, String> {
+    let mut tokens = shell_words::split(command).map_err(|error| error.to_string())?;
+    if tokens.first().is_some_and(|token| token == "$") {
+        tokens.remove(0);
+    }
+    let stop = tokens
+        .iter()
+        .position(|token| matches!(token.as_str(), "#" | ";" | "&&" | "||" | "|" | ">" | ">>"))
+        .unwrap_or(tokens.len());
+    tokens.truncate(stop);
+    if tokens.first().is_none_or(|token| token != "mem") {
+        return Err("example does not start with mem".to_string());
+    }
+
+    let original = tokens.clone();
+    for (index, token) in tokens.iter_mut().enumerate() {
+        let previous = index
+            .checked_sub(1)
+            .and_then(|previous| original.get(previous));
+        let replacement = placeholder_value(previous.map(String::as_str), &original, index);
+        *token = replace_placeholders(token, replacement);
+    }
+
+    let mut invocations = vec![Vec::new()];
+    for token in tokens {
+        let alternatives = token_alternatives(&token);
+        let mut expanded = Vec::new();
+        for invocation in &invocations {
+            for alternative in &alternatives {
+                let mut next = invocation.clone();
+                next.push(alternative.clone());
+                expanded.push(next);
+            }
+        }
+        if expanded.len() > 64 {
+            return Err("example expands to more than 64 command variants".to_string());
+        }
+        invocations = expanded;
+    }
+
+    Ok(invocations)
+}
+
+/// Every fenced shell command and inline `mem ...` span in repository-facing
+/// Markdown is parsed by the real Clap definition. Inline command-name
+/// references may omit required operands, but unknown commands, flags, and
+/// invalid values always fail.
+#[test]
+fn repository_mem_examples_parse_with_real_clap() {
+    let root = repository_root();
+    let mut invalid = Vec::new();
+    for file in repository_markdown_files() {
+        let markdown = fs::read_to_string(&file)
+            .unwrap_or_else(|error| panic!("read {}: {error}", file.display()));
+        for example in markdown_mem_examples(&markdown) {
+            let invocations = match normalized_invocations(&example.command) {
+                Ok(invocations) => invocations,
+                Err(error) => {
+                    invalid.push(format!(
+                        "{}:{} `{}`: {error}",
+                        file.strip_prefix(&root).unwrap_or(&file).display(),
+                        example.line,
+                        example.command
+                    ));
+                    continue;
+                }
+            };
+            for invocation in invocations {
+                if let Err(error) = cli_args::Cli::try_parse_from(&invocation) {
+                    let partial_inline = example.kind == ExampleKind::Inline
+                        && matches!(
+                            error.kind(),
+                            ErrorKind::MissingRequiredArgument
+                                | ErrorKind::MissingSubcommand
+                                | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+                        );
+                    if partial_inline
+                        || matches!(
+                            error.kind(),
+                            ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+                        )
+                    {
+                        continue;
+                    }
+
+                    if example.kind == ExampleKind::Inline {
+                        if let Some(option) = invocation
+                            .last()
+                            .filter(|token| token.starts_with("--"))
+                            .cloned()
+                        {
+                            let mut completed = invocation.clone();
+                            completed.push(
+                                placeholder_value(Some(&option), &completed, completed.len())
+                                    .into(),
+                            );
+                            match cli_args::Cli::try_parse_from(&completed) {
+                                Ok(_) => continue,
+                                Err(completed_error)
+                                    if matches!(
+                                        completed_error.kind(),
+                                        ErrorKind::MissingRequiredArgument
+                                            | ErrorKind::MissingSubcommand
+                                            | ErrorKind::DisplayHelp
+                                            | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+                                            | ErrorKind::DisplayVersion
+                                    ) =>
+                                {
+                                    continue;
+                                }
+                                Err(_) => {}
+                            }
+                        }
+                    }
+
+                    invalid.push(format!(
+                        "{}:{} `{}` as `{}`: {}",
+                        file.strip_prefix(&root).unwrap_or(&file).display(),
+                        example.line,
+                        example.command,
+                        invocation.join(" "),
+                        error.to_string().replace('\n', " ")
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        invalid.is_empty(),
+        "Markdown mem examples rejected by Clap:\n{}",
+        invalid.join("\n")
     );
 }

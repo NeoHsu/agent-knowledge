@@ -22,3 +22,6 @@ serde.workspace = true
 serde_json.workspace = true
 tar = "0.4.46"
 uuid.workspace = true
+
+[dev-dependencies]
+shell-words = "1.1.0"
