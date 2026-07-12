@@ -1,3 +1,4 @@
+use rusqlite::Connection;
 use std::fs;
 
 mod support;
@@ -41,6 +42,131 @@ fn save_query_and_version_conflict() {
         "不要使用 emoji",
     ]);
     assert!(conflict.contains("version_conflict"));
+}
+
+#[test]
+fn lifecycle_mutations_increment_versions_for_optimistic_concurrency() {
+    let repo = TestRepo::new("lifecycle-versions");
+    repo.run(&["init"]);
+    let deleted: serde_json::Value = serde_json::from_str(&repo.run(&[
+        "save",
+        "--name",
+        "delete_me",
+        "--tags",
+        "[\"test:version\"]",
+        "--content",
+        "delete lifecycle version probe",
+        "--force",
+    ]))
+    .expect("delete probe save json");
+    let deleted_id = deleted["id"].as_str().expect("delete probe id");
+    repo.run(&["delete", "delete_me", "--expected-version", "1"]);
+
+    repo.run(&[
+        "save",
+        "--name",
+        "old_version",
+        "--tags",
+        "[\"test:version\"]",
+        "--content",
+        "supersede lifecycle version probe",
+        "--force",
+    ]);
+    repo.run(&[
+        "supersede",
+        "old_version",
+        "new_version",
+        "--expected-version",
+        "1",
+        "--content",
+        "replacement lifecycle version probe",
+    ]);
+
+    let conn = Connection::open(repo.join("memory.db")).expect("open memory db");
+    let deleted_version: i64 = conn
+        .query_row(
+            "SELECT version FROM memories WHERE id = ?1",
+            [deleted_id],
+            |row| row.get(0),
+        )
+        .expect("deleted version");
+    let superseded_version: i64 = conn
+        .query_row(
+            "SELECT version FROM memories WHERE name = 'old_version'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("superseded version");
+    assert_eq!(deleted_version, 2);
+    assert_eq!(superseded_version, 2);
+    drop(conn);
+
+    let conflict = repo.run(&[
+        "update",
+        &format!("id:{deleted_id}"),
+        "--expected-version",
+        "1",
+        "--content",
+        "stale update must not be accepted",
+    ]);
+    assert!(conflict.contains("version_conflict"));
+}
+
+#[test]
+fn ambiguity_soft_delete_increments_memory_version() {
+    let repo = TestRepo::new("ambiguity-lifecycle-version");
+    repo.run(&["init"]);
+    let keep: serde_json::Value = serde_json::from_str(&repo.run(&[
+        "save",
+        "--name",
+        "ambiguity_keep",
+        "--content",
+        "keep this ambiguity candidate",
+        "--force",
+    ]))
+    .expect("keep save json");
+    let drop_memory: serde_json::Value = serde_json::from_str(&repo.run(&[
+        "save",
+        "--name",
+        "ambiguity_drop",
+        "--content",
+        "drop this ambiguity candidate",
+        "--force",
+    ]))
+    .expect("drop save json");
+    let memory_ids = serde_json::to_string(&vec![
+        keep["id"].as_str().expect("keep id"),
+        drop_memory["id"].as_str().expect("drop id"),
+    ])
+    .expect("memory ids");
+    let ambiguity: serde_json::Value = serde_json::from_str(&repo.run(&[
+        "ambiguity",
+        "add",
+        "--query",
+        "choose lifecycle candidate",
+        "--memory-ids",
+        &memory_ids,
+    ]))
+    .expect("ambiguity json");
+    let ambiguity_id = ambiguity["id"].as_i64().expect("ambiguity id").to_string();
+    repo.run(&[
+        "ambiguity",
+        "resolve",
+        &ambiguity_id,
+        "--keep",
+        "ambiguity_keep",
+        "--soft-delete-others",
+    ]);
+
+    let conn = Connection::open(repo.join("memory.db")).expect("open memory db");
+    let version: i64 = conn
+        .query_row(
+            "SELECT version FROM memories WHERE name = 'ambiguity_drop'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("ambiguity soft-delete version");
+    assert_eq!(version, 2);
 }
 
 #[test]

@@ -235,7 +235,9 @@ pub(crate) fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Va
         with_transaction(conn, |conn| {
             for memory in &expired_memories {
                 conn.execute(
-                    "UPDATE memories SET valid_until = ?1, updated_at = ?1 WHERE id = ?2",
+                    "UPDATE memories
+                     SET valid_until = ?1, updated_at = ?1, version = version + 1
+                     WHERE id = ?2",
                     params![now, memory.id],
                 )?;
                 log_change(
@@ -250,10 +252,10 @@ pub(crate) fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Va
             fixed_expired = expired_memories.len();
             fixed_broken_links = conn.execute(
                 "UPDATE memories
-                 SET superseded_by = NULL
+                 SET superseded_by = NULL, updated_at = ?1, version = version + 1
                  WHERE superseded_by IS NOT NULL
                  AND superseded_by NOT IN (SELECT id FROM memories)",
-                [],
+                params![now],
             )?;
             Ok(())
         })?;

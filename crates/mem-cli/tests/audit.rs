@@ -1,3 +1,4 @@
+use rusqlite::Connection;
 use std::fs;
 
 mod support;
@@ -15,6 +16,65 @@ fn save_reference(repo: &TestRepo, name: &str) {
         "--content",
         &format!("Action: fact number {name}. Why: 2026-07-08 test."),
     ]);
+}
+
+#[test]
+fn audit_fix_increments_versions_for_every_memory_mutation() {
+    let repo = TestRepo::new("audit-fix-versions");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--name",
+        "expired_version",
+        "--tags",
+        "[\"test:audit\"]",
+        "--expires-at",
+        "2020-01-01T00:00:00Z",
+        "--content",
+        "expired audit version probe",
+        "--force",
+    ]);
+    repo.run(&[
+        "save",
+        "--name",
+        "broken_link_version",
+        "--tags",
+        "[\"test:audit\"]",
+        "--content",
+        "broken-link audit version probe",
+        "--force",
+    ]);
+    let conn = Connection::open(repo.join("memory.db")).expect("open memory db");
+    conn.execute(
+        "UPDATE memories SET superseded_by = 'missing-memory' WHERE name = 'broken_link_version'",
+        [],
+    )
+    .expect("inject broken link");
+    drop(conn);
+
+    let report: serde_json::Value =
+        serde_json::from_str(&repo.run(&["audit", "--fix"])).expect("audit report");
+    assert_eq!(report["fixed_expired"], 1);
+    assert_eq!(report["fixed_broken_links"], 1);
+
+    let conn = Connection::open(repo.join("memory.db")).expect("open fixed memory db");
+    let expired: (i64, Option<String>) = conn
+        .query_row(
+            "SELECT version, valid_until FROM memories WHERE name = 'expired_version'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("expired mutation");
+    let broken: (i64, Option<String>) = conn
+        .query_row(
+            "SELECT version, superseded_by FROM memories WHERE name = 'broken_link_version'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("broken-link mutation");
+    assert_eq!(expired.0, 2);
+    assert!(expired.1.is_some());
+    assert_eq!(broken, (2, None));
 }
 
 #[test]

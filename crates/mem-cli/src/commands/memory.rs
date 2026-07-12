@@ -683,7 +683,10 @@ pub(crate) fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
             ],
         )?;
         conn.execute(
-            "UPDATE memories SET valid_until = ?1, superseded_by = ?2, updated_at = ?1 WHERE id = ?3",
+            "UPDATE memories
+             SET valid_until = ?1, superseded_by = ?2, updated_at = ?1,
+                 version = version + 1
+             WHERE id = ?3",
             params![now, new_id, old.id],
         )?;
         log_change(
@@ -763,7 +766,9 @@ pub(crate) fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
         let now = now();
         with_transaction(&conn, |conn| {
             conn.execute(
-                "UPDATE memories SET valid_until = ?1, updated_at = ?1 WHERE id = ?2",
+                "UPDATE memories
+                 SET valid_until = ?1, updated_at = ?1, version = version + 1
+                 WHERE id = ?2",
                 params![now, old.id],
             )?;
             log_change(

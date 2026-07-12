@@ -93,7 +93,9 @@ pub(crate) fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> 
                             continue;
                         }
                         conn.execute(
-                            "UPDATE memories SET valid_until = ?1, updated_at = ?1 WHERE id = ?2",
+                            "UPDATE memories
+                             SET valid_until = ?1, updated_at = ?1, version = version + 1
+                             WHERE id = ?2",
                             params![now, memory.id],
                         )?;
                         log_change(
