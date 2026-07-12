@@ -30,13 +30,15 @@ records:
 Measured on 2026-07-13 with an Apple M2 Max (`arm64`), macOS 26.5.1, Rust
 1.97.0, bundled SQLite, and the optimized release profile. Interactive values
 are p50 / p95 across 20 samples; maintenance values are p50 across 5 fresh or
-repeated samples as appropriate.
+repeated samples as appropriate. The retained report identifies clean commit
+`a0e03472a43e79368d7c665a92f7bc00cb9cf281` and release-binary SHA-256
+`76773041bcfbc86ac06d72169cf1e393f9d5be84e6ce13137426bcc3dbf59feb`.
 
 | N | Import | Query p50/p95 | Prime p50/p95 | Graph | Bundle |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | 306 ms | 20 / 23 ms | 32 / 38 ms | 43 ms | 45 ms |
-| 1,000 | 417 ms | 20 / 23 ms | 31 / 34 ms | 357 ms | 239 ms |
-| 10,000 | 1.66 s | 39 / 50 ms | 51 / 63 ms | 3.58 s | 2.25 s |
+| 100 | 416 ms | 19 / 24 ms | 29 / 34 ms | 41 ms | 46 ms |
+| 1,000 | 442 ms | 21 / 24 ms | 30 / 33 ms | 363 ms | 244 ms |
+| 10,000 | 1.66 s | 40 / 47 ms | 52 / 56 ms | 3.59 s | 2.27 s |
 
 These figures are a regression baseline, not a cross-machine service-level
 objective. Query uses bounded adaptive over-fetch and deterministic reranking;
