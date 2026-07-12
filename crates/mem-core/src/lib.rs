@@ -8,7 +8,6 @@ pub mod scope;
 pub mod util;
 pub mod workflow;
 
-mod index_state;
 mod search_index;
 mod search_tokenizer;
 
