@@ -21,6 +21,11 @@ All notable changes to mnemark are documented here.
 - Deterministic query reranking across lexical relevance, source trust, confidence, scope specificity, and recency, with `--explain-score`.
 - Bundle v2 online SQLite snapshots, streaming per-file SHA-256 manifests, archive/resource bounds, strict SQLite schema-object validation, and rollback-safe replacement.
 - Agent-memory acceptance tests for read-only behavior, lifecycle isolation, scope isolation, secret leakage, durable merge idempotence, and skill packaging.
+- Reproducible scale benchmarks with repeated p50/p95 measurements, peak RSS,
+  artifact sizes, correctness assertions, binary/script hashes, cache metadata,
+  and per-stage `bundle export --profile` timings.
+- Configurable bounded query candidate retrieval through
+  `[query].candidate_limit` (default 10,000; range 200-100,000).
 
 ### Fixed
 
@@ -40,7 +45,16 @@ All notable changes to mnemark are documented here.
   retained memory versions for reliable optimistic concurrency.
 - Prime text/JSON output now treats `--budget` as a hard character limit,
   including focused graph context, and reports when the fixed envelope cannot
-  fit.
+  fit; ranked sections now apply ordering and `LIMIT` in SQLite instead of
+  loading all matching memories.
+- Query now pushes exact tag, scope, type, lifecycle, and expiry filters into
+  Tantivy and uses adaptive bounded over-fetch before deterministic reranking.
+- JSON import now reuses one connection, commits 500-row chunks with per-item
+  savepoints, and updates graph/index dirty state once per chunk while
+  preserving partial-success summaries.
+- Bundle SQLite snapshots use larger cooperative backup steps, removing the
+  fixed throttling that dominated export time without weakening snapshot
+  consistency.
 - Missing rebuildable graph tables are recreated and rebuilt without treating durable semantic tables as disposable.
 - Release tags are gated by Linux/macOS/Windows tests and native binary smoke
   checks; release Actions are SHA-pinned and platform artifacts receive
