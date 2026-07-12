@@ -49,6 +49,65 @@ fn prime_renders_sections_and_protocol() {
 }
 
 #[test]
+fn prime_sql_ranking_preserves_scope_and_source_priority() {
+    let store = TestRuntimeStore::new("prime-sql-ranking");
+    store.run(&["init"]);
+    store.run(&[
+        "save",
+        "--type",
+        "feedback",
+        "--name",
+        "global_manual_rank",
+        "--source",
+        "manual",
+        "--user-confirmed",
+        "--content",
+        "global manual ranking probe",
+        "--force",
+    ]);
+    store.run(&[
+        "save",
+        "--type",
+        "feedback",
+        "--name",
+        "project_agent_rank",
+        "--scope",
+        "project:example/app",
+        "--content",
+        "project agent ranking probe",
+        "--force",
+    ]);
+    store.run(&[
+        "save",
+        "--type",
+        "feedback",
+        "--name",
+        "project_manual_rank",
+        "--scope",
+        "project:example/app",
+        "--source",
+        "manual",
+        "--user-confirmed",
+        "--content",
+        "project manual ranking probe",
+        "--force",
+    ]);
+
+    let output = store.run(&[
+        "prime",
+        "--scope",
+        "project:example/app",
+        "--per-section",
+        "3",
+    ]);
+    let project_manual = output.find("project_manual_rank").expect("project manual");
+    let project_agent = output.find("project_agent_rank").expect("project agent");
+    let global_manual = output.find("global_manual_rank").expect("global manual");
+    assert!(project_manual < project_agent);
+    assert!(project_agent < global_manual);
+}
+
+#[test]
 fn prime_escapes_delimiters_and_control_lines_from_stored_data() {
     let store = TestRuntimeStore::new("prime-delimiter-safety");
     store.run(&["init"]);

@@ -53,8 +53,9 @@ pub use memory::{
     active_expired_memories, all_memories, all_memories_compatible, all_workflows,
     gc_candidate_memories, graph_memories, insert_memory_record, list_memories_filtered,
     memories_by_ids, memory_by_id, memory_by_name, memory_by_name_in_scope, memory_count,
-    memory_is_active, resolve_memory_ref, resolve_memory_ref_in_scopes, unique_memory_id,
-    update_memory_from_merge, workflow_by_ref, workflow_by_ref_in_scopes, ACTIVE_MEMORY_SQL,
+    memory_is_active, ranked_prime_memories, resolve_memory_ref, resolve_memory_ref_in_scopes,
+    unique_memory_id, update_memory_from_merge, workflow_by_ref, workflow_by_ref_in_scopes,
+    ACTIVE_MEMORY_SQL,
 };
 pub use metadata::{
     ensure_store_id, index_dirty, new_event_uid, set_index_dirty, store_id, STORE_ID_KEY,

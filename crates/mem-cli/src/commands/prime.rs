@@ -59,26 +59,12 @@ pub(crate) fn cmd_prime(app: &App, args: PrimeArgs) -> Result<()> {
 
     let mut sections: Vec<(&str, Vec<Memory>)> = Vec::new();
     for section in SECTIONS {
-        let mut memories = list_memories_filtered(
+        let memories = mem_core::db::ranked_prime_memories(
             &conn,
-            false,
-            Some(section),
-            None,
-            Some(scope_refs.as_slice()),
-            false,
+            section,
+            scope_refs.as_slice(),
+            args.per_section,
         )?;
-        memories.retain(|memory| !is_expired(memory.expires_at.as_deref()));
-        memories.sort_by(|a, b| {
-            (b.scope != "global")
-                .cmp(&(a.scope != "global"))
-                .then(source_priority(&b.source).cmp(&source_priority(&a.source)))
-                .then(confidence_rank(&a.confidence).cmp(&confidence_rank(&b.confidence)))
-                .then(b.access_count.cmp(&a.access_count))
-                .then(b.updated_at.cmp(&a.updated_at))
-                .then(a.name.cmp(&b.name))
-                .then(a.id.cmp(&b.id))
-        });
-        memories.truncate(args.per_section);
         sections.push((section, memories));
     }
 
@@ -91,8 +77,10 @@ pub(crate) fn cmd_prime(app: &App, args: PrimeArgs) -> Result<()> {
             false,
             false,
             (args.per_section * 4).max(DEFAULT_LIMIT),
-            None,
-            Some(scope_refs.as_slice()),
+            memory_index::SearchFilters {
+                scopes: Some(scope_refs.as_slice()),
+                ..Default::default()
+            },
             true,
         )?;
         let scored_memory_ids = memory_hits
@@ -250,14 +238,6 @@ fn ensure_budget(rendered: &str, budget: usize) -> Result<()> {
         );
     }
     Ok(())
-}
-
-fn confidence_rank(confidence: &str) -> u8 {
-    match confidence {
-        "high" => 0,
-        "medium" => 1,
-        _ => 2,
-    }
 }
 
 /// Workflows prime with their goal/description only; the runbook body is

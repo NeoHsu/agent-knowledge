@@ -172,6 +172,55 @@ pub fn graph_memories(conn: &Connection) -> Result<Vec<Memory>> {
         .map_err(Into::into)
 }
 
+/// Fetch the highest-priority active memories for one Prime section without
+/// decoding or sorting the entire matching section in process.
+pub fn ranked_prime_memories(
+    conn: &Connection,
+    memory_type: &str,
+    scopes: &[&str],
+    limit: usize,
+) -> Result<Vec<Memory>> {
+    if scopes.is_empty() || limit == 0 {
+        return Ok(Vec::new());
+    }
+    let placeholders = (2..scopes.len() + 2)
+        .map(|index| format!("?{index}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "SELECT * FROM memories
+         WHERE {ACTIVE_MEMORY_SQL}
+           AND type = ?1
+           AND scope IN ({placeholders})
+         ORDER BY
+           CASE WHEN scope = 'global' THEN 0 ELSE 1 END DESC,
+           CASE source
+             WHEN 'manual' THEN 4
+             WHEN 'agent' THEN 3
+             WHEN 'daily_retro' THEN 2
+             WHEN 'weekly_retro' THEN 1
+             ELSE 2
+           END DESC,
+           CASE confidence
+             WHEN 'high' THEN 3
+             WHEN 'medium' THEN 2
+             ELSE 1
+           END DESC,
+           access_count DESC,
+           updated_at DESC,
+           name ASC,
+           id ASC
+         LIMIT {limit}"
+    );
+    let mut values = Vec::with_capacity(scopes.len() + 1);
+    values.push(memory_type);
+    values.extend_from_slice(scopes);
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(values), row_to_memory)?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
+}
+
 /// Query memories with optional filters pushed into the SQL WHERE clause to
 /// avoid a full table scan followed by in-process filtering.
 pub fn list_memories_filtered(
