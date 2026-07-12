@@ -298,6 +298,26 @@ fn sync_dry_run_rejects_secret_leakage_without_committing() {
 
 #[cfg(unix)]
 #[test]
+fn sync_rejects_stale_bundle_backup_without_scanning_or_staging_it() {
+    let store = TestRuntimeStore::new("sync-stale-bundle-backup");
+    store.run(&["init"]);
+    git_init_store(store.home());
+    let backup = store.home().join(".bundle-replace-backup-stale");
+    fs::create_dir_all(&backup).expect("stale backup directory");
+    fs::write(backup.join("old.txt"), "token: abcdefgh12345678\n").expect("stale backup content");
+
+    let error = store.run_fail(&["sync", "--dry-run"]);
+    assert!(error.contains("stale bundle replacement backup found"));
+    assert_eq!(
+        git(store.home(), &["rev-list", "--all", "--count"]).trim(),
+        "0"
+    );
+    assert!(
+        !git(store.home(), &["diff", "--cached", "--name-only"]).contains(".bundle-replace-backup")
+    );
+}
+
+#[test]
 fn sync_disables_repository_hooks_and_commit_signing() {
     let store = TestRuntimeStore::new("sync-no-hooks");
     store.run(&["init"]);
@@ -350,6 +370,7 @@ fn sync_commits_locally_without_remote() {
     let ignore = fs::read_to_string(store.home().join(".gitignore")).expect("gitignore");
     assert!(ignore.contains("index/"));
     assert!(ignore.contains(".mem.lock"));
+    assert!(ignore.contains(".bundle-replace-backup-*"));
 
     // No changes on the second run.
     let output = store.run(&["sync"]);
@@ -412,6 +433,91 @@ fn sync_rejects_and_rolls_back_secret_bearing_remote_state() {
         .contains("safe_local_memory"));
 
     fs::remove_dir_all(attacker).ok();
+    fs::remove_dir_all(bare).ok();
+}
+
+#[test]
+fn sync_aborts_git_merge_when_semantic_database_merge_is_rejected() {
+    let bare = temp_path("sync-semantic-rejection-bare");
+    fs::create_dir_all(&bare).expect("bare dir");
+    git(&bare, &["init", "--bare", "-b", "main"]);
+    let bare_url = bare.to_str().expect("bare path").to_string();
+
+    let remote_store = TestRuntimeStore::new("sync-semantic-rejection-remote");
+    remote_store.run(&["init"]);
+    git_init_store(remote_store.home());
+    git(remote_store.home(), &["remote", "add", "origin", &bare_url]);
+    remote_store.run(&[
+        "save",
+        "--name",
+        "shared_baseline",
+        "--content",
+        "safe shared baseline",
+        "--force",
+    ]);
+    remote_store.run(&["sync", "--push"]);
+
+    let local_store = TestRuntimeStore::new("sync-semantic-rejection-local");
+    fs::remove_dir_all(local_store.home()).expect("clear clone target");
+    git(
+        local_store.home().parent().expect("clone parent"),
+        &[
+            "clone",
+            &bare_url,
+            local_store.home().to_str().expect("clone target"),
+        ],
+    );
+    git(
+        local_store.home(),
+        &["config", "user.email", "local@example.com"],
+    );
+    git(local_store.home(), &["config", "user.name", "Local"]);
+    git(local_store.home(), &["config", "commit.gpgsign", "false"]);
+    local_store.run(&[
+        "save",
+        "--name",
+        "safe_local_divergence",
+        "--content",
+        "retain this safe local divergence",
+        "--force",
+    ]);
+    local_store.run(&["sync"]);
+    let before = git(local_store.home(), &["rev-parse", "HEAD"]);
+
+    remote_store.run(&[
+        "save",
+        "--name",
+        "unsafe_remote_divergence",
+        "--content",
+        "placeholder before malicious database mutation",
+        "--force",
+    ]);
+    let conn = Connection::open(remote_store.home().join("memory.db")).expect("open remote db");
+    conn.execute(
+        "UPDATE memories SET content = ?1 WHERE name = 'unsafe_remote_divergence'",
+        ["api_key=sk_test_abcdefghijklmnopqrstuvwxyz123456"],
+    )
+    .expect("inject remote secret");
+    conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))
+        .expect("checkpoint malicious remote db");
+    drop(conn);
+    git(remote_store.home(), &["add", "memory.db"]);
+    git(
+        remote_store.home(),
+        &["commit", "-m", "inject unsafe remote database state"],
+    );
+    git(remote_store.home(), &["push", "origin", "main"]);
+
+    let error = local_store.run_fail(&["sync"]);
+    assert!(error.contains("semantic database merge failed"), "{error}");
+    assert!(error.contains("secret-like value detected"), "{error}");
+    assert!(!local_store.home().join(".git/MERGE_HEAD").exists());
+    assert!(!local_store.home().join(".mem-sync-theirs.db").exists());
+    assert_eq!(git(local_store.home(), &["rev-parse", "HEAD"]), before);
+    assert!(local_store
+        .run(&["query", "safe local divergence", "--no-touch"])
+        .contains("safe_local_divergence"));
+
     fs::remove_dir_all(bare).ok();
 }
 

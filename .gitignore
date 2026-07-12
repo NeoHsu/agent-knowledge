@@ -3,6 +3,7 @@
 /memory.db
 /memory.db-*
 /.mem.lock
+/.bundle-replace-backup-*
 /.agents/
 /skills-lock.json
 *.tmp

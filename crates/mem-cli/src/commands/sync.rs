@@ -9,6 +9,7 @@ const GITIGNORE_LINES: &[&str] = &[
     "memory.db-wal",
     "memory.db-shm",
     "memory.db.backup-*",
+    ".bundle-replace-backup-*",
 ];
 
 /// Sync model: git moves bytes, `mem merge` resolves meaning. A concurrent
@@ -198,7 +199,17 @@ fn resolve_db_conflict(
 
     let report = merge_database(app, &theirs_path, false, allow_secret_redaction);
     remove_temporary_database(&theirs_path);
-    let report = report?;
+    let report = match report {
+        Ok(report) => report,
+        Err(error) => {
+            if let Err(abort_error) = git_run(root, &["merge", "--abort"]) {
+                return Err(error).context(format!(
+                    "semantic database merge failed and git merge abort also failed: {abort_error:#}"
+                ));
+            }
+            return Err(error).context("semantic database merge failed; git merge was aborted");
+        }
+    };
     checkpoint_database(app, "after semantic conflict merge")?;
 
     git_run(root, &["add", "-A"])?;
@@ -253,8 +264,19 @@ fn validate_sync_worktree(root: &Path, current: &Path) -> Result<()> {
         let path = entry?.path();
         let relative = path.strip_prefix(root)?;
         let first = relative.components().next();
-        if current == root
-            && first.is_some_and(|component| {
+        if current == root {
+            if first.is_some_and(|component| {
+                component
+                    .as_os_str()
+                    .to_string_lossy()
+                    .starts_with(".bundle-replace-backup-")
+            }) {
+                bail!(
+                    "stale bundle replacement backup found at {}; inspect and remove it only after confirming the active store is healthy",
+                    path.display()
+                );
+            }
+            if first.is_some_and(|component| {
                 let name = component.as_os_str().to_string_lossy();
                 name == ".git"
                     || name == "index"
@@ -262,10 +284,9 @@ fn validate_sync_worktree(root: &Path, current: &Path) -> Result<()> {
                     || name == "memory.db"
                     || name.starts_with("memory.db-")
                     || name.starts_with("memory.db.backup-")
-                    || name.starts_with(".bundle-replace-backup-")
-            })
-        {
-            continue;
+            }) {
+                continue;
+            }
         }
         let metadata = fs::symlink_metadata(&path)?;
         if metadata.file_type().is_symlink() {
