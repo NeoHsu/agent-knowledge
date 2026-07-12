@@ -33,6 +33,11 @@ scripts/build-release.sh
 scripts/smoke-release.sh
 ```
 
+Tag releases are gated by formatting, Clippy, tests, dependency audit, and a
+release-binary smoke test on Linux. The same test and smoke flow also runs on
+native macOS and Windows runners. Published platform archives receive GitHub
+build-provenance attestations.
+
 ## Scale benchmark
 
 After a release build, run deterministic local acceptance benchmarks at 100, 1,000, and 10,000 memories:
