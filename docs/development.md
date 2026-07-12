@@ -33,11 +33,23 @@ scripts/build-release.sh
 scripts/smoke-release.sh
 ```
 
+## Scale benchmark
+
+After a release build, run deterministic local acceptance benchmarks at 100, 1,000, and 10,000 memories:
+
+```bash
+scripts/benchmark-scale.sh
+# bounded iteration while developing:
+SCALES="100 1000" scripts/benchmark-scale.sh
+```
+
+The script uses isolated temporary stores and reports import, query, prime, graph rebuild, and bundle export latency as CSV. It performs no network access and deletes its stores on exit.
+
 ## Developer notes
 
-### `--no-touch` flag
+### Read-only query default
 
-Queries with `--no-touch` skip the `access_count` update and do not acquire the write lock, making them safe for read-only agent polling.
+Queries are no-touch and lock-free by default, making them safe for agent polling. `--touch` explicitly updates `access_count`/`last_accessed_at` and acquires the write lock. A stale index produces an error unless the caller runs `mem reindex` or explicitly passes `--repair-index`; the hidden `--no-touch` flag remains only as a compatibility no-op.
 
 ### `serde_yaml_ng` alias
 
