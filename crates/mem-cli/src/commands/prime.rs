@@ -1,7 +1,7 @@
 use super::*;
 
-const MIN_BUDGET: usize = 400;
-const CONTENT_CAPS: &[usize] = &[240, 160, 100, 80];
+const MIN_CONTENT_CAP: usize = 80;
+const CONTENT_CAPS: &[usize] = &[240, 160, 100, MIN_CONTENT_CAP];
 
 /// Sections in priority order: when the budget forces drops, entries are
 /// removed from the last section backwards so user identity and feedback
@@ -23,16 +23,21 @@ pub(crate) fn cmd_prime(app: &App, args: PrimeArgs) -> Result<()> {
         bail!("prime --focus cannot exceed 1000 characters");
     }
     if !app.db_path.exists() {
-        return match args.format {
-            PrimeFormat::Text => print_text(format!(
+        let rendered = match args.format {
+            PrimeFormat::Text => format!(
                 "mnemark: no memory store at {} (run `mem init`)\n",
                 app.root.display()
-            )),
-            PrimeFormat::Json => print_json(&json!({
-                "status": "no_store",
-                "root": app.root.display().to_string()
-            })),
+            ),
+            PrimeFormat::Json => format!(
+                "{}\n",
+                serde_json::to_string(&json!({
+                    "status": "no_store",
+                    "root": app.root.display().to_string()
+                }))?
+            ),
         };
+        ensure_budget(&rendered, args.budget)?;
+        return print_text(rendered);
     }
     app.require_schema()?;
     let conn = if args.focus.is_some() {
@@ -119,84 +124,132 @@ pub(crate) fn cmd_prime(app: &App, args: PrimeArgs) -> Result<()> {
         None
     };
 
-    let render_graph_context = match args.format {
-        PrimeFormat::Text => graph_context.as_ref(),
-        PrimeFormat::Json => None,
-    };
-    let budget = args.budget.max(MIN_BUDGET);
-    let mut cap = *CONTENT_CAPS.last().expect("caps");
-    let mut graph_limit = if render_graph_context.is_some() {
-        args.per_section.max(1)
-    } else {
-        0
-    };
+    let budget = args.budget;
+    let mut cap = MIN_CONTENT_CAP;
+    let mut graph_limit = graph_context
+        .as_ref()
+        .map(|_| args.per_section.max(1))
+        .unwrap_or_default();
     let mut rendered = String::new();
     for candidate in CONTENT_CAPS {
-        rendered = render_text(
-            app,
-            &scopes,
-            &sections,
-            render_graph_context,
-            graph_limit,
-            *candidate,
-        );
-        if rendered.chars().count() <= budget {
-            cap = *candidate;
-            break;
-        }
         cap = *candidate;
-    }
-    while rendered.chars().count() > budget && drop_last_entry(&mut sections) {
-        rendered = render_text(
+        rendered = render_prime(
+            args.format,
             app,
             &scopes,
             &sections,
-            render_graph_context,
+            graph_context.as_ref(),
             graph_limit,
             cap,
-        );
+        )?;
+        if rendered.chars().count() <= budget {
+            break;
+        }
+    }
+    while rendered.chars().count() > budget && drop_last_entry(&mut sections) {
+        rendered = render_prime(
+            args.format,
+            app,
+            &scopes,
+            &sections,
+            graph_context.as_ref(),
+            graph_limit,
+            cap,
+        )?;
     }
     while rendered.chars().count() > budget && graph_limit > 0 {
         graph_limit -= 1;
-        rendered = render_text(
+        rendered = render_prime(
+            args.format,
             app,
             &scopes,
             &sections,
-            render_graph_context,
+            graph_context.as_ref(),
             graph_limit,
             cap,
+        )?;
+    }
+    ensure_budget(&rendered, budget)?;
+    print_text(rendered)
+}
+
+fn render_prime(
+    format: PrimeFormat,
+    app: &App,
+    scopes: &[String],
+    sections: &[(&str, Vec<Memory>)],
+    graph_context: Option<&mem_core::graph::GraphQueryReport>,
+    graph_limit: usize,
+    cap: usize,
+) -> Result<String> {
+    match format {
+        PrimeFormat::Text => Ok(render_text(
+            app,
+            scopes,
+            sections,
+            graph_context,
+            graph_limit,
+            cap,
+        )),
+        PrimeFormat::Json => render_json(app, scopes, sections, graph_context, graph_limit, cap),
+    }
+}
+
+fn render_json(
+    app: &App,
+    scopes: &[String],
+    sections: &[(&str, Vec<Memory>)],
+    graph_context: Option<&mem_core::graph::GraphQueryReport>,
+    graph_limit: usize,
+    cap: usize,
+) -> Result<String> {
+    let mut body = serde_json::Map::new();
+    for (section, memories) in sections {
+        let entries = memories
+            .iter()
+            .map(|memory| {
+                json!({
+                    "name": memory.name,
+                    "type": memory.r#type,
+                    "scope": memory.scope,
+                    "source": memory.source,
+                    "confidence": memory.confidence,
+                    "content": truncate_text(entry_body(memory), cap)
+                })
+            })
+            .collect::<Vec<_>>();
+        body.insert((*section).to_string(), Value::Array(entries));
+    }
+    let graph_context = match graph_context {
+        None => Value::Null,
+        Some(_) if graph_limit == 0 => json!({"status": "omitted_by_budget"}),
+        Some(context) => json!({
+            "status": context.status,
+            "query": context.query,
+            "start_nodes": context.start_nodes.iter().take(graph_limit).collect::<Vec<_>>(),
+            "nodes": context.nodes.iter().take(graph_limit).collect::<Vec<_>>(),
+            "edges": context.edges.iter().take(graph_limit).collect::<Vec<_>>()
+        }),
+    };
+    let mut rendered = serde_json::to_string_pretty(&json!({
+        "status": "ok",
+        "root": app.root.display().to_string(),
+        "scopes": scopes,
+        "sections": body,
+        "graph_context": graph_context
+    }))?;
+    rendered.push('\n');
+    Ok(rendered)
+}
+
+fn ensure_budget(rendered: &str, budget: usize) -> Result<()> {
+    let required = rendered.chars().count();
+    if required > budget {
+        bail!(
+            "prime output cannot fit within --budget {budget}; the selected format and context require at least {required} characters"
         );
     }
-
-    match args.format {
-        PrimeFormat::Text => print_text(rendered),
-        PrimeFormat::Json => {
-            let mut body = serde_json::Map::new();
-            for (section, memories) in &sections {
-                let entries = memories
-                    .iter()
-                    .map(|memory| {
-                        json!({
-                            "name": memory.name,
-                            "type": memory.r#type,
-                            "scope": memory.scope,
-                            "source": memory.source,
-                            "confidence": memory.confidence,
-                            "content": truncate_text(entry_body(memory), cap)
-                        })
-                    })
-                    .collect::<Vec<_>>();
-                body.insert((*section).to_string(), Value::Array(entries));
-            }
-            print_json_pretty(&json!({
-                "status": "ok",
-                "root": app.root.display().to_string(),
-                "scopes": scopes,
-                "sections": body,
-                "graph_context": graph_context
-            }))
-        }
-    }
+    Ok(())
 }
 
 fn confidence_rank(confidence: &str) -> u8 {

@@ -218,7 +218,7 @@ pub(crate) struct PrimeArgs {
     #[arg(
         long,
         default_value_t = 4000,
-        help = "Approximate output budget in characters"
+        help = "Maximum emitted output in characters"
     )]
     pub(crate) budget: usize,
     #[arg(long, default_value_t = 8, help = "Maximum entries per section")]

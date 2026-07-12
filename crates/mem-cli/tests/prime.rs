@@ -121,13 +121,61 @@ fn prime_respects_budget() {
             &format!("{index} {long}"),
         ]);
     }
-    let output = store.run(&["prime", "--budget", "600"]);
+    let output = store.run(&["prime", "--budget", "900"]);
     assert!(
         output.chars().count() <= 900,
         "budget overshoot: {} chars",
         output.chars().count()
     );
     assert!(output.contains("-- protocol --"));
+}
+
+#[test]
+fn prime_rejects_a_budget_smaller_than_the_required_envelope() {
+    let store = TestRuntimeStore::new("prime-minimum-budget");
+    store.run(&["init"]);
+    let error = store.run_fail(&["prime", "--budget", "256"]);
+    assert!(error.contains("prime output cannot fit within --budget 256"));
+    assert!(error.contains("require at least"));
+}
+
+#[test]
+fn focused_prime_json_respects_the_hard_budget() {
+    let store = TestRuntimeStore::new("prime-json-budget");
+    store.run(&["init"]);
+    let long = "graph budget evidence ".repeat(30);
+    for index in 0..8 {
+        store.run(&[
+            "save",
+            "--name",
+            &format!("graph_budget_{index}"),
+            "--tags",
+            "[\"domain:graph-budget\"]",
+            "--content",
+            &format!("focus graph budget {index} {long}"),
+            "--force",
+        ]);
+    }
+
+    let output = store.run(&[
+        "prime",
+        "--focus",
+        "focus graph budget",
+        "--format",
+        "json",
+        "--per-section",
+        "8",
+        "--budget",
+        "1200",
+    ]);
+    assert!(
+        output.chars().count() <= 1200,
+        "JSON budget overshoot: {} chars",
+        output.chars().count()
+    );
+    let parsed: serde_json::Value = serde_json::from_str(&output).expect("budgeted prime json");
+    assert_eq!(parsed["status"], "ok");
+    assert!(parsed.get("graph_context").is_some());
 }
 
 #[test]
