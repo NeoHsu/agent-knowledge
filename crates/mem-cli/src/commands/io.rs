@@ -1,5 +1,11 @@
 use super::*;
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
+
+const IMPORT_TRANSACTION_CHUNK: usize = 500;
+
+type ImportedMemoryResult = std::result::Result<(Value, Option<String>), String>;
+type IndexedImportResult = (usize, ImportedMemoryResult);
 
 pub(crate) fn cmd_export(app: &App, args: ExportArgs) -> Result<()> {
     app.require_schema()?;
@@ -152,42 +158,73 @@ pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
 
     if args.file.extension().and_then(|s| s.to_str()) == Some("json") {
         let values: Vec<Value> = serde_json::from_str(&text).context("parse json import")?;
+        let rebuild_index =
+            memory_index::is_stale(app) || memory_index::validate_physical_index(app).is_err();
         let conn = app.conn()?;
-        let mut saved_ids: Vec<String> = Vec::new();
-        for (index, value) in values.into_iter().enumerate() {
-            let import_result = save_args_from_import_value(
-                value,
-                &args.source,
-                args.user_confirmed,
-                args.redact_secrets,
-                &args.file.display().to_string(),
-                args.no_validate_workflow,
-            )
-            .and_then(|save_args| save_memory_no_index(app, save_args));
-            match import_result {
-                Ok((result, maybe_id)) => {
-                    let status = result_status(&result);
-                    if let Some(id) = maybe_id {
-                        saved_ids.push(id);
+        let mut saved_ids = BTreeSet::new();
+        let origin_ref = args.file.display().to_string();
+        for (chunk_index, chunk) in values.chunks(IMPORT_TRANSACTION_CHUNK).enumerate() {
+            let first_index = chunk_index * IMPORT_TRANSACTION_CHUNK;
+            let chunk_results = with_transaction(&conn, |conn| {
+                let mut chunk_results: Vec<IndexedImportResult> = Vec::with_capacity(chunk.len());
+                let mut changed = false;
+                for (offset, value) in chunk.iter().cloned().enumerate() {
+                    conn.execute_batch("SAVEPOINT import_item")?;
+                    let import_result = save_args_from_import_value(
+                        value,
+                        &args.source,
+                        args.user_confirmed,
+                        args.redact_secrets,
+                        &origin_ref,
+                        args.no_validate_workflow,
+                    )
+                    .and_then(|save_args| save_memory_no_index_in_connection(conn, save_args));
+                    match import_result {
+                        Ok((result, maybe_id)) => {
+                            conn.execute_batch("RELEASE import_item")?;
+                            changed |= maybe_id.is_some();
+                            chunk_results.push((first_index + offset, Ok((result, maybe_id))));
+                        }
+                        Err(error) => {
+                            conn.execute_batch("ROLLBACK TO import_item; RELEASE import_item;")?;
+                            chunk_results.push((first_index + offset, Err(error.to_string())));
+                        }
                     }
-                    increment_count(&mut counts, &status);
-                    results.push(json!({
-                        "index": index,
-                        "status": status,
-                        "result": result
-                    }));
                 }
-                Err(err) => {
-                    increment_count(&mut counts, "failed");
-                    results.push(json!({
-                        "index": index,
-                        "status": "failed",
-                        "error": err.to_string()
-                    }));
+                if changed {
+                    mem_core::graph::set_graph_dirty(conn, true)?;
+                    mem_core::db::set_index_dirty(conn, true)?;
+                }
+                Ok(chunk_results)
+            })?;
+
+            for (index, import_result) in chunk_results {
+                match import_result {
+                    Ok((result, maybe_id)) => {
+                        let status = result_status(&result);
+                        if let Some(id) = maybe_id {
+                            saved_ids.insert(id);
+                        }
+                        increment_count(&mut counts, &status);
+                        results.push(json!({
+                            "index": index,
+                            "status": status,
+                            "result": result
+                        }));
+                    }
+                    Err(error) => {
+                        increment_count(&mut counts, "failed");
+                        results.push(json!({
+                            "index": index,
+                            "status": "failed",
+                            "error": error
+                        }));
+                    }
                 }
             }
         }
-        memory_index::upsert_batch_or_mark_stale(app, &conn, &saved_ids)?;
+        let saved_ids = saved_ids.into_iter().collect::<Vec<_>>();
+        memory_index::complete_bulk_write(app, &conn, &saved_ids, rebuild_index)?;
     } else {
         let name = args
             .file

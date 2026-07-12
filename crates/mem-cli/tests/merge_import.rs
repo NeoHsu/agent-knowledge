@@ -389,3 +389,61 @@ fn import_outputs_single_summary() {
     assert_eq!(summary["counts"]["failed"], 1);
     assert!(summary["results"].is_array());
 }
+
+#[test]
+fn import_batches_transactions_across_chunk_boundaries_and_keeps_item_errors() {
+    let repo = TestRepo::new("import-batch-transactions");
+    repo.run(&["init"]);
+    let mut records = (0..501)
+        .map(|index| {
+            serde_json::json!({
+                "name": format!("bulk_import_{index:04}"),
+                "content": format!("bulk boundary payload {index}"),
+                "tags": ["import:batch"]
+            })
+        })
+        .collect::<Vec<_>>();
+    records.insert(250, serde_json::json!({"content": "missing required name"}));
+    let import_file = repo.join("bulk-import.json");
+    fs::write(
+        &import_file,
+        serde_json::to_vec(&records).expect("serialize bulk import"),
+    )
+    .expect("write bulk import");
+
+    let output = repo.run(&["import", import_file.to_str().expect("import path")]);
+    let summary: Value = serde_json::from_str(&output).expect("bulk import summary");
+    assert_eq!(summary["total"], 502);
+    assert_eq!(summary["counts"]["saved"], 501);
+    assert_eq!(summary["counts"]["failed"], 1);
+
+    let conn = Connection::open(repo.join("memory.db")).expect("open imported db");
+    let memories: i64 = conn
+        .query_row("SELECT COUNT(*) FROM memories", [], |row| row.get(0))
+        .expect("memory count");
+    let changes: i64 = conn
+        .query_row("SELECT COUNT(*) FROM changelog", [], |row| row.get(0))
+        .expect("changelog count");
+    let index_dirty: String = conn
+        .query_row(
+            "SELECT value FROM metadata WHERE key = 'index_dirty'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("index dirty state");
+    let graph_dirty: String = conn
+        .query_row(
+            "SELECT value FROM metadata WHERE key = 'graph_dirty'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("graph dirty state");
+    assert_eq!(memories, 501);
+    assert_eq!(changes, 501);
+    assert_eq!(index_dirty, "false");
+    assert_eq!(graph_dirty, "true");
+    drop(conn);
+
+    let query = repo.run(&["query", "bulk boundary payload 500", "--limit", "1"]);
+    assert!(query.contains("bulk_import_0500"), "query: {query}");
+}

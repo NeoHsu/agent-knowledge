@@ -160,7 +160,8 @@ pub(crate) use doctor::cmd_doctor;
 pub(crate) use graph::cmd_graph;
 pub(crate) use io::{cmd_export, cmd_import};
 pub(crate) use memory::{
-    cmd_delete, cmd_save, cmd_supersede, cmd_update, save_memory, save_memory_no_index,
+    cmd_delete, cmd_save, cmd_supersede, cmd_update, save_memory,
+    save_memory_no_index_in_connection,
 };
 pub(crate) use merge::{cmd_merge, merge_database};
 pub(crate) use prime::cmd_prime;

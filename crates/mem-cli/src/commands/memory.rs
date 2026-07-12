@@ -267,11 +267,14 @@ fn lint_memory(r#type: &str, name: &str, content: &str, tags: &str) -> Vec<Value
 /// Like `save_memory` but skips all index operations (no upsert, no repair_stale).
 /// Returns `(json_result, Option<saved_id>)` — `Some(id)` when the record was saved or updated,
 /// `None` for duplicates and similar-found results that produce no new/changed record.
-pub(crate) fn save_memory_no_index(app: &App, args: SaveArgs) -> Result<(Value, Option<String>)> {
-    app.require_schema()?;
+/// Save one imported memory inside a caller-owned transaction or savepoint.
+/// The caller batches index updates and marks graph materialization dirty once.
+pub(crate) fn save_memory_no_index_in_connection(
+    conn: &Connection,
+    args: SaveArgs,
+) -> Result<(Value, Option<String>)> {
     let (args, content) = prepare_save_args(args)?;
-    let conn = app.conn()?;
-    if let Some(existing) = memory_by_name_in_scope(&conn, &args.name, &args.scope)? {
+    if let Some(existing) = memory_by_name_in_scope(conn, &args.name, &args.scope)? {
         if args.force {
             if source_priority(&args.source) < source_priority(&existing.source) {
                 return Ok((
@@ -293,43 +296,40 @@ pub(crate) fn save_memory_no_index(app: &App, args: SaveArgs) -> Result<(Value, 
             let confidence = args
                 .confidence
                 .unwrap_or_else(|| confidence_for_source(&args.source).to_string());
-            with_transaction(&conn, |conn| {
-                conn.execute(
-                    "UPDATE memories
-                     SET type = ?1, description = ?2, content = ?3, tags = ?4, scope = ?5,
-                         source = ?6, confidence = ?7, protected = ?8, updated_at = ?9,
-                         expires_at = ?10, origin = ?11, origin_ref = ?12,
-                         user_confirmed_at = COALESCE(?13, user_confirmed_at),
-                         version = version + 1
-                     WHERE id = ?14",
-                    params![
-                        args.r#type,
-                        description,
-                        content,
-                        args.tags,
-                        args.scope,
-                        args.source,
-                        confidence,
-                        args.source == "manual",
-                        now,
-                        args.expires_at,
-                        args.origin.as_deref().unwrap_or("direct"),
-                        args.origin_ref,
-                        user_confirmed_at,
-                        existing.id
-                    ],
-                )?;
-                log_change(
-                    conn,
-                    &existing.id,
-                    "update",
-                    existing.content.as_deref(),
-                    Some(&content),
-                    &args.source,
-                )?;
-                mem_core::graph::set_graph_dirty(conn, true)
-            })?;
-            let updated = memory_by_id(&conn, &existing.id)?
+            conn.execute(
+                "UPDATE memories
+                 SET type = ?1, description = ?2, content = ?3, tags = ?4, scope = ?5,
+                     source = ?6, confidence = ?7, protected = ?8, updated_at = ?9,
+                     expires_at = ?10, origin = ?11, origin_ref = ?12,
+                     user_confirmed_at = COALESCE(?13, user_confirmed_at),
+                     version = version + 1
+                 WHERE id = ?14",
+                params![
+                    args.r#type,
+                    description,
+                    content,
+                    args.tags,
+                    args.scope,
+                    args.source,
+                    confidence,
+                    args.source == "manual",
+                    now,
+                    args.expires_at,
+                    args.origin.as_deref().unwrap_or("direct"),
+                    args.origin_ref,
+                    user_confirmed_at,
+                    existing.id
+                ],
+            )?;
+            log_change(
+                conn,
+                &existing.id,
+                "update",
+                existing.content.as_deref(),
+                Some(&content),
+                &args.source,
+            )?;
+            let updated = memory_by_id(conn, &existing.id)?
                 .ok_or_else(|| anyhow!("updated memory missing: {}", existing.id))?;
             return Ok((
                 json!({
@@ -352,9 +352,7 @@ pub(crate) fn save_memory_no_index(app: &App, args: SaveArgs) -> Result<(Value, 
         ));
     }
 
-    // Note: no repair_stale or similar_candidates check — caller manages index.
-
-    let id = unique_memory_id(&conn, &slugify(&args.name))?;
+    let id = unique_memory_id(conn, &slugify(&args.name))?;
     let now = now();
     let confidence = args
         .confidence
@@ -364,34 +362,31 @@ pub(crate) fn save_memory_no_index(app: &App, args: SaveArgs) -> Result<(Value, 
     let description = args.description.or(args.why);
     let origin = args.origin.as_deref().unwrap_or("direct");
 
-    with_transaction(&conn, |conn| {
-        conn.execute(
-            "INSERT INTO memories
-            (id, type, name, description, content, tags, scope, source, confidence, protected,
-             created_at, updated_at, expires_at, origin, origin_ref, user_confirmed_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13, ?14, ?15)",
-            params![
-                id,
-                args.r#type,
-                args.name,
-                description,
-                content,
-                args.tags,
-                args.scope,
-                args.source,
-                confidence,
-                protected,
-                now,
-                args.expires_at,
-                origin,
-                args.origin_ref,
-                user_confirmed_at
-            ],
-        )
-        .context("insert memory")?;
-        log_change(conn, &id, "save", None, Some(&content), &args.source)?;
-        mem_core::graph::set_graph_dirty(conn, true)
-    })?;
+    conn.execute(
+        "INSERT INTO memories
+        (id, type, name, description, content, tags, scope, source, confidence, protected,
+         created_at, updated_at, expires_at, origin, origin_ref, user_confirmed_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13, ?14, ?15)",
+        params![
+            id,
+            args.r#type,
+            args.name,
+            description,
+            content,
+            args.tags,
+            args.scope,
+            args.source,
+            confidence,
+            protected,
+            now,
+            args.expires_at,
+            origin,
+            args.origin_ref,
+            user_confirmed_at
+        ],
+    )
+    .context("insert memory")?;
+    log_change(conn, &id, "save", None, Some(&content), &args.source)?;
 
     Ok((json!({"status": "saved", "id": id, "version": 1}), Some(id)))
 }
@@ -797,7 +792,15 @@ fn similar_candidates(
     scope: &str,
     limit: usize,
 ) -> Result<Vec<Value>> {
-    let ids = memory_index::search_ids(app, content, false, false, 25, None, None, true)?;
+    let ids = memory_index::search_ids(
+        app,
+        content,
+        false,
+        false,
+        25,
+        memory_index::SearchFilters::default(),
+        true,
+    )?;
     let mut candidates = Vec::new();
     for id in ids {
         let Some(memory) = memory_by_id(conn, &id)? else {
