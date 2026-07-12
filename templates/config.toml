@@ -11,6 +11,8 @@ default_limit = 20
 [query]
 default_scope = "auto"
 default_limit = 20
+# Maximum lexical candidates loaded for deterministic post-ranking (200-100000).
+candidate_limit = 10000
 
 [workflow]
 default_scope = "auto"

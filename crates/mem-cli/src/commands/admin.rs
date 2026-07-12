@@ -70,6 +70,7 @@ pub(crate) fn cmd_config(app: &App, command: ConfigCommand) -> Result<()> {
                     "schema": "embedded",
                     "query_default_scope": app.config.query_default_scope(),
                     "query_default_limit": app.config.query_default_limit().unwrap_or(DEFAULT_LIMIT),
+                    "query_candidate_limit": app.config.query_candidate_limit(),
                     "workflow_default_scope": app.config.workflow_default_scope(),
                     "workflow_default_limit": app.config.workflow_default_limit().unwrap_or(DEFAULT_LIMIT),
                     "budget_per_scope_max": app.config.per_scope_max()

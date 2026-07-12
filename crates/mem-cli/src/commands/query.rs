@@ -2,6 +2,10 @@ use std::collections::HashMap;
 
 use super::*;
 
+const QUERY_CANDIDATE_FLOOR: usize = 200;
+const QUERY_CANDIDATE_MULTIPLIER: usize = 10;
+const QUERY_CANDIDATE_MAX_CONFIG: usize = 100_000;
+
 #[derive(Debug, Clone, Serialize)]
 struct RetrievalScore {
     total: f64,
@@ -47,6 +51,17 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
         .limit
         .or_else(|| app.config.query_default_limit())
         .unwrap_or(DEFAULT_LIMIT);
+    let candidate_hard_limit = app.config.query_candidate_limit();
+    if args.query.is_some() {
+        if !(QUERY_CANDIDATE_FLOOR..=QUERY_CANDIDATE_MAX_CONFIG).contains(&candidate_hard_limit) {
+            bail!(
+                "query candidate_limit must be between {QUERY_CANDIDATE_FLOOR} and {QUERY_CANDIDATE_MAX_CONFIG}"
+            );
+        }
+        if limit > candidate_hard_limit {
+            bail!("query --limit cannot exceed {candidate_hard_limit}");
+        }
+    }
     let scope = args
         .scope
         .as_deref()
@@ -67,7 +82,7 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
         }
     };
 
-    let hits = if let Some(query) = args.query.as_deref() {
+    let (mut memories, lexical_scores) = if let Some(query) = args.query.as_deref() {
         if memory_index::is_stale(app) {
             if args.repair_index {
                 memory_index::repair_stale(app)?;
@@ -77,46 +92,27 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
                 );
             }
         }
-        let search_limit = memory_count(&conn)?.max(limit).max(DEFAULT_LIMIT);
-        memory_index::search_hits(
+        bounded_search_candidates(
             app,
-            query,
-            args.fuzzy,
-            args.raw_query,
-            search_limit,
-            args.r#type.as_deref(),
-            scope_filter.as_deref(),
-            args.repair_index,
-        )?
-    } else {
-        Vec::new()
-    };
-    let ids = hits.iter().map(|hit| hit.id.clone()).collect::<Vec<_>>();
-    let lexical_scores = hits
-        .iter()
-        .map(|hit| (hit.id.clone(), hit.score))
-        .collect::<HashMap<_, _>>();
-
-    // P2: when listing (no query), push filters into SQL to avoid a full table scan.
-    let mut memories = if args.query.is_some() {
-        let mut by_id = memories_by_ids(&conn, &ids)?;
-        let mut rows = ids
-            .iter()
-            .filter_map(|id| by_id.remove(id))
-            .collect::<Vec<_>>();
-        // Post-filter search results (IDs come from tantivy which doesn't know about filters).
-        rows.retain(|memory| passes_filters(memory, &args, scope_filter.as_deref()));
-        rows
-    } else {
-        // Push all applicable filters into the SQL WHERE clause.
-        mem_core::db::list_memories_filtered(
             &conn,
-            args.include_superseded,
-            args.r#type.as_deref(),
-            args.tags.as_deref(),
+            &args,
+            query,
+            limit,
+            candidate_hard_limit,
             scope_filter.as_deref(),
-            args.expired,
         )?
+    } else {
+        (
+            mem_core::db::list_memories_filtered(
+                &conn,
+                args.include_superseded,
+                args.r#type.as_deref(),
+                args.tags.as_deref(),
+                scope_filter.as_deref(),
+                args.expired,
+            )?,
+            HashMap::new(),
+        )
     };
 
     let retrieval_scores = if args.query.is_some() {
@@ -193,6 +189,77 @@ pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
         OutputFormat::Compact => print_text(render_memory_compact(&memories))?,
     }
     Ok(())
+}
+
+fn bounded_search_candidates(
+    app: &App,
+    conn: &Connection,
+    args: &QueryArgs,
+    query: &str,
+    result_limit: usize,
+    candidate_hard_limit: usize,
+    scope_filter: Option<&[&str]>,
+) -> Result<(Vec<Memory>, HashMap<String, f64>)> {
+    if result_limit == 0 {
+        return Ok((Vec::new(), HashMap::new()));
+    }
+    let store_count = memory_count(conn)?;
+    let maximum = store_count.min(candidate_hard_limit);
+    if maximum == 0 {
+        return Ok((Vec::new(), HashMap::new()));
+    }
+    let lifecycle = if args.expired {
+        memory_index::SearchLifecycle::Expired
+    } else if args.include_superseded {
+        memory_index::SearchLifecycle::IncludeSuperseded
+    } else {
+        memory_index::SearchLifecycle::Active
+    };
+    let filters = memory_index::SearchFilters {
+        memory_type: args.r#type.as_deref(),
+        scopes: scope_filter,
+        tag: args.tags.as_deref(),
+        lifecycle,
+    };
+    let mut candidate_limit = initial_candidate_limit(result_limit, maximum);
+
+    loop {
+        let hits = memory_index::search_hits(
+            app,
+            query,
+            args.fuzzy,
+            args.raw_query,
+            candidate_limit,
+            filters,
+            args.repair_index,
+        )?;
+        let ids = hits.iter().map(|hit| hit.id.clone()).collect::<Vec<_>>();
+        let lexical_scores = hits
+            .iter()
+            .map(|hit| (hit.id.clone(), hit.score))
+            .collect::<HashMap<_, _>>();
+        let mut by_id = memories_by_ids(conn, &ids)?;
+        let mut rows = ids
+            .iter()
+            .filter_map(|id| by_id.remove(id))
+            .collect::<Vec<_>>();
+        // The index owns these filters; retain the SQLite check as a defense
+        // against a timestamp boundary or an index becoming stale mid-query.
+        rows.retain(|memory| passes_filters(memory, args, scope_filter));
+
+        let exhausted = hits.len() < candidate_limit;
+        if rows.len() >= result_limit || exhausted || candidate_limit >= maximum {
+            return Ok((rows, lexical_scores));
+        }
+        candidate_limit = candidate_limit.saturating_mul(2).min(maximum);
+    }
+}
+
+fn initial_candidate_limit(result_limit: usize, maximum: usize) -> usize {
+    result_limit
+        .saturating_mul(QUERY_CANDIDATE_MULTIPLIER)
+        .max(QUERY_CANDIDATE_FLOOR)
+        .min(maximum)
 }
 
 fn deterministic_retrieval_scores(
@@ -379,4 +446,20 @@ fn tags_text(tags: &str) -> String {
     parse_string_array(tags)
         .map(|tags| tags.join(","))
         .unwrap_or_else(|_| tags.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn candidate_limit_is_bounded_and_overfetches_small_results() {
+        assert_eq!(initial_candidate_limit(1, 50_000), QUERY_CANDIDATE_FLOOR);
+        assert_eq!(initial_candidate_limit(50, 50_000), 500);
+        assert_eq!(
+            initial_candidate_limit(mem_core::config::DEFAULT_QUERY_CANDIDATE_LIMIT, 50_000),
+            mem_core::config::DEFAULT_QUERY_CANDIDATE_LIMIT
+        );
+        assert_eq!(initial_candidate_limit(50, 73), 73);
+    }
 }

@@ -1,20 +1,24 @@
 use std::fs;
+use std::ops::Bound;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
+use chrono::Utc;
 use tantivy::collector::TopDocs;
 use tantivy::query::{
-    AllQuery, BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, Query, QueryParser, TermQuery,
+    AllQuery, BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, Query, QueryParser, RangeQuery,
+    TermQuery,
 };
 use tantivy::schema::{
-    Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, Value as TantivyValue,
-    STORED, STRING,
+    Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, Value as TantivyValue, FAST,
+    INDEXED, STORED, STRING,
 };
 use tantivy::{doc, Index, IndexWriter, TantivyDocument, Term};
 
+use crate::index::{SearchFilters, SearchLifecycle};
 use crate::search_tokenizer;
 
-pub(crate) const INDEX_SCHEMA_VERSION: i64 = 3;
+pub(crate) const INDEX_SCHEMA_VERSION: i64 = 4;
 const INDEX_VERSION_MARKER: &str = ".mnemark-index-version";
 
 #[derive(Debug)]
@@ -73,8 +77,11 @@ pub struct IndexedMemory {
     pub description: Option<String>,
     pub content: Option<String>,
     pub tags: String,
+    pub exact_tags: Vec<String>,
     pub scope: String,
     pub r#type: String,
+    pub valid: bool,
+    pub expires_at: i64,
 }
 
 pub(crate) struct IndexFields {
@@ -83,8 +90,11 @@ pub(crate) struct IndexFields {
     description: Field,
     content: Field,
     tags: Field,
+    exact_tag: Field,
     scope: Field,
     r#type: Field,
+    valid: Field,
+    expires_at: Field,
 }
 
 pub fn rebuild(index_path: &Path, memories: &[IndexedMemory]) -> Result<()> {
@@ -147,8 +157,7 @@ pub fn search_hits(
     fuzzy: bool,
     raw_query: bool,
     limit: usize,
-    type_filter: Option<&str>,
-    scope_filter: Option<&[&str]>,
+    filters: SearchFilters<'_>,
 ) -> Result<Vec<SearchHit>> {
     let index = open_existing_index(index_path)?;
     let fields = fields_from_schema(index.schema())?;
@@ -160,8 +169,7 @@ pub fn search_hits(
         literal_query_text(query)
     };
 
-    // Build the text query clause (or AllQuery when no text provided).
-    let text_clause: Option<Box<dyn tantivy::query::Query>> = if query_text.is_empty() {
+    let text_clause: Option<Box<dyn Query>> = if query_text.is_empty() {
         None
     } else if fuzzy {
         build_fuzzy_query(&query_text, &fields)
@@ -170,52 +178,74 @@ pub fn search_hits(
         apply_field_boosts(&mut parser, &fields);
         Some(Box::new(parser.parse_query(&query_text)?))
     };
-
-    // Build filter clauses for type and scope.
-    let type_clause: Option<Box<dyn tantivy::query::Query>> = type_filter.map(|t| {
+    let type_clause = filters.memory_type.map(|memory_type| {
         Box::new(TermQuery::new(
-            Term::from_field_text(fields.r#type, t),
+            Term::from_field_text(fields.r#type, memory_type),
             IndexRecordOption::Basic,
-        )) as Box<dyn tantivy::query::Query>
+        )) as Box<dyn Query>
     });
-
-    let scope_clause: Option<Box<dyn tantivy::query::Query>> = scope_filter.and_then(|scopes| {
+    let scope_clause = filters.scopes.and_then(|scopes| {
         if scopes.is_empty() {
             return None;
         }
-        let should_terms: Vec<(Occur, Box<dyn tantivy::query::Query>)> = scopes
+        let terms = scopes
             .iter()
-            .map(|s| {
+            .map(|scope| {
                 (
                     Occur::Should,
                     Box::new(TermQuery::new(
-                        Term::from_field_text(fields.scope, s),
+                        Term::from_field_text(fields.scope, scope),
                         IndexRecordOption::Basic,
-                    )) as Box<dyn tantivy::query::Query>,
+                    )) as Box<dyn Query>,
                 )
             })
             .collect();
-        Some(Box::new(BooleanQuery::new(should_terms)) as Box<dyn tantivy::query::Query>)
+        Some(Box::new(BooleanQuery::new(terms)) as Box<dyn Query>)
     });
+    let tag_clause = filters.tag.map(|tag| {
+        Box::new(TermQuery::new(
+            Term::from_field_text(fields.exact_tag, tag),
+            IndexRecordOption::Basic,
+        )) as Box<dyn Query>
+    });
+    let valid_clause = match filters.lifecycle {
+        SearchLifecycle::Active | SearchLifecycle::Expired => Some(Box::new(TermQuery::new(
+            Term::from_field_text(fields.valid, "true"),
+            IndexRecordOption::Basic,
+        )) as Box<dyn Query>),
+        SearchLifecycle::IncludeSuperseded => None,
+    };
+    let now = Utc::now().timestamp();
+    let expiration_clause = match filters.lifecycle {
+        SearchLifecycle::Expired => Box::new(RangeQuery::new(
+            Bound::Unbounded,
+            Bound::Excluded(Term::from_field_i64(fields.expires_at, now)),
+        )) as Box<dyn Query>,
+        SearchLifecycle::Active | SearchLifecycle::IncludeSuperseded => Box::new(RangeQuery::new(
+            Bound::Included(Term::from_field_i64(fields.expires_at, now)),
+            Bound::Unbounded,
+        ))
+            as Box<dyn Query>,
+    };
 
-    // Combine all clauses. If there are any filters or text, build a BooleanQuery.
-    // Otherwise fall back to AllQuery.
-    let boxed_query: Box<dyn tantivy::query::Query> = {
-        let mut must_clauses: Vec<(Occur, Box<dyn tantivy::query::Query>)> = Vec::new();
-        if let Some(tc) = text_clause {
-            must_clauses.push((Occur::Must, tc));
-        }
-        if let Some(tf) = type_clause {
-            must_clauses.push((Occur::Must, tf));
-        }
-        if let Some(sf) = scope_clause {
-            must_clauses.push((Occur::Must, sf));
-        }
-        if must_clauses.is_empty() {
-            Box::new(AllQuery)
-        } else {
-            Box::new(BooleanQuery::new(must_clauses))
-        }
+    let mut must_clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+    for clause in [
+        text_clause,
+        type_clause,
+        scope_clause,
+        tag_clause,
+        valid_clause,
+        Some(expiration_clause),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        must_clauses.push((Occur::Must, clause));
+    }
+    let boxed_query: Box<dyn Query> = if must_clauses.is_empty() {
+        Box::new(AllQuery)
+    } else {
+        Box::new(BooleanQuery::new(must_clauses))
     };
 
     let docs = searcher.search(&boxed_query, &TopDocs::with_limit(limit).order_by_score())?;
@@ -264,8 +294,11 @@ fn build_schema() -> (Schema, IndexFields) {
     let description = builder.add_text_field("description", text_options.clone());
     let content = builder.add_text_field("content", text_options.clone());
     let tags = builder.add_text_field("tags", text_options);
+    let exact_tag = builder.add_text_field("exact_tag", STRING);
     let scope = builder.add_text_field("scope", STRING);
     let r#type = builder.add_text_field("type", STRING);
+    let valid = builder.add_text_field("valid", STRING);
+    let expires_at = builder.add_i64_field("expires_at", INDEXED | FAST);
     let schema = builder.build();
     let fields = IndexFields {
         id,
@@ -273,8 +306,11 @@ fn build_schema() -> (Schema, IndexFields) {
         description,
         content,
         tags,
+        exact_tag,
         scope,
         r#type,
+        valid,
+        expires_at,
     };
     (schema, fields)
 }
@@ -379,7 +415,7 @@ fn add_memory_doc(
     fields: &IndexFields,
     memory: &IndexedMemory,
 ) -> Result<()> {
-    writer.add_document(doc!(
+    let mut document = doc!(
         fields.id => memory.id.clone(),
         fields.name => memory.name.clone(),
         fields.description => memory.description.clone().unwrap_or_default(),
@@ -387,7 +423,13 @@ fn add_memory_doc(
         fields.tags => memory.tags.clone(),
         fields.scope => memory.scope.clone(),
         fields.r#type => memory.r#type.clone(),
-    ))?;
+        fields.valid => memory.valid.to_string(),
+        fields.expires_at => memory.expires_at,
+    );
+    for tag in &memory.exact_tags {
+        document.add_text(fields.exact_tag, tag);
+    }
+    writer.add_document(document)?;
     Ok(())
 }
 
@@ -457,12 +499,21 @@ fn fields_from_schema(schema: Schema) -> Result<IndexFields> {
         tags: schema
             .get_field("tags")
             .context("index missing tags field")?,
+        exact_tag: schema
+            .get_field("exact_tag")
+            .context("index missing exact_tag field")?,
         scope: schema
             .get_field("scope")
             .context("index missing scope field")?,
         r#type: schema
             .get_field("type")
             .context("index missing type field")?,
+        valid: schema
+            .get_field("valid")
+            .context("index missing valid field")?,
+        expires_at: schema
+            .get_field("expires_at")
+            .context("index missing expires_at field")?,
     })
 }
 

@@ -170,6 +170,14 @@ fn ambiguity_soft_delete_increments_memory_version() {
 }
 
 #[test]
+fn query_rejects_result_limits_above_candidate_safety_bound() {
+    let repo = TestRepo::new("query-result-hard-limit");
+    repo.run(&["init"]);
+    let error = repo.run_fail(&["query", "bounded", "--limit", "10001"]);
+    assert!(error.contains("query --limit cannot exceed 10000"));
+}
+
+#[test]
 fn query_treats_punctuation_as_literal_text() {
     let repo = TestRepo::new("literal-query");
     repo.run(&["init"]);

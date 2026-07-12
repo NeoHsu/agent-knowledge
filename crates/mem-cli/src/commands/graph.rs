@@ -65,8 +65,10 @@ pub(crate) fn cmd_graph(app: &App, command: GraphCommand) -> Result<()> {
                 false,
                 false,
                 (args.limit * 3).max(DEFAULT_LIMIT),
-                None,
-                borrowed.as_deref(),
+                memory_index::SearchFilters {
+                    scopes: borrowed.as_deref(),
+                    ..Default::default()
+                },
                 true,
             )?;
             let scored_memory_ids = memory_hits

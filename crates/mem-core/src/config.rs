@@ -21,6 +21,7 @@ pub struct Config {
 pub struct QueryConfig {
     pub default_scope: Option<String>,
     pub default_limit: Option<usize>,
+    pub candidate_limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -39,6 +40,7 @@ pub struct BudgetConfig {
 /// Default soft cap on active memories per scope. Exceeding it never blocks
 /// writes; audit and retro flag the scope for curation instead.
 pub const DEFAULT_PER_SCOPE_MAX: usize = 30;
+pub const DEFAULT_QUERY_CANDIDATE_LIMIT: usize = 10_000;
 
 impl Config {
     pub fn load_user() -> Result<Self> {
@@ -74,6 +76,9 @@ impl Config {
         if higher.query.default_limit.is_some() {
             self.query.default_limit = higher.query.default_limit;
         }
+        if higher.query.candidate_limit.is_some() {
+            self.query.candidate_limit = higher.query.candidate_limit;
+        }
         if higher.workflow.default_scope.is_some() {
             self.workflow.default_scope = higher.workflow.default_scope.clone();
         }
@@ -99,6 +104,12 @@ impl Config {
 
     pub fn query_default_limit(&self) -> Option<usize> {
         self.query.default_limit.or(self.default_limit)
+    }
+
+    pub fn query_candidate_limit(&self) -> usize {
+        self.query
+            .candidate_limit
+            .unwrap_or(DEFAULT_QUERY_CANDIDATE_LIMIT)
     }
 
     pub fn workflow_default_scope(&self) -> Option<&str> {
@@ -169,6 +180,7 @@ mod tests {
             query: QueryConfig {
                 default_scope: Some("project:store/repo".to_string()),
                 default_limit: Some(10),
+                candidate_limit: Some(1_000),
             },
             ..Config::default()
         };
@@ -176,6 +188,7 @@ mod tests {
             default_limit: Some(50),
             query: QueryConfig {
                 default_scope: Some("auto".to_string()),
+                candidate_limit: Some(5_000),
                 ..QueryConfig::default()
             },
             ..Config::default()
@@ -185,6 +198,7 @@ mod tests {
 
         assert_eq!(merged.query_default_scope(), Some("auto"));
         assert_eq!(merged.query_default_limit(), Some(50));
+        assert_eq!(merged.query_candidate_limit(), 5_000);
         assert_eq!(merged.workflow_default_scope(), Some("global"));
         assert_eq!(merged.workflow_default_limit(), Some(50));
     }

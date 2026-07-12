@@ -1,14 +1,32 @@
 use anyhow::{anyhow, Context, Result};
+use chrono::DateTime;
 use rusqlite::Connection;
 
 use crate::app::App;
 use crate::db::{self, all_memories, memory_by_id, Memory};
 use crate::search_index::{self, IndexedMemory};
+use crate::util::parse_string_array;
 
 #[derive(Debug, Clone)]
 pub struct MemorySearchHit {
     pub id: String,
     pub score: f64,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum SearchLifecycle {
+    #[default]
+    Active,
+    IncludeSuperseded,
+    Expired,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SearchFilters<'a> {
+    pub memory_type: Option<&'a str>,
+    pub scopes: Option<&'a [&'a str]>,
+    pub tag: Option<&'a str>,
+    pub lifecycle: SearchLifecycle,
 }
 
 /// Returns true if the index is stale, using only the SQLite metadata key.
@@ -82,13 +100,36 @@ pub fn upsert_batch_or_mark_stale(app: &App, conn: &Connection, ids: &[String]) 
     if is_stale(app) || validate_physical_index(app).is_err() {
         return reindex_or_mark_stale(app, "rebuild stale or missing index after batch write");
     }
+    write_batch(app, conn, ids)
+}
+
+/// Complete a bulk SQLite write that marked the index dirty before commit.
+/// A previously stale/missing index is rebuilt; otherwise one batch upsert is
+/// committed and the transactional dirty marker is cleared afterward.
+pub fn complete_bulk_write(
+    app: &App,
+    conn: &Connection,
+    ids: &[String],
+    rebuild_required: bool,
+) -> Result<()> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    if rebuild_required || validate_physical_index(app).is_err() {
+        return reindex_or_mark_stale(app, "rebuild stale or missing index after bulk write");
+    }
+    write_batch(app, conn, ids)?;
+    db::set_index_dirty(conn, false)
+}
+
+fn write_batch(app: &App, conn: &Connection, ids: &[String]) -> Result<()> {
     let memories: Vec<IndexedMemory> = ids
         .iter()
         .filter_map(|id| {
             memory_by_id(conn, id)
                 .ok()
                 .flatten()
-                .map(|m| indexed_memory(&m))
+                .map(|memory| indexed_memory(&memory))
         })
         .collect();
     match search_index::upsert_batch(&app.index_path, &memories) {
@@ -132,21 +173,11 @@ pub fn search_ids(
     fuzzy: bool,
     raw_query: bool,
     limit: usize,
-    type_filter: Option<&str>,
-    scope_filter: Option<&[&str]>,
+    filters: SearchFilters<'_>,
     allow_repair: bool,
 ) -> Result<Vec<String>> {
-    search_hits(
-        app,
-        query,
-        fuzzy,
-        raw_query,
-        limit,
-        type_filter,
-        scope_filter,
-        allow_repair,
-    )
-    .map(|hits| hits.into_iter().map(|hit| hit.id).collect())
+    search_hits(app, query, fuzzy, raw_query, limit, filters, allow_repair)
+        .map(|hits| hits.into_iter().map(|hit| hit.id).collect())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -156,21 +187,11 @@ pub fn search_hits(
     fuzzy: bool,
     raw_query: bool,
     limit: usize,
-    type_filter: Option<&str>,
-    scope_filter: Option<&[&str]>,
+    filters: SearchFilters<'_>,
     allow_repair: bool,
 ) -> Result<Vec<MemorySearchHit>> {
-    let search = || {
-        search_index::search_hits(
-            &app.index_path,
-            query,
-            fuzzy,
-            raw_query,
-            limit,
-            type_filter,
-            scope_filter,
-        )
-    };
+    let search =
+        || search_index::search_hits(&app.index_path, query, fuzzy, raw_query, limit, filters);
     let hits = match search() {
         Ok(hits) => hits,
         Err(err) if search_index::is_compatibility_error(&err) && allow_repair => {
@@ -201,13 +222,22 @@ pub fn search_hits(
 }
 
 fn indexed_memory(memory: &Memory) -> IndexedMemory {
+    let expires_at = match memory.expires_at.as_deref() {
+        None => i64::MAX,
+        Some(value) => DateTime::parse_from_rfc3339(value)
+            .map(|timestamp| timestamp.timestamp())
+            .unwrap_or(i64::MIN),
+    };
     IndexedMemory {
         id: memory.id.clone(),
         name: memory.name.clone(),
         description: memory.description.clone(),
         content: memory.content.clone(),
         tags: memory.tags.clone(),
+        exact_tags: parse_string_array(&memory.tags).unwrap_or_default(),
         scope: memory.scope.clone(),
         r#type: memory.r#type.clone(),
+        valid: memory.valid_until.is_none(),
+        expires_at,
     }
 }

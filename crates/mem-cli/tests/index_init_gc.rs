@@ -264,7 +264,7 @@ fn config_show_reports_effective_paths_and_defaults() {
     fs::create_dir_all(&config_root).expect("config root");
     fs::write(
         repo.join("config.toml"),
-        "[query]\ndefault_scope = \"auto\"\ndefault_limit = 7\n[workflow]\ndefault_scope = \"project:NeoHsu/mnemark\"\ndefault_limit = 3\n",
+        "[query]\ndefault_scope = \"auto\"\ndefault_limit = 7\ncandidate_limit = 1234\n[workflow]\ndefault_scope = \"project:NeoHsu/mnemark\"\ndefault_limit = 3\n",
     )
     .expect("write store config");
 
@@ -292,6 +292,7 @@ fn config_show_reports_effective_paths_and_defaults() {
     assert_eq!(shown["effective"]["schema"], "embedded");
     assert_eq!(shown["effective"]["query_default_scope"], "auto");
     assert_eq!(shown["effective"]["query_default_limit"], 7);
+    assert_eq!(shown["effective"]["query_candidate_limit"], 1234);
     assert_eq!(
         shown["effective"]["workflow_default_scope"],
         "project:NeoHsu/mnemark"
@@ -385,7 +386,7 @@ fn missing_index_version_marker_triggers_rebuild() {
     assert!(query.contains("raw_missing_marker"));
     assert_eq!(
         fs::read_to_string(repo.join(INDEX_VERSION_MARKER)).expect("read marker"),
-        "3\n"
+        "4\n"
     );
 }
 
@@ -405,7 +406,7 @@ fn old_index_version_marker_triggers_rebuild() {
     assert!(query.contains("raw_old_marker"));
     assert_eq!(
         fs::read_to_string(repo.join(INDEX_VERSION_MARKER)).expect("read marker"),
-        "3\n"
+        "4\n"
     );
 }
 
@@ -425,7 +426,7 @@ fn invalid_index_version_marker_triggers_rebuild() {
     assert!(query.contains("raw_invalid_marker"));
     assert_eq!(
         fs::read_to_string(repo.join(INDEX_VERSION_MARKER)).expect("read marker"),
-        "3\n"
+        "4\n"
     );
 }
 
