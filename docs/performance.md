@@ -49,9 +49,16 @@ savepoints. Bundle export includes an online SQLite snapshot, full durable-field
 secret scan, artifact validation, SHA-256, and gzip archive creation.
 
 The earlier benchmark populated only `reference` memories, so its Prime numbers
-did not exercise Prime retrieval. It also measured the intentionally throttled
-SQLite backup loop that previously dominated bundle export. Do not compare those
-figures directly with this corrected mixed-data baseline.
+did not exercise Prime retrieval and are invalid as a Prime scale baseline.
+
+The old and corrected tables are not a controlled A/B comparison: the dataset,
+sample count, warmup/cache protocol, correctness checks, and benchmark script
+changed in addition to the binary. Their differences provide historical
+context, not an exact percentage attributable to code changes. A controlled
+speedup claim would require both binaries to run the same corrected dataset and
+protocol in interleaved repetitions. The transaction and bundle-stage profiles
+still independently identify the optimized bottlenecks without relying on the
+cross-table ratio.
 
 For bounded development or CI runs:
 
