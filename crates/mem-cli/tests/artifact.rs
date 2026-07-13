@@ -104,6 +104,7 @@ executable = true
     assert_eq!(checked["status"], "error");
     assert!(array_contains(&checked["missing"], "scripts.missing"));
     assert_eq!(checked["checksum_mismatch"][0]["name"], "scripts.mismatch");
+    #[cfg(unix)]
     assert!(array_contains(
         &checked["not_executable"],
         "scripts.mismatch"

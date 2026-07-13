@@ -361,6 +361,8 @@ fn write_file(path: std::path::PathBuf, content: &str, executable: bool) {
         permissions.set_mode(0o755);
         fs::set_permissions(&path, permissions).expect("chmod artifact");
     }
+    #[cfg(not(unix))]
+    let _ = executable;
 }
 
 fn save_checklist_workflow(repo: &TestRepo, name: &str) {
