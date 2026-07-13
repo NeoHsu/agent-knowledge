@@ -30,15 +30,16 @@ records:
 Measured on 2026-07-13 with an Apple M2 Max (`arm64`), macOS 26.5.1, Rust
 1.97.0, bundled SQLite, and the optimized release profile. Interactive values
 are p50 / p95 across 20 samples; maintenance values are p50 across 5 fresh or
-repeated samples as appropriate. The retained report identifies clean commit
-`a0e03472a43e79368d7c665a92f7bc00cb9cf281` and release-binary SHA-256
-`76773041bcfbc86ac06d72169cf1e393f9d5be84e6ce13137426bcc3dbf59feb`.
+repeated samples as appropriate. The retained report uses the published v0.6.0
+macOS arm64 artifact from clean release commit
+`b84506e41544a68f27b2984d5e1f6ded70b756db`; its binary SHA-256 is
+`a7abfb929d9e1e60c1069c7e65aaf711af9de69cf99580ad2ed982171404ba13`.
 
 | N | Import | Query p50/p95 | Prime p50/p95 | Graph | Bundle |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | 416 ms | 19 / 24 ms | 29 / 34 ms | 41 ms | 46 ms |
-| 1,000 | 442 ms | 21 / 24 ms | 30 / 33 ms | 363 ms | 244 ms |
-| 10,000 | 1.66 s | 40 / 47 ms | 52 / 56 ms | 3.59 s | 2.27 s |
+| 100 | 284 ms | 30 / 33 ms | 44 / 52 ms | 64 ms | 63 ms |
+| 1,000 | 476 ms | 30 / 35 ms | 45 / 54 ms | 528 ms | 324 ms |
+| 10,000 | 2.29 s | 50 / 58 ms | 76 / 81 ms | 5.29 s | 2.96 s |
 
 These figures are a regression baseline, not a cross-machine service-level
 objective. Query uses bounded adaptive over-fetch and deterministic reranking;
