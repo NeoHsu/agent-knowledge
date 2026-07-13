@@ -330,6 +330,7 @@ fn sync_disables_repository_hooks_and_commit_signing() {
         format!("#!/bin/sh\ntouch '{}'\nexit 1\n", marker.display()),
     )
     .expect("write pre-commit hook");
+    #[cfg(unix)]
     fs::set_permissions(&hook, fs::Permissions::from_mode(0o700)).expect("chmod hook");
     store.run(&[
         "save",

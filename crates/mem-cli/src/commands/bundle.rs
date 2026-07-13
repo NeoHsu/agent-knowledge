@@ -957,9 +957,14 @@ fn temp_bundle_dir(label: &str) -> Result<PathBuf> {
         "mnemark-bundle-{label}-{}",
         uuid::Uuid::new_v4().simple()
     ));
-    let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
-    builder.mode(0o700);
+    let builder = {
+        let mut builder = fs::DirBuilder::new();
+        builder.mode(0o700);
+        builder
+    };
+    #[cfg(not(unix))]
+    let builder = fs::DirBuilder::new();
     builder
         .create(&path)
         .with_context(|| format!("create secure temporary directory {}", path.display()))?;
