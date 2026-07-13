@@ -77,11 +77,10 @@ fn init_uses_user_config_knowledge_home_when_env_is_absent() {
     fs::create_dir_all(config_root.join("mnemark")).expect("config dir");
     let installed_mem = install_dir.join("mem");
     fs::copy(mem_bin(), &installed_mem).expect("copy mem binary");
-    fs::write(
-        config_root.join("mnemark/config.toml"),
-        format!("knowledge_home = \"{}\"\n", knowledge_home.display()),
-    )
-    .expect("write config");
+    let knowledge_home_toml = serde_json::to_string(&knowledge_home.display().to_string())
+        .expect("serialize knowledge home");
+    let config = format!("knowledge_home = {knowledge_home_toml}\n");
+    fs::write(config_root.join("mnemark/config.toml"), config).expect("write config");
 
     let output = Command::new(&installed_mem)
         .current_dir(&run_dir)

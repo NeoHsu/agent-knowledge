@@ -258,9 +258,14 @@ fn redacted_merge_snapshot(source_path: &Path) -> Result<(PathBuf, PathBuf)> {
         "mnemark-merge-redacted-{}",
         uuid::Uuid::new_v4().simple()
     ));
-    let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
-    builder.mode(0o700);
+    let builder = {
+        let mut builder = fs::DirBuilder::new();
+        builder.mode(0o700);
+        builder
+    };
+    #[cfg(not(unix))]
+    let builder = fs::DirBuilder::new();
     builder
         .create(&root)
         .with_context(|| format!("create secure temporary directory {}", root.display()))?;

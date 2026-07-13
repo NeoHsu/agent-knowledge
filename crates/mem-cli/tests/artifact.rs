@@ -5,7 +5,9 @@ use std::os::unix::fs::{symlink, PermissionsExt};
 
 mod support;
 
-use support::{temp_path, TestRepo};
+#[cfg(unix)]
+use support::temp_path;
+use support::TestRepo;
 
 const HELLO_SHA256: &str =
     "sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03";
@@ -102,6 +104,7 @@ executable = true
     assert_eq!(checked["status"], "error");
     assert!(array_contains(&checked["missing"], "scripts.missing"));
     assert_eq!(checked["checksum_mismatch"][0]["name"], "scripts.mismatch");
+    #[cfg(unix)]
     assert!(array_contains(
         &checked["not_executable"],
         "scripts.mismatch"
@@ -194,6 +197,8 @@ fn write_file(path: impl AsRef<std::path::Path>, content: &str, executable: bool
         permissions.set_mode(0o755);
         fs::set_permissions(path, permissions).expect("chmod artifact");
     }
+    #[cfg(not(unix))]
+    let _ = executable;
 }
 
 #[cfg(unix)]
