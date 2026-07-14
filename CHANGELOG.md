@@ -2,6 +2,12 @@
 
 All notable changes to mnemark are documented here.
 
+## [Unreleased]
+
+### Breaking changes
+
+- Removed the former `setup agent-policy` subcommand. Agent setup is now exclusively user-level through `mem setup <platform>`; project knowledge remains logically scoped inside the active runtime store.
+
 ## [0.6.0] - 2026-07-11
 
 ### Breaking changes

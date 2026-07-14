@@ -174,7 +174,6 @@ pub(crate) fn base_dir(explicit: Option<&Path>) -> PathBuf {
 
 pub(crate) fn cmd_setup(command: SetupCommand) -> Result<()> {
     match command {
-        SetupCommand::AgentPolicy(args) => cmd_setup_agent_policy(args),
         SetupCommand::List => cmd_setup_list(),
         SetupCommand::ClaudeCode(args) => cmd_setup_platform("claude-code", args),
         SetupCommand::Codex(args) => cmd_setup_platform("codex", args),
@@ -644,30 +643,4 @@ fn wire_claude_hook(settings_path: &Path, dry_run: bool) -> Result<Value> {
         "target": target_text,
         "command": HOOK_COMMAND
     }))
-}
-
-fn cmd_setup_agent_policy(args: SetupAgentPolicyArgs) -> Result<()> {
-    let target = select_agent_policy_target(args.target)?;
-    if args.dry_run {
-        let mut result = install_policy(&target, true)?;
-        result["would_write"] =
-            json!(result.get("status").and_then(Value::as_str) == Some("dry_run"));
-        print_json_pretty(&result)?;
-        return Ok(());
-    }
-    let result = install_policy(&target, false)?;
-    print_json(&result)?;
-    Ok(())
-}
-
-fn select_agent_policy_target(target: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(target) = target {
-        return Ok(target);
-    }
-    let claude = PathBuf::from("CLAUDE.md");
-    if claude.exists() {
-        Ok(claude)
-    } else {
-        Ok(PathBuf::from("AGENTS.md"))
-    }
 }

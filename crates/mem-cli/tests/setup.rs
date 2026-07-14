@@ -1,95 +1,43 @@
 use std::fs;
-use std::process::Command;
 
 mod support;
 
-use support::{mem_bin, temp_path, TestRepo};
+use support::{temp_path, TestRepo};
 
 #[test]
-fn setup_agent_policy_creates_agents_md_by_default() {
-    let repo = TestRepo::new("setup-agent-policy-default");
+fn setup_agent_policy_subcommand_is_removed() {
+    let repo = TestRepo::new("setup-agent-policy-removed");
 
-    let output = repo.run(&["setup", "agent-policy"]);
-    let result: serde_json::Value = serde_json::from_str(&output).expect("setup json");
-    assert_eq!(result["status"], "installed");
-    assert_eq!(result["target"], "AGENTS.md");
-
-    let content = fs::read_to_string(repo.join("AGENTS.md")).expect("agents file");
-    assert!(content.starts_with("# mnemark memory policy"));
-    assert!(content.contains("Use the registered mnemark skill and local `mem` CLI"));
-
-    let trimmed = format!("{}\n", content.trim_end());
-    fs::write(repo.join("AGENTS.md"), &trimmed).expect("trim final blank line");
-    let second = repo.run(&["setup", "agent-policy"]);
-    let second: serde_json::Value = serde_json::from_str(&second).expect("setup json");
-    assert_eq!(second["status"], "already_present");
-    let content_after = fs::read_to_string(repo.join("AGENTS.md")).expect("agents file");
-    assert_eq!(trimmed, content_after);
+    let error = repo.run_fail(&["setup", "agent-policy"]);
+    assert!(error.contains("unrecognized subcommand 'agent-policy'"));
 }
 
 #[test]
-fn setup_agent_policy_prefers_existing_claude_and_prepends() {
-    let repo = TestRepo::new("setup-agent-policy-claude");
-    fs::write(repo.join("CLAUDE.md"), "# Existing\n\nKeep this.\n").expect("write claude");
+fn setup_platform_supports_dry_run() {
+    let repo = TestRepo::new("setup-dry-run");
+    let base = temp_path("setup-dry-run-base");
 
-    let output = repo.run(&["setup", "agent-policy"]);
-    let result: serde_json::Value = serde_json::from_str(&output).expect("setup json");
-    assert_eq!(result["status"], "installed");
-    assert_eq!(result["target"], "CLAUDE.md");
-
-    let content = fs::read_to_string(repo.join("CLAUDE.md")).expect("claude file");
-    assert!(content.starts_with("# mnemark memory policy"));
-    assert!(content.contains("# Existing\n\nKeep this."));
-}
-
-#[test]
-fn setup_agent_policy_supports_target_and_dry_run() {
-    let repo = TestRepo::new("setup-agent-policy-target");
-    let target = repo.join("nested/AGENTS.md");
-
-    let output = Command::new(mem_bin())
-        .current_dir(repo.path())
-        .args([
-            "setup",
-            "agent-policy",
-            "--target",
-            target.to_str().expect("target path"),
-            "--dry-run",
-        ])
-        .output()
-        .expect("run dry-run");
-    assert!(
-        output.status.success(),
-        "dry-run failed stdout={} stderr={}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let result: serde_json::Value = serde_json::from_slice(&output.stdout).expect("dry-run json");
+    let output = repo.run(&[
+        "setup",
+        "pi",
+        "--base-dir",
+        base.to_str().expect("base"),
+        "--dry-run",
+    ]);
+    let result: serde_json::Value = serde_json::from_str(&output).expect("dry-run json");
     assert_eq!(result["status"], "dry_run");
-    assert_eq!(result["would_write"], true);
-    assert!(result["policy"]
-        .as_str()
-        .expect("policy")
-        .contains("<!-- mnemark-policy v5 -->"));
-    assert!(!target.exists());
+    assert_eq!(result["policy"]["status"], "dry_run");
+    assert_eq!(result["skill"]["status"], "dry_run");
+    assert!(!base.join(".pi/agent/AGENTS.md").exists());
+    assert!(!base.join(".agents/skills/mnemark/SKILL.md").exists());
+}
 
-    let output = Command::new(mem_bin())
-        .current_dir(repo.path())
-        .args([
-            "setup",
-            "agent-policy",
-            "--target",
-            target.to_str().expect("target path"),
-        ])
-        .output()
-        .expect("run setup");
-    assert!(
-        output.status.success(),
-        "setup failed stdout={} stderr={}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(target.exists());
+#[test]
+fn setup_scope_option_is_removed() {
+    let repo = TestRepo::new("setup-scope-removed");
+
+    let error = repo.run_fail(&["setup", "pi", "--scope", "project"]);
+    assert!(error.contains("unexpected argument '--scope'"));
 }
 
 #[test]
@@ -392,7 +340,6 @@ fn setup_gemini_has_no_skill_dir_and_list_reports_platforms() {
         names,
         vec!["claude-code", "codex", "pi", "gemini-cli", "opencode"]
     );
-
     fs::remove_dir_all(base).ok();
 }
 

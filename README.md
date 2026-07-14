@@ -48,7 +48,6 @@ mem config show
 mem save --type feedback --name no_emoji --scope global --source manual --user-confirmed --tags '["style"]' --content "不要使用 emoji"
 mem query "emoji"
 mem query "name:no_emoji" --raw-query
-mem setup agent-policy
 mem setup claude-code
 mem setup pi
 mem save --type workflow --name release_runbook --scope global --source manual --user-confirmed --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
@@ -58,6 +57,8 @@ mem artifact check
 mem bundle export mnemark-store.tgz
 mem retro daily
 ```
+
+`mem setup <platform>` wires the selected agent at user level. It has no project mode and never selects the current repository implicitly. Project memories remain logically isolated by `project:<owner>/<repo>` scope inside the active runtime store.
 
 ## Documentation
 
@@ -107,7 +108,7 @@ npx skills add ./skills/mnemark
 | Bundles | Portable store export/import/inspect | `mem bundle export\|inspect\|import` |
 | Migration | Explicit schema migration, JSON/Markdown import/export, idempotent durable-state DB merge | `mem migrate`, `mem import`, `mem export`, `mem merge` |
 | Retrospective | Daily/weekly orchestration bundles for agents | `mem retro daily\|weekly` |
-| Agent setup | Platform policy, shared skill links, and startup adapters | `mem setup agent-policy\|claude-code\|codex\|pi\|gemini-cli\|opencode` |
+| Agent setup | User-level platform policy, shared skills, and startup adapters | `mem setup claude-code\|codex\|pi\|gemini-cli\|opencode` |
 | Agent skill | Versioned source plus shared installation | `skills/mnemark` → `~/.agents/skills/mnemark` |
 
 ## Runtime Store

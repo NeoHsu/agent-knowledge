@@ -24,8 +24,8 @@ and the active knowledge store.
  +-------------------------------------------------------------------+
  |  CODING AGENT   Claude Code / Codex / pi / Gemini / opencode      |
  |                                                                   |
- |  `mem setup <platform>` wires 3 idempotent layers:                |
- |    [1] policy block  -> CLAUDE.md / AGENTS.md                      |
+ |  `mem setup <platform>` wires 3 user-level layers:               |
+ |    [1] policy block  -> platform-global instructions              |
  |          "use mem, not built-in memory; run `mem prime` at start" |
  |    [2] session hook  -> native hook where available               |
  |    [3] shared skill  -> ~/.agents/skills/mnemark                  |

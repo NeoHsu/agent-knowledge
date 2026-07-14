@@ -74,7 +74,7 @@ mem setup opencode
 mem doctor
 ```
 
-The bundled skill is installed once at `~/.agents/skills/mnemark`. Pi reads that Agent Skills location directly; Claude Code and Codex use per-skill symlinks from their platform directories. `mem doctor` verifies the shared files and links as well as policy and session-start wiring. All setup commands are idempotent; use `--dry-run` to preview. See the capability matrix and overrides in `skills/mnemark/references/cli-guide.md`.
+Setup is user-level and never selects the current repository implicitly. The bundled skill is installed once at `~/.agents/skills/mnemark`; Pi reads it directly, while Claude Code and Codex use per-skill symlinks. `mem doctor` verifies the policy, shared files, links, and session-start wiring. All setup commands are idempotent; use `--dry-run` to preview. Project knowledge is selected logically through memory scopes such as `project:<owner>/<repo>`. See the capability matrix and explicit path overrides in `skills/mnemark/references/cli-guide.md`.
 
 For multi-machine durability, make the store its own git repository and use `mem sync`:
 
@@ -89,7 +89,7 @@ mem sync --push   # only after explicit approval
 
 ## Install the mnemark skill manually
 
-`mem setup <platform>` already installs the bundled skill into the shared Agent Skills directory and links platform-specific skill paths when needed. Alternatively, install from the repository with the open agent skills CLI:
+`mem setup <platform>` installs the bundled skill into the shared Agent Skills directory and links platform-specific skill paths when needed. Alternatively, install from the repository with the open agent skills CLI:
 
 ```bash
 npx skills add https://github.com/NeoHsu/mnemark/tree/main/skills/mnemark
@@ -102,28 +102,6 @@ npx skills add ./skills/mnemark
 ```
 
 Use `--global` to install for all projects, or `--agent <name>` when targeting a specific supported agent. After installation, agents can save, query, audit, merge, bundle, and run retrospectives through the local `mem` CLI.
-
-## Configure the coding agent entrypoint
-
-Run this in the project root you want to configure. It prepends a memory policy to the coding agent entrypoint so user-requested saved memories go through mnemark instead of a platform-specific memory system.
-
-```bash
-mem setup agent-policy
-```
-
-Default target selection:
-
-1. use `CLAUDE.md` when it already exists
-2. otherwise create or update `AGENTS.md`
-
-Use `--target` for a specific file and `--dry-run` to preview without writing:
-
-```bash
-mem setup agent-policy --target CLAUDE.md
-mem setup agent-policy --target AGENTS.md --dry-run
-```
-
-The command is idempotent. It upgrades recognized older policy blocks, verifies the complete managed v5 content, and reports drift instead of trusting the marker alone.
 
 ## Next steps
 

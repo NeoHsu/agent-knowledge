@@ -151,8 +151,6 @@ pub(crate) enum ConfigCommand {
 
 #[derive(Subcommand)]
 pub(crate) enum SetupCommand {
-    #[command(about = "Prepend the mnemark memory policy to CLAUDE.md or AGENTS.md")]
-    AgentPolicy(SetupAgentPolicyArgs),
     #[command(about = "List supported coding-agent platforms and their default wiring paths")]
     List,
     #[command(about = "Wire mnemark into Claude Code: policy, skill files, SessionStart hook")]
@@ -271,18 +269,6 @@ pub(crate) struct SyncArgs {
     )]
     pub(crate) redact_secrets: bool,
     #[arg(long, help = "Report pending changes and divergence without writing")]
-    pub(crate) dry_run: bool,
-}
-
-#[derive(Args)]
-pub(crate) struct SetupAgentPolicyArgs {
-    #[arg(
-        long,
-        value_name = "FILE",
-        help = "Entry file to update; defaults to CLAUDE.md if present, otherwise AGENTS.md"
-    )]
-    pub(crate) target: Option<PathBuf>,
-    #[arg(long, help = "Print the selected target and policy without writing")]
     pub(crate) dry_run: bool,
 }
 

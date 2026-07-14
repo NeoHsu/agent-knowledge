@@ -28,7 +28,7 @@ For sync, run `mem sync --dry-run` first. The default creates only a local check
 
 ## Setup
 
-Install the `mem` CLI (see README) so it is on `PATH`. CLI/tool settings and artifact manifests use TOML; workflow runbooks use YAML. Use `mem config show` to debug the active root and effective defaults; discovery order and config priority live in `references/cli-guide.md` Setup.
+Install the `mem` CLI (see README) so it is on `PATH`. CLI/tool settings and artifact manifests use TOML; workflow runbooks use YAML. Agent setup is user-level; project knowledge remains logically scoped in the active runtime store. Use `mem config show` to debug the active root and effective defaults; discovery order and config priority live in `references/cli-guide.md` Setup.
 
 ```bash
 mem init

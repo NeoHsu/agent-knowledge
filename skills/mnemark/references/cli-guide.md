@@ -8,7 +8,7 @@ mem migrate --dry-run
 mem migrate
 mem context --detect
 mem config show
-mem setup agent-policy
+mem setup pi
 mem doctor
 ```
 
@@ -45,9 +45,6 @@ memories per scope (default 30; 0 disables). Exceeding it never blocks saves;
 ## Setup helpers
 
 ```bash
-mem setup agent-policy
-mem setup agent-policy --target CLAUDE.md
-mem setup agent-policy --target AGENTS.md --dry-run
 mem setup list
 mem setup claude-code
 mem setup claude-code --dry-run
@@ -58,15 +55,15 @@ mem setup opencode
 mem setup claude-code --base-dir /tmp/sandbox --no-hook
 ```
 
-`setup agent-policy` prepends the mnemark memory policy (v5) to the coding-agent entrypoint in the current project. It prefers an existing `CLAUDE.md`, otherwise it creates or updates `AGENTS.md`. Use `--target <FILE>` to choose a specific file. The command is idempotent, upgrades an unedited v1/v2/v3/v4 block in place, and reports `drifted` instead of trusting a v5 marker whose managed content changed.
-
 `setup <platform>` wires mnemark into one coding agent for the whole user account. It installs three layers, each idempotent:
 
-1. Policy: prepends the v5 policy block to the platform's global instructions file (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md`, `~/.gemini/GEMINI.md`, or `~/.config/opencode/AGENTS.md`).
-2. Skill: writes the bundled, version-matched skill once to `~/.agents/skills/mnemark`. Pi discovers that shared Agent Skills location directly. Claude Code and Codex receive per-skill symlinks from their platform directories to the shared installation. A legacy platform copy is migrated only when it contains managed mnemark files; unmanaged files produce `conflict` and are never deleted.
-3. Session start: on Claude Code, adds a `SessionStart` hook running `mem prime` to `~/.claude/settings.json` while preserving all existing settings. Platforms without a hook mechanism rely on the policy block's "run `mem prime` at session start" instruction instead.
+1. Policy: prepends the v5 block to `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md`, `~/.gemini/GEMINI.md`, or `~/.config/opencode/AGENTS.md`. An unedited v1/v2/v3/v4 policy is upgraded in place; a changed managed block reports `drifted` instead of being overwritten.
+2. Skill: writes the bundled, version-matched skill once to `~/.agents/skills/mnemark`. Pi reads it directly; Claude Code and Codex receive per-skill symlinks. A legacy platform copy is migrated only when it contains managed mnemark files; unmanaged files report `conflict` and are never deleted.
+3. Session start: Claude Code receives a `SessionStart` hook in `~/.claude/settings.json`. Other platforms rely on the policy's visible `mem prime` instruction.
 
-Use `--base-dir <DIR>` to target a different home directory, `--instructions` to override the policy path, `--skills-dir` to override the platform link parent, or `--shared-skills-dir` to override the shared Agent Skills parent. `--no-skill`/`--no-hook` skip layers, and `--dry-run` previews changes. `setup list` prints the shared source, platform link mode, and resolved paths.
+Setup has no project mode and never selects the current repository implicitly. Project-specific recall remains a logical memory scope selected by commands such as `mem prime --scope auto` inside the shared active store. Explicit path overrides may still target a sandbox or custom user installation root.
+
+Use `--base-dir <DIR>` to target a different user home, `--instructions` to override the policy path, `--skills-dir` to override the platform link parent, or `--shared-skills-dir` to override the shared Agent Skills parent. `--no-skill`/`--no-hook` skip layers, and `--dry-run` previews changes. `setup list` prints the shared source, platform link mode, and resolved paths.
 
 ## Doctor
 
