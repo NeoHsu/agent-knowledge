@@ -290,9 +290,7 @@ fn check_platform(
             format!("{prefix}.policy"),
             "warn",
             format!("drifted v5 policy in {}", instructions.display()),
-            Some(
-                "replace the managed block with the policy from `mem setup agent-policy --dry-run`",
-            ),
+            Some("replace the managed block with the policy from `mem setup <platform> --dry-run`"),
         )),
         Ok(content) if has_v4_policy(&content) => checks.push(check(
             format!("{prefix}.policy"),
@@ -304,9 +302,7 @@ fn check_platform(
             format!("{prefix}.policy"),
             "warn",
             format!("drifted v4 policy in {}", instructions.display()),
-            Some(
-                "replace the managed block with the policy from `mem setup agent-policy --dry-run`",
-            ),
+            Some("replace the managed block with the policy from `mem setup <platform> --dry-run`"),
         )),
         Ok(content) if content.contains(POLICY_MARKER_V3) => checks.push(check(
             format!("{prefix}.policy"),
@@ -324,7 +320,7 @@ fn check_platform(
             format!("{prefix}.policy"),
             "warn",
             format!("legacy policy block in {}", instructions.display()),
-            Some("run `mem setup <platform>` and replace the old block with v4"),
+            Some("run `mem setup <platform>` and replace the old block with v5"),
         )),
         Ok(_) => checks.push(check(
             format!("{prefix}.policy"),

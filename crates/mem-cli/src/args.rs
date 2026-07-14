@@ -244,7 +244,7 @@ pub(crate) enum PrimeFormat {
 pub(crate) struct DoctorArgs {
     #[arg(
         long,
-        help = "Only check one platform: claude-code, codex, gemini-cli, or opencode"
+        help = "Only check one platform: claude-code, codex, pi, gemini-cli, or opencode"
     )]
     pub(crate) platform: Option<String>,
     #[arg(
