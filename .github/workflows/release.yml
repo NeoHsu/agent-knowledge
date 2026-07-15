@@ -1,6 +1,7 @@
 # This workflow is based on cargo-dist's generated GitHub release pipeline.
-# `dist generate` does not preserve the SHA pins or native verification job below;
-# after regeneration, reapply those hardening changes and run actionlint.
+# `dist generate` does not preserve the SHA pins, dependency policy, or native
+# verification job below; after regeneration, reapply those hardening changes
+# and run actionlint.
 name: Release
 
 on:
@@ -99,6 +100,10 @@ jobs:
       - name: Audit dependencies
         if: runner.os == 'Linux'
         run: cargo audit --deny warnings
+
+      - name: Enforce dependency provenance and license metadata
+        if: runner.os == 'Linux'
+        run: python3 scripts/check-dependency-policy.py
 
       - name: Build release binary
         shell: bash

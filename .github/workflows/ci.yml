@@ -37,6 +37,8 @@ jobs:
       - if: matrix.rust == 'stable'
         run: cargo audit --deny warnings
       - if: matrix.rust == 'stable'
+        run: python3 scripts/check-dependency-policy.py
+      - if: matrix.rust == 'stable'
         run: scripts/build-release.sh
       - if: matrix.rust == 'stable'
         run: ls -lh target/release/mem
