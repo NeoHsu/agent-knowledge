@@ -16,4 +16,10 @@ MEM_BIN="$ROOT/target/release/mem"
 if [[ "${OS:-}" == "Windows_NT" ]]; then
 	MEM_BIN+=".exe"
 fi
-"$MEM_BIN" --version
+expected_version="$(awk -F'"' '/^version = "/ { print $2; exit }' "$ROOT/Cargo.toml")"
+actual_version="$("$MEM_BIN" --version)"
+if [[ -z "$expected_version" || "$actual_version" != "mem $expected_version" ]]; then
+	echo "release binary version mismatch: expected mem $expected_version, got $actual_version" >&2
+	exit 1
+fi
+printf '%s\n' "$actual_version"

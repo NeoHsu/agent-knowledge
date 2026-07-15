@@ -14,6 +14,14 @@ if [[ ! -x "$MEM_BIN" ]]; then
 	exit 1
 fi
 
+expected_version="$(awk -F'"' '/^version = "/ { print $2; exit }' "$ROOT/Cargo.toml")"
+actual_version="$("$MEM_BIN" --version)"
+if [[ -z "$expected_version" || "$actual_version" != "mem $expected_version" ]]; then
+	echo "release binary version mismatch: expected mem $expected_version, got $actual_version" >&2
+	echo "run scripts/build-release.sh before smoke validation" >&2
+	exit 1
+fi
+
 temp_root="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 if command -v cygpath >/dev/null 2>&1; then
 	temp_root="$(cygpath -u "$temp_root")"
@@ -60,6 +68,19 @@ cp "$MEM_BIN" "$install_bin"
 	query_output="$(MNEMARK_HOME="$runtime_home" "$install_bin" query "release smoke" --explain-score)"
 	[[ "$query_output" == *smoke_release* ]]
 	[[ "$query_output" == *retrieval_score* ]]
+	MNEMARK_HOME="$runtime_home" "$install_bin" save \
+		--name smoke_cjk \
+		--content "release 部署流程 checklist" \
+		--force >/dev/null
+	cjk_output="$(MNEMARK_HOME="$runtime_home" "$install_bin" query "releaze 部署流成" --fuzzy)"
+	[[ "$cjk_output" == *smoke_cjk* ]]
+	set +e
+	json_error="$(MNEMARK_HOME="$runtime_home" "$install_bin" --json-errors query "smoke" --limit 10001 2>&1)"
+	json_status=$?
+	set -e
+	((json_status != 0))
+	[[ "$json_error" == *'"status":"error"'* ]]
+	[[ "$json_error" == *'"code":"command_failed"'* ]]
 	MNEMARK_HOME="$runtime_home" "$install_bin" save \
 		--name smoke_target \
 		--content "graph traversal target content" \

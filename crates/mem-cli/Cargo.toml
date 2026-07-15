@@ -6,6 +6,10 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
+description = "Portable, local-first memory and workflow runbooks for coding agents"
+readme = "../../README.md"
+keywords = ["ai", "memory", "cli", "sqlite", "agents"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "mem"

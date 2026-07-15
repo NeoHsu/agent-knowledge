@@ -6,6 +6,10 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
+description = "SQLite, Tantivy, graph, workflow, and artifact primitives for mnemark"
+readme = "../../README.md"
+keywords = ["ai", "memory", "sqlite", "search", "agents"]
+categories = ["database", "development-tools"]
 
 [features]
 default = ["cjk"]
