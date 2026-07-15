@@ -970,3 +970,43 @@ fn temp_bundle_dir(label: &str) -> Result<PathBuf> {
         .with_context(|| format!("create secure temporary directory {}", path.display()))?;
     Ok(path)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundle_path_allowlist_rejects_escape_and_unknown_entries() {
+        for (path, is_dir) in [
+            ("../memory.db", false),
+            ("artifacts/../../memory.db", false),
+            ("unknown.txt", false),
+            ("index/meta.json", false),
+            ("artifacts", false),
+            ("artifacts/unknown/file.txt", false),
+            ("artifacts/scripts", false),
+        ] {
+            assert!(
+                validate_bundle_path(Path::new(path), is_dir).is_err(),
+                "unsafe bundle path was accepted: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn bundle_path_allowlist_accepts_only_durable_layout() {
+        for (path, is_dir) in [
+            ("bundle.json", false),
+            ("memory.db", false),
+            ("config.toml", false),
+            ("manifest.toml", false),
+            ("artifacts", true),
+            ("artifacts/scripts", true),
+            ("artifacts/scripts/check.sh", false),
+            ("artifacts/templates/release.md", false),
+        ] {
+            validate_bundle_path(Path::new(path), is_dir)
+                .unwrap_or_else(|error| panic!("valid bundle path {path} was rejected: {error}"));
+        }
+    }
+}

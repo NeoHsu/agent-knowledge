@@ -176,4 +176,42 @@ mod tests {
         assert!(stripped.contains("[REDACTED]"));
         assert!(!stripped.contains("MIIEowIBAAKCAQEA"));
     }
+
+    #[test]
+    fn strips_every_supported_credential_family() {
+        // Assemble all synthetic values at runtime so repository secret
+        // scanners do not mistake test fixtures for live credentials.
+        let samples = [
+            ["sk-", "placeholder1234567890"].concat(),
+            ["ghp_", "placeholder1234567890"].concat(),
+            ["github_", "pat_", "placeholder1234567890"].concat(),
+            ["glpat-", "placeholder1234567890"].concat(),
+            ["sk-ant-", "placeholder1234567890"].concat(),
+            ["sk_", "live_", "placeholder1234567890"].concat(),
+            ["AI", "za", "0123456789abcdefghijklmnop"].concat(),
+            ["npm_", "placeholder1234567890123456"].concat(),
+            ["xoxb-", "placeholder-1234567890123456"].concat(),
+            ["Bearer ", "placeholder.token-1234567890"].concat(),
+            [
+                "https://user:",
+                "placeholder-password@example.invalid/private",
+            ]
+            .concat(),
+            ["access_", "token=", "placeholder1234567890"].concat(),
+            ["AK", "IA", "0123456789ABCDEF"].concat(),
+        ];
+        for sample in &samples {
+            let stripped = strip_secrets(sample)
+                .unwrap_or_else(|error| panic!("strip credential family: {error}"));
+            assert_ne!(&stripped, sample, "credential family was not detected");
+            assert!(stripped.contains("[REDACTED]"));
+        }
+    }
+
+    #[test]
+    fn ordinary_operational_text_is_not_redacted() {
+        let text =
+            "Run mem doctor, verify project:example/app, then inspect the release checklist.";
+        assert_eq!(strip_secrets(text).expect("scan safe text"), text);
+    }
 }

@@ -523,7 +523,19 @@ fn check_store_permissions(checks: &mut Vec<Value>, app: &App) {
 }
 
 #[cfg(not(unix))]
-fn check_store_permissions(_checks: &mut Vec<Value>, _app: &App) {}
+fn check_store_permissions(checks: &mut Vec<Value>, app: &App) {
+    checks.push(check(
+        "store_permissions",
+        "warn",
+        format!(
+            "automatic ACL verification is unavailable on this platform for {}",
+            app.root.display()
+        ),
+        Some(
+            "restrict the store directory and memory.db to the current user with platform ACL tools",
+        ),
+    ));
+}
 
 fn check(id: impl Into<String>, status: &str, detail: String, fix: Option<&str>) -> Value {
     let mut entry = json!({
