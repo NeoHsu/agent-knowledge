@@ -16,6 +16,14 @@ if [[ ! -x "$MEM_BIN" ]]; then
 	exit 1
 fi
 
+expected_version="$(awk -F'"' '/^version = "/ { print $2; exit }' "$ROOT/Cargo.toml")"
+actual_version="$("$MEM_BIN" --version)"
+if [[ "${ALLOW_VERSION_MISMATCH:-0}" != "1" && (-z "$expected_version" || "$actual_version" != "mem $expected_version") ]]; then
+	echo "benchmark binary version mismatch: expected mem $expected_version, got $actual_version" >&2
+	echo "rebuild first, or set ALLOW_VERSION_MISMATCH=1 for an intentional cross-version comparison" >&2
+	exit 1
+fi
+
 for value in "$INTERACTIVE_RUNS" "$MAINTENANCE_RUNS" "$WARMUP_RUNS"; do
 	if [[ ! "$value" =~ ^[0-9]+$ ]]; then
 		echo "benchmark run counts must be non-negative integers" >&2
@@ -238,7 +246,9 @@ def benchmark_scale(scale: int) -> dict[str, Any]:
     for iteration in range(maintenance_runs):
         home = root / f"store-{scale}-import-{iteration}"
         command(home, "init")
-        elapsed, rss, _ = command(home, "import", str(payload), measure=True)
+        elapsed, rss, _ = command(
+            home, "import", str(payload), "--summary-only", measure=True
+        )
         assert_import(home, scale)
         import_times.append(elapsed)
         if rss is not None:
