@@ -4,6 +4,8 @@ All notable changes to mnemark are documented here.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-14
+
 ### Breaking changes
 
 - Removed the former `setup agent-policy` subcommand. Agent setup is now

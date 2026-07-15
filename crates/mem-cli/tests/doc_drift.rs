@@ -49,7 +49,8 @@ fn help_for(args: &[String]) -> String {
         args.join(" "),
         String::from_utf8_lossy(&output.stderr)
     );
-    String::from_utf8(output.stdout).expect("utf8 help")
+    String::from_utf8(output.stdout)
+        .unwrap_or_else(|error| panic!("decode mem help as UTF-8: {error}"))
 }
 
 fn clap_subcommands() -> BTreeSet<String> {
@@ -150,7 +151,7 @@ fn skill_markdown_files() -> Vec<PathBuf> {
     fn collect(dir: &Path, files: &mut Vec<PathBuf>) {
         for entry in fs::read_dir(dir).unwrap_or_else(|err| panic!("read {}: {err}", dir.display()))
         {
-            let entry = entry.expect("read directory entry");
+            let entry = entry.unwrap_or_else(|error| panic!("read directory entry: {error}"));
             let path = entry.path();
             if path.is_dir() {
                 collect(&path, files);
@@ -264,11 +265,71 @@ fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+#[test]
+fn versioned_docs_match_package_version() {
+    let root = repository_root();
+    let expected = format!("source version `{}`", env!("CARGO_PKG_VERSION"));
+    for relative in [
+        "README.md",
+        "docs/getting-started.md",
+        "docs/performance.md",
+        "skills/mnemark/references/cli-guide.md",
+    ] {
+        let path = root.join(relative);
+        let markdown = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+        assert!(
+            markdown.contains(&expected),
+            "{relative} must identify the current {expected}"
+        );
+    }
+}
+
+#[test]
+fn mnemark_skill_keeps_safety_and_routing_boundaries() {
+    let root = repository_root();
+    let skill_path = root.join("skills/mnemark/SKILL.md");
+    let guide_path = root.join("skills/mnemark/references/cli-guide.md");
+    let skill = fs::read_to_string(&skill_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", skill_path.display()));
+    let guide = fs::read_to_string(&guide_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", guide_path.display()));
+    let combined = format!("{skill}\n{guide}");
+    let normalized = combined.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    for required in [
+        "store_source",
+        "remember this",
+        "記住",
+        "匯入記憶庫",
+        "把這個流程存成 runbook",
+        "mem sync --dry-run",
+        "fetch/merge",
+        "generic Git sync",
+        "ordinary data import/export",
+        "CI workflows",
+        "sprint retrospectives",
+        "auditing/developing a skill",
+        "Stores and bundles are plaintext",
+        "do not authenticate the bundle publisher",
+        "does not copy an external file",
+    ] {
+        assert!(
+            normalized.contains(required),
+            "mnemark skill docs must retain safety/routing contract: {required}"
+        );
+    }
+    assert!(
+        !skill.contains("The default creates only a local checkpoint"),
+        "sync docs must not hide fetch/merge side effects"
+    );
+}
+
 fn repository_markdown_files() -> Vec<PathBuf> {
     fn collect(dir: &Path, files: &mut Vec<PathBuf>) {
         for entry in fs::read_dir(dir).unwrap_or_else(|err| panic!("read {}: {err}", dir.display()))
         {
-            let entry = entry.expect("read directory entry");
+            let entry = entry.unwrap_or_else(|error| panic!("read directory entry: {error}"));
             let path = entry.path();
             if path.is_dir() {
                 collect(&path, files);
@@ -280,7 +341,7 @@ fn repository_markdown_files() -> Vec<PathBuf> {
 
     let root = repository_root();
     let mut files = fs::read_dir(&root)
-        .expect("read repository root")
+        .unwrap_or_else(|error| panic!("read repository root: {error}"))
         .filter_map(|entry| entry.ok().map(|entry| entry.path()))
         .filter(|path| {
             path.is_file() && path.extension().is_some_and(|extension| extension == "md")

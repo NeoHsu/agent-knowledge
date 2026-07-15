@@ -13,8 +13,8 @@ instructions.
 
 ## 1. System map
 
-Three planes: you, the coding agent (wired by `mem setup`), the `mem` binary,
-and the active knowledge store.
+Four layers participate: you, the coding agent (wired by `mem setup`), the
+`mem` binary, and the active knowledge store.
 
 ```text
                           YOU (developer)
@@ -24,12 +24,12 @@ and the active knowledge store.
  +-------------------------------------------------------------------+
  |  CODING AGENT   Claude Code / Codex / pi / Gemini / opencode      |
  |                                                                   |
- |  `mem setup <platform>` wires 3 user-level layers:               |
+ |  `mem setup <platform>` wires up to 3 user-level layers:          |
  |    [1] policy block  -> platform-global instructions              |
  |          "use mem, not built-in memory; run `mem prime` at start" |
  |    [2] session hook  -> native hook where available               |
- |    [3] shared skill  -> ~/.agents/skills/mnemark                  |
- |          platform-specific directories link to the shared copy    |
+ |    [3] shared skill  -> supported platforms use                   |
+ |          ~/.agents/skills/mnemark directly or through links       |
  +-------------------------------------------------------------------+
                                |
                                | shells out to
@@ -49,7 +49,7 @@ and the active knowledge store.
  |    manifest.toml  <- artifact metadata                            |
  |    artifacts/     <- portable helper scripts / templates / ...    |
  |    config.toml    <- store-local defaults                         |
- |    .git/          <- private versioning; push only with `mem sync --push` |
+ |    .git/          <- optional private sync repository             |
  +-------------------------------------------------------------------+
 ```
 
@@ -87,14 +87,18 @@ What a normal coding session looks like once mnemark is wired in.
   work unit complete
        |
        v
-  [ mem sync ]  local checkpoint + fetch/merge (no push by default)
+  offer sync; inspect [ mem sync --dry-run ] first
+       |
+       v
+  [ mem sync ]  local checkpoint + optional fetch/merge (no push by default)
        |
        +--> mem sync --push only after explicit user approval
 ```
 
 ## 3. Inside `mem save`
 
-Every write runs the same pipeline. Warnings never block the save.
+Every memory save, including each valid import item, uses the same persistence
+rules. Lint warnings do not block a save; validation and security errors do.
 
 ```text
   mem save --type … --scope … --tags … --content "…"
@@ -107,6 +111,9 @@ Every write runs the same pipeline. Warnings never block the save.
   provenance gate  (--source manual requires --user-confirmed)
        |
        v
+  type/content validation  (workflow schema is strict unless explicitly bypassed)
+       |
+       v
   duplicate / similar check
        |  exact name  -> duplicate_found  -.
        |  high overlap -> similar_found    -+-> caller: skip / update / supersede
@@ -116,7 +123,7 @@ Every write runs the same pipeline. Warnings never block the save.
        |
        v
   Tantivy index upsert
-       |
+       | failure after DB commit -> mark index stale; SQLite remains authoritative
        v
   lint (non-blocking):  no_tags · content_long · relative_date_language · vague_name
                         · claims_outside_backticks
@@ -151,7 +158,11 @@ Source sets confidence and trust: `manual` = high/protected, `agent` = medium,
 Workflows prime with their `goal` line only; load the full runbook on demand
 with `mem workflow show`. `mem prime --focus "<task>"` additionally ensures the
 local graph is current and adds budget-capped, scored graph neighborhood context
-for task starts that need relationship context. Ordinary query is lock-free and no-touch by default; `--touch` is the explicit telemetry-writing mode. Query relevance combines lexical score, source trust, confidence, scope specificity, and recency; inspect it with `--explain-score`.
+for task starts that need relationship context. Focused and graph-dependent
+reads may update only rebuildable graph/index state. Ordinary query is lock-free
+and no-touch by default; `--touch` is the explicit telemetry-writing mode.
+Query relevance combines lexical score, source trust, confidence, scope
+specificity, and recency; inspect it with `--explain-score`.
 
 ## 5. Workflow lifecycle — data, not automation
 

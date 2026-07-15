@@ -25,7 +25,9 @@ Graph index            relationships, paths, dependencies, explanations
 mem graph rebuild
 mem graph stats
 mem graph explain release_runbook
-mem graph path release_runbook artifact:artifacts/scripts/build-release.sh --direction any
+mem graph path release_runbook \
+  artifact:artifacts/scripts/build-release.sh \
+  --direction any
 mem graph query "release safety" --scope auto --depth 2 --direction outgoing
 mem prime --focus "release safety"
 mem graph export --format json
@@ -49,8 +51,12 @@ mem graph reject <edge-id> --note "reason"
 - `graph_semantic_edge_revisions` — append-only snapshots written when semantic
   edges are ingested, updated, reviewed, or merged.
 
-Graph-dependent read commands rebuild only when `graph_dirty`, the graph schema version is stale, or rebuildable `graph_nodes`/`graph_edges` tables are missing. Durable semantic tables are never treated as disposable materialization. A clean graph query does not
-rewrite `memory.db`. `mem graph stats` never rebuilds implicitly, so its `dirty`
+Graph-dependent read commands rebuild only when `graph_dirty`, the graph schema
+version is stale, or rebuildable `graph_nodes`/`graph_edges` tables are missing.
+Durable semantic tables are never treated as disposable materialization. When
+both graph and Tantivy state are current, graph query does not rewrite
+`memory.db`; `graph query` can repair a stale search index before resolving
+lexical start nodes. `mem graph stats` never rebuilds implicitly, so its `dirty`
 field remains useful; run `mem graph rebuild` explicitly when inspecting stale
 counts.
 
@@ -67,9 +73,9 @@ not materialized.
   neighborhood inspection inside the selected scope.
 - `graph path <from> <to>` finds a minimum-hop relationship path within
   `--scope auto|all|<scope>`, then globally breaks equal-hop ties by cumulative
-  relation weight, confidence, and stable path identity; `path_score` exposes the
-  chosen cumulative score. `--direction
-  any|outgoing|incoming` controls orientation. Pending edges are excluded by
+  relation weight, confidence, and stable path identity; `path_score` exposes
+  the chosen cumulative score. `--direction any|outgoing|incoming` controls
+  orientation. Pending edges are excluded by
   default; `--include-ambiguous` includes pending `AMBIGUOUS` edges.
 - Path depth is capped at 20; query depth is capped at 8 and query result limits
   at 500 to bound local traversal.
@@ -88,7 +94,8 @@ not materialized.
   `schema_version`, `nodes`, and `edges`.
 - `graph candidates` emits candidate memories and allowed relations for
   skill-mediated extraction. `--changed-since` and `--unlinked` bound curation
-  work.
+  work. Ordinary candidate listing is read-only; `--unlinked` may refresh graph
+  materialization before testing connectivity.
 
 Graph traversal returns evidence and context. It does not synthesize final
 answers, and graph edges are never instruction authority. System, developer,

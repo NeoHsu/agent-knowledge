@@ -1,6 +1,11 @@
 # Getting Started
 
-This guide covers installing `mem`, initializing the active knowledge store, saving the first memory, and installing the bundled mnemark skill. For workflow runbooks, artifacts, bundles, and retrospectives, see `docs/workflows.md`.
+This guide covers installing `mem`, initializing the active knowledge store,
+saving the first memory, and installing the bundled mnemark skill. It describes
+source version `0.7.0`; the `latest` installer can lag behind `main`, so verify
+the installed version and use documentation from the matching Git tag when
+necessary. For workflow runbooks, artifacts, bundles, and retrospectives, see
+[Workflows](workflows.md).
 
 ## Install
 
@@ -9,13 +14,18 @@ Install `mem` from release assets instead of building from Rust source.
 macOS / Linux:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/NeoHsu/mnemark/releases/latest/download/mnemark-installer.sh | sh
+base=https://github.com/NeoHsu/mnemark/releases/latest/download
+curl --proto '=https' --tlsv1.2 -LsSf \
+  "$base/mnemark-installer.sh" |
+  sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/NeoHsu/mnemark/releases/latest/download/mnemark-installer.ps1 | iex"
+$base = "https://github.com/NeoHsu/mnemark/releases/latest/download"
+powershell -ExecutionPolicy Bypass -c `
+  "irm $base/mnemark-installer.ps1 | iex"
 ```
 
 Direct release downloads are available on the [latest release page](https://github.com/NeoHsu/mnemark/releases/latest):
@@ -28,7 +38,12 @@ Direct release downloads are available on the [latest release page](https://gith
 | x64 Linux | `mnemark-x86_64-unknown-linux-gnu.tar.xz` |
 | x64 Windows | `mnemark-x86_64-pc-windows-msvc.zip` |
 
-Checksums are published next to release assets.
+Checksums are published next to release assets. Confirm the installed contract
+before continuing:
+
+```bash
+mem --version
+```
 
 ## Initialize the store
 
@@ -39,12 +54,21 @@ mem init
 mem config show
 ```
 
-Runtime memory data is not stored in this source repository. See `docs/runtime-model.md` for active store discovery, config priority, and runtime files.
+Runtime memory data is not stored in this source repository. See the
+[Runtime Model](runtime-model.md) for active store discovery, config priority,
+and runtime files.
 
 ## Save and query the first memory
 
 ```bash
-mem save --type feedback --name no_emoji --scope global --source manual --user-confirmed --tags '["style"]' --content "不要使用 emoji"
+mem save \
+  --type feedback \
+  --name no_emoji \
+  --scope global \
+  --source manual \
+  --user-confirmed \
+  --tags '["style"]' \
+  --content "不要使用 emoji"
 mem query "emoji"
 mem query "name:no_emoji" --raw-query
 ```
@@ -58,11 +82,17 @@ Supported memory types are:
 - `preference`
 - `workflow`
 
-Query is read-only and no-touch by default. Use `--touch` only when access telemetry is intentional. Secret-like values reject writes unless `--redact-secrets` is explicit; manual provenance requires `--user-confirmed`.
+Query is read-only and no-touch by default. Use `--touch` only when access
+telemetry is intentional. Secret-like values reject writes unless
+`--redact-secrets` is explicit; manual provenance requires `--user-confirmed`.
+The store and bundle formats are plaintext, so review the
+[Security Policy](../SECURITY.md) before storing private data.
 
 ## Wire mnemark into your coding agents
 
-One command per agent platform wires the whole institution — policy block, bundled skill files, and (where the platform supports it) a session-start hook running `mem prime`:
+One command per agent platform installs the user-level integration: a policy
+block, the shared bundled skill where supported, and a session-start hook
+running `mem prime` where the platform provides one:
 
 ```bash
 mem setup list
@@ -74,9 +104,19 @@ mem setup opencode
 mem doctor
 ```
 
-Setup is user-level and never selects the current repository implicitly. The bundled skill is installed once at `~/.agents/skills/mnemark`; Pi reads it directly, while Claude Code and Codex use per-skill symlinks. `mem doctor` verifies the policy, shared files, links, and session-start wiring. All setup commands are idempotent; use `--dry-run` to preview. Project knowledge is selected logically through memory scopes such as `project:<owner>/<repo>`. See the capability matrix and explicit path overrides in `skills/mnemark/references/cli-guide.md`.
+Setup is user-level and never selects the current repository implicitly. The
+bundled skill is installed once at `~/.agents/skills/mnemark`; Pi reads it
+directly, while Claude Code and Codex use per-skill symlinks. `mem doctor`
+verifies the policy, shared files, links, and session-start wiring. Platform
+setup commands are idempotent and support `--dry-run`; `setup list` is already
+read-only. Project knowledge is selected logically through memory scopes such
+as `project:<owner>/<repo>`. See the capability matrix and explicit path
+overrides in the
+[CLI Guide](../skills/mnemark/references/cli-guide.md).
 
-For multi-machine durability, make the store its own git repository and use `mem sync`:
+For multi-machine durability, make the store its own git repository and use
+`mem sync`. Change to the `root` reported by `mem config show`; the default is
+shown below:
 
 ```bash
 cd ~/.mnemark
@@ -89,7 +129,9 @@ mem sync --push   # only after explicit approval
 
 ## Install the mnemark skill manually
 
-`mem setup <platform>` installs the bundled skill into the shared Agent Skills directory and links platform-specific skill paths when needed. Alternatively, install from the repository with the open agent skills CLI:
+`mem setup <platform>` installs the bundled skill into the shared Agent Skills
+directory and links platform-specific skill paths when needed. Alternatively,
+install from the repository with the open agent skills CLI:
 
 ```bash
 npx skills add https://github.com/NeoHsu/mnemark/tree/main/skills/mnemark
@@ -101,14 +143,16 @@ For a local checkout during development:
 npx skills add ./skills/mnemark
 ```
 
-Use `--global` to install for all projects, or `--agent <name>` when targeting a specific supported agent. After installation, agents can save, query, audit, merge, bundle, and run retrospectives through the local `mem` CLI.
+Use `--global` to install for all projects, or `--agent <name>` when targeting
+a specific supported agent. After installation, agents can save, query, audit,
+merge, bundle, and run retrospectives through the local `mem` CLI.
 
 ## Next steps
 
 | Need | Read |
 | --- | --- |
-| Complete command reference | `skills/mnemark/references/cli-guide.md` |
-| Runtime store and portability | `docs/runtime-model.md` |
+| Complete command reference | [CLI Guide](../skills/mnemark/references/cli-guide.md) |
+| Runtime store and portability | [Runtime Model](runtime-model.md) |
 | Security boundaries and safe deployment | [`SECURITY.md`](../SECURITY.md) |
-| Workflow runbooks, artifacts, bundles, retrospectives | `docs/workflows.md` |
-| Repository development | `docs/development.md` |
+| Workflow runbooks, artifacts, bundles, retrospectives | [Workflows](workflows.md) |
+| Repository development | [Development](development.md) |

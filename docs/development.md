@@ -11,8 +11,9 @@ restricted environments.
 mise install
 ```
 
-If the host has no `cc`, expose a `cc` shim that delegates to `zig cc` before
-running Cargo; the OpenAB environment keeps that shim in `/home/node/bin`.
+If the host has no `cc`, expose a `cc` shim on `PATH` that delegates to
+`zig cc` before running Cargo. Do not hard-code a harness-specific shim path in
+repository scripts.
 
 ## Run from source
 
@@ -22,15 +23,32 @@ cargo run -p mnemark --bin mem -- <args>
 
 ## Validate
 
+The full local validation mirrors the stable CI lane:
+
 ```bash
+cargo fmt --all -- --check
+env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings
 env -u CC -u CXX cargo test --workspace --locked
+cargo audit --deny warnings
 python3 scripts/check-dependency-policy.py
 ```
 
-Use `env -u CC -u CXX` on macOS when inherited Zig compiler variables break
-native dependency builds. The dependency policy check requires every locked
+Install `cargo-audit` locally when it is unavailable. Use
+`env -u CC -u CXX` on macOS when inherited Zig compiler variables break native
+dependency builds. The dependency policy check requires every locked
 third-party package to come from crates.io and carry license metadata; RustSec
 remains responsible for vulnerability advisories.
+
+When changing workflows or shell scripts, also run:
+
+```bash
+actionlint .github/workflows/*.yml
+shellcheck scripts/*.sh
+```
+
+CI tests both stable Rust and the declared Rust 1.97 MSRV. The stable lane also
+builds and smoke-tests the release binary and runs a bounded benchmark
+correctness smoke.
 
 ## Release build and smoke test
 
@@ -43,6 +61,20 @@ Tag releases are gated by formatting, Clippy, tests, dependency audit, and a
 release-binary smoke test on Linux. The same test and smoke flow also runs on
 native macOS and Windows runners. Published platform archives receive GitHub
 build-provenance attestations.
+
+Before creating a release tag:
+
+1. Match the workspace version, `Cargo.lock`, changelog, and intended tag.
+2. Start from a clean working tree and run the full validation above.
+3. Run `scripts/build-release.sh` and `scripts/smoke-release.sh`; both reject a
+   stale binary whose version differs from `Cargo.toml`.
+4. Retain a clean benchmark JSON report for performance claims.
+5. Push the release commit and wait for branch CI before creating the tag.
+
+Creating or pushing a tag publishes through the release workflow and is an
+external side effect. Do it only with explicit approval. `dist generate` does
+not preserve repository hardening around SHA pins, dependency policy, or native
+verification; after regeneration, reapply those changes and run `actionlint`.
 
 ## Scale benchmark
 
@@ -113,3 +145,21 @@ filtering, or CLI output changes.
 `mem import` JSON arrays and `mem merge` use a single Tantivy `IndexWriter`
 commit for all changes instead of N individual commits. Changed records are
 fed to that writer in bounded batches.
+
+### Graph module boundaries
+
+`crates/mem-core/src/graph.rs` is a small public façade. Keep responsibilities
+in the dedicated modules:
+
+- `model.rs` — public graph types;
+- `ids.rs` — stable node identifiers;
+- `store.rs` — shared SQLite rows, metadata, and low-level writes;
+- `query.rs` — explain, path, query, export, and candidates;
+- `materialize.rs` — deterministic rebuild and source extraction;
+- `health.rs` — graph audit and health reporting;
+- `semantic.rs` and `semantic/` — shared validation/persistence plus ingest,
+  merge, projection, and review operations.
+
+Shared primitives belong in `ids` or `store`; semantic code must not depend
+back on the deterministic materializer. Add new behavior to the narrowest
+module instead of growing the façade.

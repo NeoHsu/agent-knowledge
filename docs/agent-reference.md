@@ -21,7 +21,11 @@ This is the canonical guidance for agents working in this repository. Read this 
 - `docs/development.md` — local setup, validation, release smoke tests, and developer notes.
 - `SECURITY.md` — threat model, implemented controls, residual limitations, and reporting guidance.
 - `crates/mem-cli/` — `mem` CLI arguments, command dispatch, command implementations, integration tests.
-- `crates/mem-core/` — app discovery, config, SQLite DB helpers, Tantivy index, graph materialization, tokenizer, workflow/artifact validation, utilities.
+- `crates/mem-core/` — app discovery, config, SQLite DB helpers, Tantivy
+  index, tokenizer, workflow/artifact validation, and utilities.
+- `crates/mem-core/src/graph.rs` plus `graph/` — public graph façade and
+  separated model, identifiers, store, query, materialization, health, and
+  semantic-edge subsystems.
 - `schema/memory-schema.sql` — embedded SQLite schema source.
 - `skills/mnemark/` — installable mnemark agent skill and progressive references.
 - `templates/` — example config, manifest, and workflow files.
@@ -60,7 +64,10 @@ Read:
 2. `crates/mem-core/src/search_tokenizer.rs`
 3. `docs/development.md` notes about index schema versioning
 
-Bump `INDEX_SCHEMA_VERSION` when indexed fields, field options, tokenizer behavior, normalization, indexed document content, or required ranking/filtering fields change. Do not bump it for query-time boosts, fuzzy construction, SQLite-only filtering, or CLI output changes.
+Bump `INDEX_SCHEMA_VERSION` when indexed fields, field options, tokenizer
+behavior, normalization, indexed document content, or required ranking/filtering
+fields change. Do not bump it for query-time boosts, fuzzy construction,
+SQLite-only filtering, or CLI output changes.
 
 ### Change graph behavior
 
@@ -68,11 +75,23 @@ Read:
 
 1. `docs/graph-memory.md`
 2. `schema/memory-schema.sql`
-3. `crates/mem-core/src/graph.rs`
-4. `crates/mem-cli/src/commands/graph.rs`
-5. `crates/mem-cli/tests/graph.rs`
+3. `crates/mem-core/src/graph.rs` for the public façade
+4. the relevant module under `crates/mem-core/src/graph/`:
+   - `model.rs` for public request/report types;
+   - `query.rs` for explain/path/query/export/candidates;
+   - `materialize.rs` for deterministic rebuild and extraction;
+   - `health.rs` for graph audit and health reports;
+   - `ids.rs` and `store.rs` for shared identifiers and SQLite operations;
+   - `semantic.rs` for shared durable semantic-edge validation/persistence;
+   - `semantic/ingest.rs`, `merge.rs`, `projection.rs`, or `review.rs` for
+     the corresponding semantic-edge operation.
+5. `crates/mem-cli/src/commands/graph.rs`
+6. `crates/mem-cli/tests/graph.rs`
 
-Keep graph tables rebuildable, evidence-bearing, and context-only; do not add hidden LLM calls or embedding requirements to the Rust CLI.
+Keep graph tables rebuildable, evidence-bearing, and context-only. Preserve the
+one-way dependency from materialization/semantic operations into shared
+`ids`/`store` primitives; do not reintroduce a monolithic graph module, hidden
+LLM calls, or embedding requirements into the Rust CLI.
 
 ### Change workflow or artifact behavior
 
@@ -86,7 +105,8 @@ Read:
 6. `crates/mem-core/src/artifact.rs`
 7. `crates/mem-cli/tests/workflow.rs` and `crates/mem-cli/tests/artifact.rs`
 
-Workflow helpers must discover, show, and validate only; they must not execute workflow commands.
+Workflow helpers must discover, show, and validate only; they must not execute
+workflow commands.
 
 ### Change skill docs
 
@@ -94,25 +114,35 @@ Read:
 
 1. `skills/mnemark/SKILL.md`
 2. the referenced file under `skills/mnemark/references/`
-3. `docs/getting-started.md`, `docs/workflows.md`, or `docs/runtime-model.md` sections for the same behavior
+3. the relevant sections in `docs/getting-started.md`, `docs/workflows.md`, or
+   `docs/runtime-model.md`
 
 Keep `SKILL.md` concise and put details in references.
 
 ## Validation
 
-Preferred full validation:
+Preferred full validation mirrors the stable CI lane:
 
 ```bash
+cargo fmt --all -- --check
+env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings
 env -u CC -u CXX cargo test --workspace --locked
+cargo audit --deny warnings
 python3 scripts/check-dependency-policy.py
-```
-
-Use `env -u CC -u CXX` on macOS when `CC="zig cc"` or `CXX="zig c++"`
-breaks native dependency builds. Release smoke validation:
-
-```bash
 scripts/build-release.sh
 scripts/smoke-release.sh
+```
+
+Install `cargo-audit` locally when it is unavailable. Use
+`env -u CC -u CXX` on macOS when inherited `CC="zig cc"` or `CXX="zig c++"`
+settings break native dependency builds. CI also tests the declared Rust 1.97
+MSRV and runs a bounded benchmark correctness smoke.
+
+When changing GitHub workflows or shell scripts, additionally run:
+
+```bash
+actionlint .github/workflows/*.yml
+shellcheck scripts/*.sh
 ```
 
 ## Documentation Rules
@@ -125,7 +155,8 @@ scripts/smoke-release.sh
 - Skill files are embedded into the binary by
   `crates/mem-cli/src/commands/setup.rs`; changing `skills/mnemark/` changes
   what `mem setup <platform>` installs, so rebuild before manual verification.
-- Historical plans should be clearly marked as design history or removed when obsolete.
+- Historical plans should be clearly marked as design history or removed when
+  obsolete.
 - Keep command examples copy-pastable and aligned with Clap args.
 - If a flag is hidden or intentionally unsupported, do not show it as a normal example.
 - Prefer one authoritative explanation and cross-reference it instead of

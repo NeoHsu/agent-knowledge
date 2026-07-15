@@ -1,14 +1,20 @@
 # Memory Quality Rules
 
-Memories are read by models of varying capability. Write every memory so the least capable future model can apply it mechanically, without re-deriving the reasoning that produced it.
+Memories are read by models of varying capability. Write every memory so the
+least capable future model can apply it without re-deriving the reasoning that
+produced it.
 
 ## The three-part shape
 
-Every `feedback`, `preference`, and decision-type memory content must state:
+Every durable memory must make these three parts explicit:
 
 1. **Trigger** — WHEN it applies, as a concrete condition.
-2. **Action** — WHAT to do, as an imperative instruction.
-3. **Why** — one line of rationale, with date or evidence.
+2. **Action** — WHAT a future agent should do or verify.
+3. **Why** — one line of rationale, provenance, date, or evidence.
+
+For factual `project` or `reference` records, Action should explain how to use
+or verify the fact; do not invent an imperative that the evidence does not
+support.
 
 Bad (fact without trigger or action):
 
@@ -19,8 +25,9 @@ emoji 不好
 Good:
 
 ```text
-產出任何面向使用者的文字（回覆、commit message、文件）時，不要使用 emoji。
-原因：使用者 2026-07-05 明確要求。
+Trigger: 產出任何面向使用者的文字（回覆、commit message、文件）時。
+Action: 不要使用 emoji。
+Why: 使用者 2026-07-05 明確要求。
 ```
 
 ## Writing rules
@@ -38,9 +45,18 @@ Wrap every path and command the content asserts in backticks. `mem reconcile` ex
 
 ## Write moments
 
-Query paths and write paths are separate. Mid-task the store is read-only: `mem prime` and `mem query` load context; nothing writes. Durable candidates noticed mid-task are collected, not saved — a fact observed mid-task lacks the outcome (did the approach work?) and tends to produce fragmentary, low-context memories that later need merging.
+This batching rule applies to incidental memory candidates discovered while
+performing another task. Mid-task, plain `mem prime` and ordinary `mem query`
+load context while candidates are collected rather than saved: the final
+outcome is not yet known, so early writes tend to be fragmentary.
 
-Writes happen at exactly three moments, each with its own quality gate:
+It does not defer a task whose requested outcome is itself a store mutation,
+such as an explicit remember request, import, migration, merge, artifact
+change, or setup. Those operations follow `SKILL.md` Safety Gates at the point
+they are requested.
+
+Incidental memory writes happen at three moments, each with its own quality
+gate:
 
 | Moment | Why it is a good write point |
 | --- | --- |
@@ -48,7 +64,7 @@ Writes happen at exactly three moments, each with its own quality gate:
 | Retrospective (`mem retro daily\|weekly`) | bundle supplies changelog/audit/ambiguity context for dedupe and confidence calibration |
 | Reconcile pass (`mem reconcile`) | fixes are grounded in a machine-verified report, not impressions |
 
-Two exceptions write immediately:
+Within incidental memory capture, two exceptions write immediately:
 
 - The user explicitly asks to remember something (`記住`, "remember this") — user intent overrides batching.
 - A task step proves an existing memory wrong — fix it on the spot with `update`/`supersede`/`delete`; a wrong memory misleads every session until corrected.

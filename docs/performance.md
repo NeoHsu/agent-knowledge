@@ -27,6 +27,17 @@ records:
 - database, Tantivy index, and bundle sizes;
 - bundle snapshot, validation, hashing, archive, and install stage timings.
 
+## Baseline publication policy
+
+This `main` branch currently targets source version `0.7.0`, while the table
+below remains the latest retained clean, published-release baseline. Do not
+replace it with a dirty-tree or untagged development run. A 0.7 baseline should
+be added only after the release commit is clean and the tagged platform binary
+has run the same retained benchmark protocol; record the tag/commit, binary and
+script hashes, platform, cache model, and sample counts. Development and 100k
+capacity-canary reports may be discussed as observations but are not release
+service-level objectives.
+
 ## 0.6.0 local baseline
 
 Measured on 2026-07-13 with an Apple M2 Max (`arm64`), macOS 26.5.1, Rust

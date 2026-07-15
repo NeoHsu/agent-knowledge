@@ -1,29 +1,41 @@
 # Daily Retrospective
 
-Goal: extract durable knowledge missed during the day and keep `memory.db` current.
+Goal: extract durable knowledge missed during the day and keep `memory.db`
+current.
 
 ## Steps
 
-1. Use the active platform's available conversation context or history.
-2. Run `mem retro daily` to get active memories, recent changelog, pending ambiguities, stats, and audit context.
-3. Compare available platform context with existing memory.
-4. Save new facts with `source=daily_retro`.
-5. Detect repeated manual procedures and suggest or save `type=workflow` memories when they are durable.
-6. Notice repeated helper code and classify it with `workflow-rules.md` Reusable Scripts.
-7. Update or supersede stale memories when evidence is clear.
-8. Add ambiguity records when two memories conflict or scope is unclear.
-9. Run `mem stats` and `mem audit`.
-10. Report concise counts and unresolved questions.
-11. Offer sync per `SKILL.md` Safety Gates.
+1. Identify the review date/time window and the available platform conversation
+   source. Never imply that `mem retro` contains chat logs.
+2. If platform context is unavailable, mark it unavailable and limit the review
+   to store maintenance; report conversation-derived checks as skipped rather
+   than reconstructing them.
+3. Run `mem retro daily` to get active memories, recent changelog, pending
+   ambiguities, workflow runs, stats, and audit context.
+4. Compare only the available platform context with existing memory.
+5. Save confirmed durable facts with `source=daily_retro`.
+6. Detect repeated manual procedures and propose `type=workflow` candidates.
+   Save one only after the user approves creating the runbook.
+7. Notice repeated helper code and classify it with `workflow-rules.md` Reusable
+   Scripts; propose ownership changes instead of moving files silently.
+8. Update or supersede stale memories when evidence is clear.
+9. Add ambiguity records when two memories conflict or scope is unclear.
+10. Run `mem stats` and `mem audit`.
+11. Report concise counts, skipped checks, candidates, and unresolved questions.
+12. If the store changed, offer sync per `SKILL.md` Safety Gates.
 
-## What to Save
+## What to Save or Propose
 
 - Repeated user preferences.
 - Explicit corrections.
 - Project decisions, deadlines, owners, constraints.
 - Stable references to systems, repos, docs, or workflows.
-- Repeated project procedures as `type=workflow` with `workflow:*` and `intent:*` tags.
-- Artifact candidates: apply `workflow-rules.md` Reusable Scripts; one-off helpers stay local, project-specific helpers belong in repo `scripts/`, cross-project helpers belong in knowledge-store `artifacts/`, and ownership changes need user approval.
+- User-approved `type=workflow` memories for repeated project procedures, with
+  `workflow:*` and `intent:*` tags.
+- Artifact candidates: apply `workflow-rules.md` Reusable Scripts; one-off
+  helpers stay local, project-specific helpers belong in repo `scripts/`,
+  cross-project helpers belong in knowledge-store `artifacts/`, and ownership
+  changes need user approval.
 
 ## What Not to Save
 
@@ -36,9 +48,13 @@ Goal: extract durable knowledge missed during the day and keep `memory.db` curre
 
 ```text
 Daily memory retro:
+- window: <YYYY-MM-DD>
+- conversation context: available | unavailable
 - added: 3
 - updated: 1
 - superseded: 1
 - ambiguities: 1 pending
+- workflow/artifact candidates: ...
+- skipped checks: ...
 - suggested questions: ...
 ```

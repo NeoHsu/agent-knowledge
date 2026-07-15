@@ -1,8 +1,18 @@
 # mnemark
 
-Portable agent memory and workflow runbook system, exposed through the `mem` CLI.
+Portable agent memory and workflow runbook system, exposed through the `mem`
+CLI.
 
-For agents working in this repository, read `docs/agent-reference.md` before making changes. `AGENTS.md` is only a platform entrypoint; `docs/agent-reference.md` is the canonical agent guidance.
+> [!NOTE]
+> This `main` branch documents source version `0.7.0`. The `latest` installer
+> follows the newest published GitHub release and can temporarily lag behind
+> `main`; run `mem --version` and use the documentation from the matching Git
+> tag when exact released behavior matters.
+
+For agents working in this repository, read
+[`docs/agent-reference.md`](docs/agent-reference.md) before making changes.
+`AGENTS.md` is only a platform entrypoint; `docs/agent-reference.md` is the
+canonical agent guidance.
 
 `mnemark` is a Rust single-binary CLI for durable agent memory. It stores memory in a private/local SQLite knowledge store, maintains a rebuildable Tantivy search index, validates workflow runbooks, and packages portable artifacts and bundles.
 
@@ -19,13 +29,18 @@ For agents working in this repository, read `docs/agent-reference.md` before mak
 Installer script for macOS / Linux:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/NeoHsu/mnemark/releases/latest/download/mnemark-installer.sh | sh
+base=https://github.com/NeoHsu/mnemark/releases/latest/download
+curl --proto '=https' --tlsv1.2 -LsSf \
+  "$base/mnemark-installer.sh" |
+  sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/NeoHsu/mnemark/releases/latest/download/mnemark-installer.ps1 | iex"
+$base = "https://github.com/NeoHsu/mnemark/releases/latest/download"
+powershell -ExecutionPolicy Bypass -c `
+  "irm $base/mnemark-installer.ps1 | iex"
 ```
 
 Direct release downloads:
@@ -38,7 +53,13 @@ Direct release downloads:
 | x64 Linux | `mnemark-x86_64-unknown-linux-gnu.tar.xz` |
 | x64 Windows | `mnemark-x86_64-pc-windows-msvc.zip` |
 
-Checksums are published next to the release assets. See the [latest release](https://github.com/NeoHsu/mnemark/releases/latest).
+Checksums are published next to the release assets. See the
+[latest release](https://github.com/NeoHsu/mnemark/releases/latest), then verify
+which contract you installed:
+
+```bash
+mem --version
+```
 
 ## Common workflows
 
@@ -50,7 +71,14 @@ mem query "emoji"
 mem query "name:no_emoji" --raw-query
 mem setup claude-code
 mem setup pi
-mem save --type workflow --name release_runbook --scope global --source manual --user-confirmed --tags '["workflow:release","intent:release","risk:high"]' --content-file templates/workflow.yaml
+mem save \
+  --type workflow \
+  --name release_runbook \
+  --scope global \
+  --source manual \
+  --user-confirmed \
+  --tags '["workflow:release","intent:release","risk:high"]' \
+  --content-file templates/workflow.yaml
 mem workflow find release --scope auto
 mem workflow validate release_runbook
 mem artifact check
@@ -58,7 +86,12 @@ mem bundle export mnemark-store.tgz
 mem retro daily
 ```
 
-`mem setup <platform>` wires the selected agent at user level. It has no project mode and never selects the current repository implicitly. Project memories remain logically isolated by `project:<owner>/<repo>` scope inside the active runtime store. Automation can add the global `--json-errors` flag to receive stable JSON error envelopes on stderr without changing successful output.
+`mem setup <platform>` wires the selected agent at user level. It has no
+project mode and never selects the current repository implicitly. Project
+memories remain logically isolated by `project:<owner>/<repo>` scope inside the
+active runtime store. Automation can add the global `--json-errors` flag to
+receive stable JSON error envelopes on stderr without changing successful
+output.
 
 ## Documentation
 
@@ -74,12 +107,14 @@ mem retro daily
 | [Agent Reference](docs/agent-reference.md) | Canonical instructions for agents changing this repo: safety rules, repo map, task routing, validation |
 | [Development](docs/development.md) | Local setup, source commands, validation, release smoke tests, developer notes |
 | [Security](SECURITY.md) | Threat model, implemented controls, explicit limitations, and reporting guidance |
-| [Performance](docs/performance.md) | Reproducible 100/1,000/10,000-memory release baseline |
+| [Performance](docs/performance.md) | Published release baseline, regression protocol, and capacity-canary rules |
 | [Changelog](CHANGELOG.md) | Breaking changes, features, and fixes by release |
 
 ## Agent Skill
 
-Install the bundled AI agent skill to enable `mem`-aware assistance — durable memory save/query, workflow runbook lookup, retrospective flows, merge/audit/bundle commands, and safety rules.
+Install the bundled AI agent skill to enable `mem`-aware assistance: durable
+memory save/query, workflow runbook lookup, retrospective flows,
+merge/audit/bundle commands, and safety rules.
 
 ```bash
 npx skills add https://github.com/NeoHsu/mnemark/tree/main/skills/mnemark
@@ -91,40 +126,92 @@ For a local checkout during development:
 npx skills add ./skills/mnemark
 ```
 
-## Feature Matrix
+## Feature map
 
-| Area | Feature | Commands / Files |
-| --- | --- | --- |
-| Memory | Save, query, update, supersede, delete | `mem save`, `query`, `update`, `supersede`, `delete` |
-| Memory types | User, feedback, project, reference, preference, workflow | `--type user\|feedback\|project\|reference\|preference\|workflow` |
-| Search | Multilingual Tantivy search, deterministic trust-aware reranking, fuzzy/raw syntax | `mem query`, `--fuzzy`, `--raw-query`, `--explain-score`, `--touch` |
-| Scope | Global and project-aware context | `mem context --detect`, `--scope auto` |
-| Lifecycle | Soft delete, protected manual memories, version conflicts | `valid_until`, `protected`, `--expected-version` |
-| History | Changelog and stats | `mem history`, `mem stats` |
-| Health | Audit and garbage collection | `mem audit`, `mem audit --fix`, `mem gc` |
-| Reconcile | Verify path/command claims in memories against the filesystem | `mem reconcile`, `--scope`, `--repo` |
-| Graph | Rebuild, traverse, query, review relationship graph, and focused priming | `mem graph rebuild\|stats\|explain\|path\|query\|ingest\|review\|export` / `mem prime --focus` |
-| Workflow | Store recurring runbooks as validated memory | `mem workflow list\|find\|show\|validate` |
-| Artifacts | Portable helper file metadata and safety checks | `mem artifact list\|show\|check\|add\|update\|remove` / `manifest.toml` |
-| Bundles | Portable store export/import/inspect | `mem bundle export\|inspect\|import` |
-| Migration | Explicit schema migration, JSON/Markdown import/export, idempotent durable-state DB merge | `mem migrate`, `mem import`, `mem export`, `mem merge` |
-| Retrospective | Daily/weekly orchestration bundles for agents | `mem retro daily\|weekly` |
-| Agent setup | User-level platform policy, shared skills, and startup adapters | `mem setup claude-code\|codex\|pi\|gemini-cli\|opencode` |
-| Agent skill | Versioned source plus shared installation | `skills/mnemark` → `~/.agents/skills/mnemark` |
+### Memory and retrieval
+
+- **Memory lifecycle:** save, query, update, supersede, expire, and delete.
+  Use `mem save --type <type> --name <name> --content "<text>"`,
+  `mem query "<terms>"`, `mem update <name> --content "<text>"`,
+  `mem supersede <old> <new> --content "<replacement>"`, and
+  `mem delete <name>`. Save/update accept RFC3339 `--expires-at`; update also
+  supports `--clear-expires-at`.
+- **Memory types:** `user`, `feedback`, `project`, `reference`, `preference`, and
+  validated `workflow` memories.
+- **Search:** multilingual Tantivy retrieval, fuzzy/raw syntax, deterministic
+  trust-aware reranking, explicit telemetry, and score explanations through
+  `mem query "<terms>" --fuzzy`, `--raw-query`, `--touch`, and
+  `--explain-score`.
+- **Scope and history:** global/project-aware selection with
+  `mem context --detect` and `--scope auto`; changelog and usage summaries with
+  `mem history` and `mem stats`.
+- **Health and reconciliation:** `mem audit`, `mem audit --fix`, `mem gc`, and
+  `mem reconcile --scope auto`.
+
+### Graph, workflows, and artifacts
+
+- **Graph:** rebuild, explain, traverse, query, export, curate, and review with
+  `mem graph rebuild`, `mem graph stats`, `mem graph explain <reference>`,
+  `mem graph path <from> <to>`, `mem graph query "<terms>"`,
+  `mem graph export`, `mem graph candidates`, `mem graph ingest <file>`,
+  `mem graph review`, `mem graph accept <edge-id>`, and
+  `mem graph reject <edge-id>`. Focused priming uses
+  `mem prime --focus "<task>"`.
+- **Workflows:** scaffold, find, show, validate, and record recurring runbooks
+  with `mem workflow new <name>`, `mem workflow find "<intent>"`,
+  `mem workflow show <reference>`, `mem workflow validate <reference>`, and
+  `mem workflow record <reference> --result success`.
+- **Artifacts:** portable helper metadata and safety checks through
+  `mem artifact list`, `mem artifact show <name>`, `mem artifact check`,
+  `mem artifact add <path> --kind script`,
+  `mem artifact update <name> --checksum`, and
+  `mem artifact remove <name>`; metadata lives in `manifest.toml`.
+
+### Portability and integrations
+
+- **Bundles:** `mem bundle export <file>`, `mem bundle inspect <file>`, and
+  `mem bundle import <file>`.
+- **Migration and transfer:** `mem migrate`,
+  `mem import <file> --summary-only`, `mem export`, and `mem merge <db>`.
+- **Retrospectives:** `mem retro daily` and `mem retro weekly`.
+- **Agent setup:** `mem setup claude-code`, `mem setup codex`, `mem setup pi`,
+  `mem setup gemini-cli`, and `mem setup opencode` install user-level policy,
+  shared skills, and supported startup adapters.
+- **Agent skill:** versioned source under `skills/mnemark`, installed once at
+  `~/.agents/skills/mnemark` and linked where needed.
 
 ## Runtime Store
 
-`memory.db` is the runtime source of truth for an individual knowledge store, but it is not tracked in this project. Keep real memory databases in a private data repo, a local `MNEMARK_HOME`, or a `knowledge_home` configured in `~/.config/mnemark/config.toml`.
+`memory.db` is the runtime source of truth for an individual knowledge store,
+but it is not tracked in this project. Keep real memory databases in a private
+data repo, a local `MNEMARK_HOME`, or a `knowledge_home` configured in
+`~/.config/mnemark/config.toml`.
 
-Runtime stores can include `config.toml`, `manifest.toml`, `artifacts/`, and rebuildable `index/`. See [Runtime Model](docs/runtime-model.md) for details.
+Runtime stores can include `config.toml`, `manifest.toml`, `artifacts/`, and a
+rebuildable `index/`. See [Runtime Model](docs/runtime-model.md) for details.
+
+## Security at a glance
+
+Runtime stores and bundle archives are not encrypted by mnemark. Bundle hashes
+detect corruption but do not authenticate the sender. Keep stores and bundles
+private, use full-disk or volume encryption when confidentiality matters, and
+accept bundles only through a trusted channel. See [Security](SECURITY.md) for
+the complete threat model and platform limitations.
 
 ## Development
 
 ```bash
 mise install
+cargo fmt --all -- --check
+env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings
 env -u CC -u CXX cargo test --workspace --locked
+cargo audit --deny warnings
 python3 scripts/check-dependency-policy.py
 ```
+
+Install `cargo-audit` before the full local validation when it is not already
+available. See [Development](docs/development.md) for MSRV, release smoke, shell
+workflow checks, and benchmark validation.
 
 For source-only CLI runs:
 
