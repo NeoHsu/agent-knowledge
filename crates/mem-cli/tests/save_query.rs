@@ -239,6 +239,42 @@ fn fuzzy_query_matches_multiple_typo_terms() {
 }
 
 #[test]
+fn chinese_query_uses_the_index_multilingual_tokenizer() {
+    let repo = TestRepo::new("query-chinese-tokenizer");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--name",
+        "deployment_workflow",
+        "--content",
+        "正式環境部署流程與回滾檢查清單",
+        "--force",
+    ]);
+
+    let query = repo.run(&["query", "部署流程", "--no-touch"]);
+
+    assert!(query.contains("deployment_workflow"));
+}
+
+#[test]
+fn fuzzy_query_tokenizes_chinese_and_english_before_matching() {
+    let repo = TestRepo::new("fuzzy-chinese-tokenizer");
+    repo.run(&["init"]);
+    repo.run(&[
+        "save",
+        "--name",
+        "mixed_release_workflow",
+        "--content",
+        "release 部署流程 checklist",
+        "--force",
+    ]);
+
+    let query = repo.run(&["query", "releaze 部署流成", "--fuzzy", "--no-touch"]);
+
+    assert!(query.contains("mixed_release_workflow"));
+}
+
+#[test]
 fn query_supports_table_and_compact_formats() {
     let repo = TestRepo::new("query-formats");
     repo.run(&["init"]);

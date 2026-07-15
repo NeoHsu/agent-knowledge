@@ -166,7 +166,7 @@ fn cli_home_overrides_current_directory_store() {
 }
 
 #[test]
-fn query_help_hides_semantic_until_backend_exists() {
+fn query_help_does_not_advertise_embedding_search() {
     let output = Command::new(mem_bin())
         .args(["query", "--help"])
         .output()
@@ -174,6 +174,13 @@ fn query_help_hides_semantic_until_backend_exists() {
     assert!(output.status.success(), "query help failed");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(!stdout.contains("--semantic"));
+
+    let rejected = Command::new(mem_bin())
+        .args(["query", "--semantic"])
+        .output()
+        .expect("run removed semantic option");
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("unexpected argument '--semantic'"));
 }
 
 #[test]

@@ -25,21 +25,12 @@ struct ExplainedMemory<'a> {
 
 pub(crate) fn cmd_query(app: &App, args: QueryArgs) -> Result<()> {
     app.require_schema()?;
-    // TODO(F2): --semantic is intentionally hidden until an embedding backend
-    // is planned and configured. Keep the guard so hidden/manual use fails
-    // explicitly instead of silently falling back to full-text search.
     if args
         .query
         .as_deref()
         .is_some_and(|query| query.chars().count() > 1_000)
     {
         bail!("query cannot exceed 1000 characters");
-    }
-    if args.semantic {
-        anyhow::bail!(
-            "--semantic is not yet implemented; no embedding backend is configured. \
-             Remove --semantic to use full-text/fuzzy search instead."
-        );
     }
     let writes_store = (args.touch && !args.no_touch) || args.repair_index;
     let conn = if writes_store {

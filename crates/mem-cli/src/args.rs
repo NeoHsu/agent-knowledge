@@ -342,8 +342,6 @@ pub(crate) struct QueryArgs {
     pub(crate) sort: SortMode,
     #[arg(long, help = "Use fuzzy matching across indexed fields")]
     pub(crate) fuzzy: bool,
-    #[arg(long, hide = true)]
-    pub(crate) semantic: bool,
     #[arg(
         long,
         conflicts_with = "no_touch",

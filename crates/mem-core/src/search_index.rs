@@ -172,7 +172,7 @@ pub fn search_hits(
     let text_clause: Option<Box<dyn Query>> = if query_text.is_empty() {
         None
     } else if fuzzy {
-        build_fuzzy_query(&query_text, &fields)
+        build_fuzzy_query(&index, &query_text, &fields)?
     } else {
         let mut parser = QueryParser::for_index(&index, default_search_fields(&fields));
         apply_field_boosts(&mut parser, &fields);
@@ -452,9 +452,29 @@ fn apply_field_boosts(parser: &mut QueryParser, fields: &IndexFields) {
     }
 }
 
-fn build_fuzzy_query(query_text: &str, fields: &IndexFields) -> Option<Box<dyn Query>> {
-    let token_clauses = query_text
-        .split_whitespace()
+fn build_fuzzy_query(
+    index: &Index,
+    query_text: &str,
+    fields: &IndexFields,
+) -> Result<Option<Box<dyn Query>>> {
+    // Fuzzy terms must be produced by the same analyzer that indexed the
+    // document. Splitting on whitespace bypasses Lindera and turns an entire
+    // Chinese phrase into one term that can never match the indexed tokens.
+    let mut analyzer = index
+        .tokenizers()
+        .get("multilingual")
+        .context("multilingual tokenizer is not registered")?;
+    let mut stream = analyzer.token_stream(query_text);
+    let mut tokens = Vec::new();
+    while stream.advance() {
+        let token = stream.token().text.trim();
+        if !token.is_empty() {
+            tokens.push(token.to_string());
+        }
+    }
+
+    let token_clauses = tokens
+        .iter()
         .map(|token| {
             let field_clauses = boosted_search_fields(fields)
                 .into_iter()
@@ -477,11 +497,11 @@ fn build_fuzzy_query(query_text: &str, fields: &IndexFields) -> Option<Box<dyn Q
         })
         .collect::<Vec<_>>();
 
-    if token_clauses.is_empty() {
+    Ok(if token_clauses.is_empty() {
         None
     } else {
         Some(Box::new(BooleanQuery::new(token_clauses)))
-    }
+    })
 }
 
 fn fields_from_schema(schema: Schema) -> Result<IndexFields> {
