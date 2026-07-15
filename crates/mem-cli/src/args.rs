@@ -51,6 +51,12 @@ pub(crate) struct Cli {
         help = "Override the active knowledge store root"
     )]
     pub(crate) home: Option<String>,
+    #[arg(
+        long,
+        global = true,
+        help = "Emit machine-readable JSON errors on stderr"
+    )]
+    pub(crate) json_errors: bool,
     #[command(subcommand)]
     pub(crate) command: Command,
 }

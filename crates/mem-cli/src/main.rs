@@ -1,5 +1,7 @@
+use std::process::ExitCode;
+
 use anyhow::Result;
-use clap::Parser;
+use clap::{error::ErrorKind, Parser};
 use serde_json::json;
 
 mod args;
@@ -9,9 +11,67 @@ use args::*;
 use commands::*;
 use mem_core::app::{with_lock, with_shared_lock, App};
 use mem_core::index as memory_index;
+use mem_core::util::strip_secrets;
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
+fn main() -> ExitCode {
+    let wants_json_errors = std::env::args_os().any(|arg| arg == "--json-errors");
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            let _ = error.print();
+            return ExitCode::SUCCESS;
+        }
+        Err(error) => {
+            let exit_code = u8::try_from(error.exit_code()).unwrap_or(2);
+            if wants_json_errors {
+                eprintln!(
+                    "{}",
+                    json!({
+                        "status": "error",
+                        "code": "cli_parse_error",
+                        "message": safe_error_message(error.to_string()),
+                        "exit_code": exit_code
+                    })
+                );
+            } else {
+                let _ = error.print();
+            }
+            return ExitCode::from(exit_code);
+        }
+    };
+    let json_errors = cli.json_errors;
+    match run(cli) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            let message = format!("{error:#}");
+            if json_errors {
+                eprintln!(
+                    "{}",
+                    json!({
+                        "status": "error",
+                        "code": "command_failed",
+                        "message": safe_error_message(message),
+                        "exit_code": 1
+                    })
+                );
+            } else {
+                eprintln!("Error: {message}");
+            }
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn safe_error_message(message: String) -> String {
+    strip_secrets(&message).unwrap_or_else(|_| "error details could not be rendered safely".into())
+}
+
+fn run(cli: Cli) -> Result<()> {
     // Every command uses explicit/runtime discovery. A source checkout is never
     // selected implicitly; development stores must use --home or MNEMARK_HOME.
     let app = App::discover_runtime_with_home(cli.home.as_deref())?;
