@@ -135,17 +135,18 @@ pub(crate) fn upsert_with_writer(
     Ok(())
 }
 
-/// Upsert a batch of memories with a single `IndexWriter` and one commit.
-#[allow(dead_code)]
-pub fn upsert_batch(index_path: &Path, memories: &[IndexedMemory]) -> Result<()> {
-    if memories.is_empty() {
-        return Ok(());
-    }
+/// Upsert bounded batches with one shared `IndexWriter` and one commit.
+pub fn upsert_batches(
+    index_path: &Path,
+    batches: impl IntoIterator<Item = Result<Vec<IndexedMemory>>>,
+) -> Result<()> {
     let index = ensure_index(index_path)?;
     let fields = fields_from_schema(index.schema())?;
     let mut writer = index.writer(50_000_000)?;
-    for memory in memories {
-        upsert_with_writer(&mut writer, &fields, memory)?;
+    for batch in batches {
+        for memory in batch? {
+            upsert_with_writer(&mut writer, &fields, &memory)?;
+        }
     }
     writer.commit()?;
     Ok(())

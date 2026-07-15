@@ -580,6 +580,8 @@ pub(crate) struct ImportArgs {
     pub(crate) redact_secrets: bool,
     #[arg(long)]
     pub(crate) no_validate_workflow: bool,
+    #[arg(long, help = "Omit per-item results and emit only total/counts")]
+    pub(crate) summary_only: bool,
 }
 
 #[derive(Args)]

@@ -1,11 +1,108 @@
 use super::*;
+use serde::de::{IgnoredAny, SeqAccess, Visitor};
 use std::collections::BTreeSet;
-use std::fmt::Write as _;
+use std::fmt::{self, Write as _};
+use std::fs::File;
+use std::io::{BufReader, Read, Seek, SeekFrom};
 
 const IMPORT_TRANSACTION_CHUNK: usize = 500;
 
 type ImportedMemoryResult = std::result::Result<(Value, Option<String>), String>;
 type IndexedImportResult = (usize, ImportedMemoryResult);
+
+struct JsonArrayValidationVisitor;
+
+impl<'de> Visitor<'de> for JsonArrayValidationVisitor {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a JSON array of memory objects")
+    }
+
+    fn visit_seq<A>(self, mut sequence: A) -> std::result::Result<(), A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        while sequence.next_element::<IgnoredAny>()?.is_some() {}
+        Ok(())
+    }
+}
+
+struct JsonArrayChunkVisitor<'a, F> {
+    chunk_size: usize,
+    process_chunk: &'a mut F,
+    processing_error: &'a mut Option<anyhow::Error>,
+}
+
+impl<'de, F> Visitor<'de> for JsonArrayChunkVisitor<'_, F>
+where
+    F: FnMut(Vec<Value>) -> Result<()>,
+{
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a JSON array of memory objects")
+    }
+
+    fn visit_seq<A>(self, mut sequence: A) -> std::result::Result<(), A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let mut chunk = Vec::with_capacity(self.chunk_size);
+        while let Some(value) = sequence.next_element::<Value>()? {
+            chunk.push(value);
+            if chunk.len() == self.chunk_size {
+                let full_chunk = std::mem::replace(&mut chunk, Vec::with_capacity(self.chunk_size));
+                if let Err(error) = (self.process_chunk)(full_chunk) {
+                    *self.processing_error = Some(error);
+                    return Err(<A::Error as serde::de::Error>::custom(
+                        "import chunk processing failed",
+                    ));
+                }
+            }
+        }
+        if !chunk.is_empty() {
+            if let Err(error) = (self.process_chunk)(chunk) {
+                *self.processing_error = Some(error);
+                return Err(<A::Error as serde::de::Error>::custom(
+                    "import chunk processing failed",
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+fn validate_json_array(reader: impl Read) -> Result<()> {
+    let mut deserializer = serde_json::Deserializer::from_reader(reader);
+    serde::de::Deserializer::deserialize_seq(&mut deserializer, JsonArrayValidationVisitor)
+        .context("parse json import")?;
+    deserializer
+        .end()
+        .context("parse trailing json import data")
+}
+
+fn process_json_array_chunks(
+    reader: impl Read,
+    chunk_size: usize,
+    mut process_chunk: impl FnMut(Vec<Value>) -> Result<()>,
+) -> Result<()> {
+    let mut processing_error = None;
+    let visitor = JsonArrayChunkVisitor {
+        chunk_size,
+        process_chunk: &mut process_chunk,
+        processing_error: &mut processing_error,
+    };
+    let mut deserializer = serde_json::Deserializer::from_reader(reader);
+    let parsed = serde::de::Deserializer::deserialize_seq(&mut deserializer, visitor);
+    if let Some(error) = processing_error {
+        return Err(error);
+    }
+    parsed.context("parse json import")?;
+    deserializer
+        .end()
+        .context("parse trailing json import data")
+}
 
 pub(crate) fn cmd_export(app: &App, args: ExportArgs) -> Result<()> {
     app.require_schema()?;
@@ -38,20 +135,20 @@ pub(crate) fn cmd_export(app: &App, args: ExportArgs) -> Result<()> {
 
     match args.format {
         ExportFormat::Json => print_json_pretty(&memories)?,
-        ExportFormat::Markdown => print_text(render_export_markdown(&memories))?,
+        ExportFormat::Markdown => print_text(render_export_markdown(&memories)?)?,
     }
     Ok(())
 }
 
-fn render_export_markdown(memories: &[mem_core::db::Memory]) -> String {
+fn render_export_markdown(memories: &[mem_core::db::Memory]) -> Result<String> {
     let mut output = String::new();
     for memory in memories {
-        writeln!(output, "## {}\n", memory.name).expect("write markdown heading");
-        writeln!(output, "- id: {}", memory.id).expect("write markdown id");
-        writeln!(output, "- type: {}", memory.r#type).expect("write markdown type");
-        writeln!(output, "- scope: {}", memory.scope).expect("write markdown scope");
-        writeln!(output, "- confidence: {}", memory.confidence).expect("write markdown confidence");
-        writeln!(output, "- tags: {}\n", memory.tags).expect("write markdown tags");
+        writeln!(output, "## {}\n", memory.name)?;
+        writeln!(output, "- id: {}", memory.id)?;
+        writeln!(output, "- type: {}", memory.r#type)?;
+        writeln!(output, "- scope: {}", memory.scope)?;
+        writeln!(output, "- confidence: {}", memory.confidence)?;
+        writeln!(output, "- tags: {}\n", memory.tags)?;
         if let Some(description) = memory.description.as_deref() {
             output.push_str(description);
             output.push_str("\n\n");
@@ -61,7 +158,7 @@ fn render_export_markdown(memories: &[mem_core::db::Memory]) -> String {
             output.push_str("\n\n");
         }
     }
-    output
+    Ok(output)
 }
 
 fn save_args_from_import_value(
@@ -151,24 +248,30 @@ pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
     if import_bytes > 268_435_456 {
         bail!("import file exceeds 268435456 bytes");
     }
-    let text =
-        fs::read_to_string(&args.file).with_context(|| format!("read {}", args.file.display()))?;
+    let summary_only = args.summary_only;
+    let mut total = 0_usize;
     let mut results = Vec::new();
     let mut counts = serde_json::Map::new();
 
     if args.file.extension().and_then(|s| s.to_str()) == Some("json") {
-        let values: Vec<Value> = serde_json::from_str(&text).context("parse json import")?;
+        let mut file = File::open(&args.file)
+            .with_context(|| format!("open {} for import", args.file.display()))?;
+        validate_json_array(BufReader::new(&mut file))?;
+        file.seek(SeekFrom::Start(0))
+            .with_context(|| format!("rewind {} after validation", args.file.display()))?;
+
         let rebuild_index =
             memory_index::is_stale(app) || memory_index::validate_physical_index(app).is_err();
         let conn = app.conn()?;
         let mut saved_ids = BTreeSet::new();
         let origin_ref = args.file.display().to_string();
-        for (chunk_index, chunk) in values.chunks(IMPORT_TRANSACTION_CHUNK).enumerate() {
-            let first_index = chunk_index * IMPORT_TRANSACTION_CHUNK;
+        let mut first_index = 0;
+        process_json_array_chunks(BufReader::new(file), IMPORT_TRANSACTION_CHUNK, |chunk| {
+            let chunk_len = chunk.len();
             let chunk_results = with_transaction(&conn, |conn| {
-                let mut chunk_results: Vec<IndexedImportResult> = Vec::with_capacity(chunk.len());
+                let mut chunk_results: Vec<IndexedImportResult> = Vec::with_capacity(chunk_len);
                 let mut changed = false;
-                for (offset, value) in chunk.iter().cloned().enumerate() {
+                for (offset, value) in chunk.into_iter().enumerate() {
                     conn.execute_batch("SAVEPOINT import_item")?;
                     let import_result = save_args_from_import_value(
                         value,
@@ -199,6 +302,7 @@ pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
             })?;
 
             for (index, import_result) in chunk_results {
+                total += 1;
                 match import_result {
                     Ok((result, maybe_id)) => {
                         let status = result_status(&result);
@@ -206,26 +310,34 @@ pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
                             saved_ids.insert(id);
                         }
                         increment_count(&mut counts, &status);
-                        results.push(json!({
-                            "index": index,
-                            "status": status,
-                            "result": result
-                        }));
+                        if !summary_only {
+                            results.push(json!({
+                                "index": index,
+                                "status": status,
+                                "result": result
+                            }));
+                        }
                     }
                     Err(error) => {
                         increment_count(&mut counts, "failed");
-                        results.push(json!({
-                            "index": index,
-                            "status": "failed",
-                            "error": error
-                        }));
+                        if !summary_only {
+                            results.push(json!({
+                                "index": index,
+                                "status": "failed",
+                                "error": error
+                            }));
+                        }
                     }
                 }
             }
-        }
+            first_index += chunk_len;
+            Ok(())
+        })?;
         let saved_ids = saved_ids.into_iter().collect::<Vec<_>>();
         memory_index::complete_bulk_write(app, &conn, &saved_ids, rebuild_index)?;
     } else {
+        let text = fs::read_to_string(&args.file)
+            .with_context(|| format!("read {}", args.file.display()))?;
         let name = args
             .file
             .file_stem()
@@ -256,20 +368,23 @@ pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
         )?;
         let status = result_status(&result);
         increment_count(&mut counts, &status);
-        results.push(json!({
-            "index": 0,
-            "status": status,
-            "result": result
-        }));
+        total = 1;
+        if !summary_only {
+            results.push(json!({
+                "index": 0,
+                "status": status,
+                "result": result
+            }));
+        }
     }
-    print_write_json_pretty(
-        app,
-        json!({
-            "status": "import_complete",
-            "total": results.len(),
-            "counts": Value::Object(counts),
-            "results": results
-        }),
-    )?;
+    let mut response = json!({
+        "status": "import_complete",
+        "total": total,
+        "counts": Value::Object(counts),
+    });
+    if !summary_only {
+        response["results"] = json!(results);
+    }
+    print_write_json_pretty(app, response)?;
     Ok(())
 }

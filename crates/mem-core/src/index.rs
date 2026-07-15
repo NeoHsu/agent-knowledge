@@ -3,9 +3,11 @@ use chrono::DateTime;
 use rusqlite::Connection;
 
 use crate::app::App;
-use crate::db::{self, all_memories, memory_by_id, Memory};
+use crate::db::{self, all_memories, memories_by_ids, memory_by_id, Memory};
 use crate::search_index::{self, IndexedMemory};
 use crate::util::parse_string_array;
+
+const INDEX_UPSERT_CHUNK: usize = 500;
 
 #[derive(Debug, Clone)]
 pub struct MemorySearchHit {
@@ -123,16 +125,19 @@ pub fn complete_bulk_write(
 }
 
 fn write_batch(app: &App, conn: &Connection, ids: &[String]) -> Result<()> {
-    let memories: Vec<IndexedMemory> = ids
-        .iter()
-        .filter_map(|id| {
-            memory_by_id(conn, id)
-                .ok()
-                .flatten()
-                .map(|memory| indexed_memory(&memory))
-        })
-        .collect();
-    match search_index::upsert_batch(&app.index_path, &memories) {
+    let batches = ids.chunks(INDEX_UPSERT_CHUNK).map(|batch| {
+        let stored = memories_by_ids(conn, batch)?;
+        batch
+            .iter()
+            .map(|id| {
+                stored
+                    .get(id)
+                    .map(indexed_memory)
+                    .ok_or_else(|| anyhow!("memory not found for batch index update: {id}"))
+            })
+            .collect::<Result<Vec<_>>>()
+    });
+    match search_index::upsert_batches(&app.index_path, batches) {
         Ok(()) => Ok(()),
         Err(err) => {
             mark_stale(app, &format!("batch upsert: {err:#}")).context("mark index stale")?;

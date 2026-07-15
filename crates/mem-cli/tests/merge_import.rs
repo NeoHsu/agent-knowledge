@@ -391,6 +391,59 @@ fn import_outputs_single_summary() {
 }
 
 #[test]
+fn import_summary_only_omits_per_item_results() {
+    let repo = TestRepo::new("import-summary-only");
+    repo.run(&["init"]);
+    let import_file = repo.join("summary-only.json");
+    fs::write(
+        &import_file,
+        r#"[
+          {"name":"summary_one","content":"first summary payload"},
+          {"name":"summary_two","content":"second summary payload"}
+        ]"#,
+    )
+    .expect("write summary-only import");
+
+    let output = repo.run(&[
+        "import",
+        import_file.to_str().expect("import path"),
+        "--summary-only",
+    ]);
+    let summary: Value = serde_json::from_str(&output).expect("summary-only json");
+
+    assert_eq!(summary["total"], 2);
+    assert_eq!(summary["counts"]["saved"], 2);
+    assert!(summary.get("results").is_none());
+    assert!(repo
+        .run(&["query", "summary payload", "--no-touch"])
+        .contains("summary_one"));
+}
+
+#[test]
+fn malformed_json_is_validated_before_any_import_chunk_is_written() {
+    let repo = TestRepo::new("import-malformed-before-write");
+    repo.run(&["init"]);
+    let import_file = repo.join("malformed.json");
+    let mut payload = String::from("[");
+    for index in 0..500 {
+        payload.push_str(&format!(
+            r#"{{"name":"streamed_{index}","content":"valid payload {index}"}},"#
+        ));
+    }
+    payload.push_str(r#"{"name":"unterminated""#);
+    fs::write(&import_file, payload).expect("write malformed import");
+
+    let error = repo.run_fail(&["import", import_file.to_str().expect("import path")]);
+
+    assert!(error.contains("parse json import"), "error: {error}");
+    let conn = Connection::open(repo.join("memory.db")).expect("open store");
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM memories", [], |row| row.get(0))
+        .expect("memory count");
+    assert_eq!(count, 0, "malformed input must not commit earlier chunks");
+}
+
+#[test]
 fn import_batches_transactions_across_chunk_boundaries_and_keeps_item_errors() {
     let repo = TestRepo::new("import-batch-transactions");
     repo.run(&["init"]);
