@@ -19,6 +19,7 @@ This is the canonical guidance for agents working in this repository. Read this 
 - `docs/runtime-model.md` — runtime store discovery, config priority, artifacts, and bundles.
 - `docs/graph-memory.md` — graph memory design, deterministic graph commands, and non-RAG stance.
 - `docs/development.md` — local setup, validation, release smoke tests, and developer notes.
+- `SECURITY.md` — threat model, implemented controls, residual limitations, and reporting guidance.
 - `crates/mem-cli/` — `mem` CLI arguments, command dispatch, command implementations, integration tests.
 - `crates/mem-core/` — app discovery, config, SQLite DB helpers, Tantivy index, graph materialization, tokenizer, workflow/artifact validation, utilities.
 - `schema/memory-schema.sql` — embedded SQLite schema source.
@@ -103,9 +104,11 @@ Preferred full validation:
 
 ```bash
 env -u CC -u CXX cargo test --workspace --locked
+python3 scripts/check-dependency-policy.py
 ```
 
-Use `env -u CC -u CXX` on macOS when `CC="zig cc"` or `CXX="zig c++"` breaks native dependency builds. Release smoke validation:
+Use `env -u CC -u CXX` on macOS when `CC="zig cc"` or `CXX="zig c++"`
+breaks native dependency builds. Release smoke validation:
 
 ```bash
 scripts/build-release.sh
@@ -115,9 +118,15 @@ scripts/smoke-release.sh
 ## Documentation Rules
 
 - `README.md` should describe current behavior, not old plans.
-- `skills/mnemark/references/cli-guide.md` is enforced by `crates/mem-cli/tests/doc_drift.rs`: every clap subcommand must appear in the guide and every `mem <subcommand>` example in the guide must exist in clap. Update both together.
-- Skill files are embedded into the binary by `crates/mem-cli/src/commands/setup.rs`; changing `skills/mnemark/` changes what `mem setup <platform>` installs, so rebuild before manual verification.
+- `skills/mnemark/references/cli-guide.md` is enforced by
+  `crates/mem-cli/tests/doc_drift.rs`: every clap subcommand must appear in the
+  guide and every `mem <subcommand>` example in the guide must exist in clap.
+  Update both together.
+- Skill files are embedded into the binary by
+  `crates/mem-cli/src/commands/setup.rs`; changing `skills/mnemark/` changes
+  what `mem setup <platform>` installs, so rebuild before manual verification.
 - Historical plans should be clearly marked as design history or removed when obsolete.
 - Keep command examples copy-pastable and aligned with Clap args.
 - If a flag is hidden or intentionally unsupported, do not show it as a normal example.
-- Prefer one authoritative explanation and cross-reference it instead of duplicating long sections.
+- Prefer one authoritative explanation and cross-reference it instead of
+  duplicating long sections.

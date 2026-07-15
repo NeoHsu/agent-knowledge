@@ -6,27 +6,87 @@ All notable changes to mnemark are documented here.
 
 ### Breaking changes
 
-- Removed the former `setup agent-policy` subcommand. Agent setup is now exclusively user-level through `mem setup <platform>`; project knowledge remains logically scoped inside the active runtime store.
-
-## [0.6.0] - 2026-07-11
-
-### Breaking changes
-
-- Store discovery is runtime-only: `--home`, `MNEMARK_HOME`, user config, then `~/.mnemark`. Source checkouts are never selected implicitly.
-- Reads no longer initialize or migrate stores. Use explicit backup-first `mem migrate --dry-run` and `mem migrate`.
-- `mem query` is no-touch by default; use `--touch` for access telemetry and `--repair-index` for explicit index repair.
-- `mem sync` no longer pushes by default. Use `--push` only after explicit approval.
-- `--source manual` requires `--user-confirmed`; unattested imported/merged claims are downgraded.
-- Secret-like durable values reject writes by default. Explicit `--redact-secrets` replaces detected values with `[REDACTED]`.
-- Memory names are unique within scope (`UNIQUE(scope, name)`); use `id:<memory-id>` for explicit ID resolution.
+- Removed the former `setup agent-policy` subcommand. Agent setup is now
+  exclusively user-level through `mem setup <platform>`; project knowledge
+  remains logically scoped inside the active runtime store.
 
 ### Added
 
-- Schema v5 store UUIDs, durable event UIDs, origin metadata, manual-confirmation provenance, strict RFC3339 lifecycle fields, Unix permission hardening, and explicit same-version repair for pre-release v5 stores.
-- Explainable local graph memory with deterministic materialization, semantic edge review/revisions, scoped traversal, direction control, weighted path tie-breaking, audit, and focused priming.
-- Deterministic query reranking across lexical relevance, source trust, confidence, scope specificity, and recency, with `--explain-score`.
-- Bundle v2 online SQLite snapshots, streaming per-file SHA-256 manifests, archive/resource bounds, strict SQLite schema-object validation, and rollback-safe replacement.
-- Agent-memory acceptance tests for read-only behavior, lifecycle isolation, scope isolation, secret leakage, durable merge idempotence, and skill packaging.
+- Added the global `--json-errors` automation contract for machine-readable
+  Clap and runtime failures, with secret-like values redacted from the JSON
+  message.
+- Added a repository security threat model, explicit encryption/authenticity
+  boundaries, Windows ACL guidance, and automated weekly dependency updates.
+- Added CJK and mixed-language query coverage plus bundle path-allowlist and
+  credential-family regression tests.
+- Added `mem import --summary-only` for bounded-memory large-import reporting
+  without changing the default per-item result contract.
+
+### Changed
+
+- Unified ordinary saves and bulk imports behind one
+  trust/provenance/version/changelog persistence pipeline.
+- Added package metadata, stripped release symbols, and stale-binary version
+  gates to smoke and benchmark scripts.
+- Split graph health reporting into its own module.
+- Removed the dormant hidden `query --semantic` branch; lexical/fuzzy search
+  and evidence-bearing graph retrieval remain the explicit non-RAG interfaces.
+
+### Fixed
+
+- Fuzzy queries now use the same multilingual analyzer as indexing instead of
+  splitting only on whitespace, so Chinese and mixed-language typo searches
+  use compatible terms.
+- `mem doctor` now reports that automatic user-only ACL verification is
+  unavailable on non-Unix platforms instead of silently omitting the permission
+  boundary.
+
+### Performance
+
+- Graph materialization reuses cached SQLite node/edge upsert statements,
+  reducing repeated SQL preparation during full rebuilds.
+- JSON array import now performs a bounded-memory validation pass and then
+  streams 500-item transaction chunks instead of retaining the full parsed
+  array; malformed JSON is rejected before any chunk is written.
+- Bulk index completion feeds 500-memory batches through one shared Tantivy
+  writer/commit instead of cloning every changed document at once.
+
+## [0.6.0] - 2026-07-13
+
+### Breaking changes
+
+- Store discovery is runtime-only: `--home`, `MNEMARK_HOME`, user config,
+  then `~/.mnemark`. Source checkouts are never selected implicitly.
+- Reads no longer initialize or migrate stores. Use explicit backup-first
+  `mem migrate --dry-run` and `mem migrate`.
+- `mem query` is no-touch by default; use `--touch` for access telemetry and
+  `--repair-index` for explicit index repair.
+- `mem sync` no longer pushes by default. Use `--push` only after explicit
+  approval.
+- `--source manual` requires `--user-confirmed`; unattested imported/merged
+  claims are downgraded.
+- Secret-like durable values reject writes by default. Explicit
+  `--redact-secrets` replaces detected values with `[REDACTED]`.
+- Memory names are unique within scope (`UNIQUE(scope, name)`); use
+  `id:<memory-id>` for explicit ID resolution.
+
+### Added
+
+- Schema v5 store UUIDs, durable event UIDs, origin metadata,
+  manual-confirmation provenance, strict RFC3339 lifecycle fields, Unix
+  permission hardening, and explicit same-version repair for pre-release v5
+  stores.
+- Explainable local graph memory with deterministic materialization, semantic
+  edge review/revisions, scoped traversal, direction control, weighted path
+  tie-breaking, audit, and focused priming.
+- Deterministic query reranking across lexical relevance, source trust,
+  confidence, scope specificity, and recency, with `--explain-score`.
+- Bundle v2 online SQLite snapshots, streaming per-file SHA-256 manifests,
+  archive/resource bounds, strict SQLite schema-object validation, and
+  rollback-safe replacement.
+- Agent-memory acceptance tests for read-only behavior, lifecycle isolation,
+  scope isolation, secret leakage, durable merge idempotence, and skill
+  packaging.
 - Reproducible scale benchmarks with repeated p50/p95 measurements, peak RSS,
   artifact sizes, correctness assertions, binary/script hashes, cache metadata,
   and per-stage `bundle export --profile` timings.

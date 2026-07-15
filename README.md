@@ -58,7 +58,7 @@ mem bundle export mnemark-store.tgz
 mem retro daily
 ```
 
-`mem setup <platform>` wires the selected agent at user level. It has no project mode and never selects the current repository implicitly. Project memories remain logically isolated by `project:<owner>/<repo>` scope inside the active runtime store.
+`mem setup <platform>` wires the selected agent at user level. It has no project mode and never selects the current repository implicitly. Project memories remain logically isolated by `project:<owner>/<repo>` scope inside the active runtime store. Automation can add the global `--json-errors` flag to receive stable JSON error envelopes on stderr without changing successful output.
 
 ## Documentation
 
@@ -73,6 +73,7 @@ mem retro daily
 | [Workflow Rules](skills/mnemark/references/workflow-rules.md) | How agents should interpret and safely execute workflow memory runbooks |
 | [Agent Reference](docs/agent-reference.md) | Canonical instructions for agents changing this repo: safety rules, repo map, task routing, validation |
 | [Development](docs/development.md) | Local setup, source commands, validation, release smoke tests, developer notes |
+| [Security](SECURITY.md) | Threat model, implemented controls, explicit limitations, and reporting guidance |
 | [Performance](docs/performance.md) | Reproducible 100/1,000/10,000-memory release baseline |
 | [Changelog](CHANGELOG.md) | Breaking changes, features, and fixes by release |
 
@@ -122,6 +123,7 @@ Runtime stores can include `config.toml`, `manifest.toml`, `artifacts/`, and reb
 ```bash
 mise install
 env -u CC -u CXX cargo test --workspace --locked
+python3 scripts/check-dependency-policy.py
 ```
 
 For source-only CLI runs:

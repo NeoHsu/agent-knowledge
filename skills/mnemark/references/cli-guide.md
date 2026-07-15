@@ -18,6 +18,12 @@ CLI configuration uses TOML. User config lives at `~/.config/mnemark/config.toml
 
 Before write commands, verify the target with `mem config show` or a dry-run. From a mnemark source checkout, use `--home <runtime-store>` unless the user explicitly intends that checkout to be the active store.
 
+All commands accept the global `--json-errors` flag. Successful output is unchanged; Clap parse failures and runtime failures become one JSON object on stderr with stable `status`, `code`, `message`, and `exit_code` fields. Without the flag, errors remain human-readable.
+
+```bash
+mem --json-errors query "release safety" --scope auto
+```
+
 ```toml
 knowledge_home = "~/.mnemark"
 default_scope = "auto"
@@ -144,7 +150,7 @@ By default, query treats punctuation as literal text so searches like `project:o
 
 Query is read-only and no-touch by default. Use `--touch` only when access telemetry is intentionally desired; it acquires the write lock. A stale Tantivy index causes an actionable error instead of hidden repair—run `mem reindex` or opt in with `--repair-index`. Relevance sorting deterministically combines normalized lexical score, source trust, confidence, scope specificity, and recency; `--explain-score` exposes every component in JSON. Superseded and inactive memories are hidden unless explicitly requested. `--format json|table|compact` controls output; prefer `compact` when loading results into an agent context window.
 
-`--tags` matches exact JSON-array membership, not substrings. `--fuzzy` searches across `name`, `description`, `content`, and `tags`. `--semantic` is hidden and not implemented until an embedding backend is planned; manual use fails with an explicit error.
+`--tags` matches exact JSON-array membership, not substrings. `--fuzzy` searches across `name`, `description`, `content`, and `tags`. Query has no embedding mode: Tantivy owns lexical/fuzzy retrieval, while `mem graph query` and focused priming provide evidence-bearing relationship context without a hidden provider call.
 
 ## Update and Lifecycle
 
@@ -310,6 +316,7 @@ Deterministic rebuild creates memory, tag, scope, type, source, artifact, claim,
 mem export --format json
 mem export --format markdown
 mem import memories.json
+mem import memories.json --summary-only
 mem import note.md --type reference
 mem import workflows.json --no-validate-workflow
 ```
@@ -335,7 +342,19 @@ mem import workflows.json --no-validate-workflow
 }
 ```
 
-JSON imports process an array of memory-like objects. Markdown or other files import as one `reference` memory unless `--type` is supplied. Import files are capped at 256 MiB. Ordinary JSON/Markdown export is also capped at 256 MiB of stored text to keep agent processes bounded; use `mem bundle export` for a complete large-store snapshot. Import defaults to agent provenance, rejects secret-like values by default, and supports explicit `--redact-secrets`. `--source manual` requires `--user-confirmed`; the import records origin and origin reference for later audit.
+JSON imports process an array of memory-like objects. The CLI first validates
+the complete array without writing, then rewinds and streams 500-item
+transaction chunks so malformed JSON leaves the store unchanged without
+retaining the full parsed array in memory. Use `--summary-only` for large
+imports to return only `status`, `total`, and `counts`; the default retains the
+per-item `results` contract. Markdown or other files import as one `reference`
+memory unless `--type` is supplied. Import files are capped at 256 MiB.
+Ordinary JSON/Markdown export is also capped at 256 MiB of stored text to keep
+agent processes bounded; use `mem bundle export` for a complete large-store
+snapshot. Import defaults to agent provenance, rejects secret-like values by
+default, and supports explicit `--redact-secrets`. `--source manual` requires
+`--user-confirmed`; the import records origin and origin reference for later
+audit.
 
 ## Merge
 
@@ -345,8 +364,22 @@ mem merge /path/to/theirs.db --prefer-trusted
 mem merge /path/to/theirs.db --redact-secrets
 ```
 
-Merge validates SQLite integrity and rejects secrets across incoming memories, ambiguities, workflow runs, changelog, semantic edges, and semantic revisions by default. `--redact-secrets` uses a temporary online snapshot and never mutates the source database. Merge imports memories with new scoped names, skips identical `(scope,name)` records, and records same-name content conflicts in `ambiguities` instead of overwriting automatically. Merge conflict ambiguity records include a structured incoming snapshot in `context`.
-Lower-trust incoming same-name memories are rejected. `--prefer-trusted` lets a higher-trust incoming memory update a lower-trust local memory; equal-trust differences still become ambiguities. Durable ambiguities, workflow runs, changelog events, semantic edges, and append-only semantic revisions are merged idempotently through store/event UIDs with memory/edge/ambiguity ID remapping. Lower-trust logical conflicts are rejected, unattested manual claims are downgraded, and unresolved/equal-trust conflicts remain pending with ambiguity evidence. Bundle merge and sync conflict resolution use the same behavior.
+Merge validates SQLite integrity and rejects secrets across incoming memories,
+ambiguities, workflow runs, changelog, semantic edges, and semantic revisions by
+default. `--redact-secrets` uses a temporary online snapshot and never mutates
+the source database. Merge imports memories with new scoped names, skips
+identical `(scope,name)` records, and records same-name content conflicts in
+`ambiguities` instead of overwriting automatically. Merge conflict ambiguity
+records include a structured incoming snapshot in `context`.
+
+Lower-trust incoming same-name memories are rejected. `--prefer-trusted` lets a
+higher-trust incoming memory update a lower-trust local memory; equal-trust
+differences still become ambiguities. Durable ambiguities, workflow runs,
+changelog events, semantic edges, and append-only semantic revisions are merged
+idempotently through store/event UIDs with memory/edge/ambiguity ID remapping.
+Lower-trust logical conflicts are rejected, unattested manual claims are
+downgraded, and unresolved/equal-trust conflicts remain pending with ambiguity
+evidence. Bundle merge and sync conflict resolution use the same behavior.
 
 ## Sync
 
@@ -385,13 +418,21 @@ Install release binaries instead of building from Rust source:
 
 ```bash
 # macOS / Linux
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/NeoHsu/mnemark/releases/latest/download/mnemark-installer.sh | sh
-
-# Windows PowerShell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/NeoHsu/mnemark/releases/latest/download/mnemark-installer.ps1 | iex"
+base=https://github.com/NeoHsu/mnemark/releases/latest/download
+curl --proto '=https' --tlsv1.2 -LsSf \
+  "$base/mnemark-installer.sh" |
+  sh
 ```
 
-Manual archives are available on the [latest release page](https://github.com/NeoHsu/mnemark/releases/latest).
+```powershell
+# Windows PowerShell
+$base = "https://github.com/NeoHsu/mnemark/releases/latest/download"
+powershell -ExecutionPolicy Bypass -c `
+  "irm $base/mnemark-installer.ps1 | iex"
+```
+
+Manual archives are available on the
+[latest release page](https://github.com/NeoHsu/mnemark/releases/latest).
 
 For repository development or release verification:
 
@@ -400,4 +441,9 @@ scripts/build-release.sh
 scripts/smoke-release.sh
 ```
 
-After building, `scripts/smoke-release.sh` copies the release binary into an isolated install directory and verifies that `mem init`, `config show`, save/query/reindex/export all work against a runtime-only store with no schema file. For source-only development, expose `target/release/mem` on `PATH` or run via Cargo as documented in `docs/development.md`. All examples in this guide assume `mem` is on `PATH`.
+After building, `scripts/smoke-release.sh` copies the release binary into an
+isolated install directory and verifies that `mem init`, `config show`,
+save/query/reindex/export all work against a runtime-only store with no schema
+file. For source-only development, expose `target/release/mem` on `PATH` or run
+via Cargo as documented in `docs/development.md`. All examples in this guide
+assume `mem` is on `PATH`.

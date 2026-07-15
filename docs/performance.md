@@ -10,9 +10,11 @@ REPORT_FILE=/tmp/mnemark-benchmark.json scripts/benchmark-scale.sh
 
 The benchmark generates mixed Prime-visible and reference memories, creates a
 fresh store for every import sample, and measures the optimized release binary.
-Interactive operations receive one warmup by default and run in separate
-processes while retaining the operating system cache. Scale order is
-seed-randomized. Every measured operation also runs a correctness assertion.
+Import uses `--summary-only` so the measurement covers validation, persistence,
+and indexing rather than retaining a per-item response report. Interactive
+operations receive one warmup by default and run in separate processes while
+retaining the operating system cache. Scale order is seed-randomized. Every
+measured operation also runs a correctness assertion.
 
 The CSV summary reports median, p95 (only when at least 20 samples exist),
 minimum, maximum, peak RSS, and input/output sizes. The JSON report additionally
@@ -74,4 +76,20 @@ scripts/benchmark-scale.sh
 
 Run the default 20 interactive samples and 3-5 maintenance samples before
 publishing performance claims. Keep the JSON report so results remain tied to a
-binary hash, commit, cache model, and correctness checks.
+binary hash, commit, cache model, and correctness checks. The benchmark rejects
+stale binaries whose version differs from `Cargo.toml`; use
+`ALLOW_VERSION_MISMATCH=1` only for an intentional controlled A/B run.
+
+A 100,000-memory capacity canary is available but is not yet a release baseline:
+
+```bash
+SCALES="100000" \
+INTERACTIVE_RUNS=5 \
+MAINTENANCE_RUNS=1 \
+REPORT_FILE=/tmp/mnemark-100k.json \
+scripts/benchmark-scale.sh
+```
+
+Do not infer a service-level objective from that canary. Review correctness,
+peak RSS, database/index size, graph rebuild latency, and bundle stages before
+raising the documented support envelope beyond 10,000 memories.

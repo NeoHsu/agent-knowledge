@@ -109,5 +109,6 @@ Use `--global` to install for all projects, or `--agent <name>` when targeting a
 | --- | --- |
 | Complete command reference | `skills/mnemark/references/cli-guide.md` |
 | Runtime store and portability | `docs/runtime-model.md` |
+| Security boundaries and safe deployment | [`SECURITY.md`](../SECURITY.md) |
 | Workflow runbooks, artifacts, bundles, retrospectives | `docs/workflows.md` |
 | Repository development | `docs/development.md` |
