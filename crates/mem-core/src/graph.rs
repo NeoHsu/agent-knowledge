@@ -17,8 +17,10 @@ use crate::util::{
     source_priority, strip_secrets, ClaimKind,
 };
 
+mod health;
 mod semantic;
 
+pub use health::graph_health;
 use semantic::materialize_semantic_edges;
 pub use semantic::{
     ingest_semantic_edges, merge_semantic_edges, review_semantic_edges, set_semantic_edge_status,
@@ -1035,127 +1037,6 @@ pub fn query_neighborhood(
     })
 }
 
-pub fn graph_health(conn: &Connection) -> Result<Value> {
-    let stats = stats(conn)?;
-    let pending_edges: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM graph_semantic_edges
-         WHERE status = 'pending'
-           AND (valid_until IS NULL OR datetime(valid_until) >= datetime('now'))",
-        [],
-        |row| row.get(0),
-    )?;
-    let ambiguous_edges: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM graph_semantic_edges
-         WHERE confidence = 'AMBIGUOUS' AND status IN ('active', 'pending')
-           AND (valid_until IS NULL OR datetime(valid_until) >= datetime('now'))",
-        [],
-        |row| row.get(0),
-    )?;
-    if stats.dirty {
-        return Ok(json!({
-            "dirty": true,
-            "derived_status": "stale",
-            "nodes": stats.nodes,
-            "edges": stats.edges,
-            "pending_edges": pending_edges,
-            "ambiguous_edges": ambiguous_edges,
-            "dangling_semantic_edges": Value::Null,
-            "orphan_memories": Value::Null,
-            "old_pending_edges": Value::Null,
-            "high_degree_nodes": Value::Null,
-            "workflow_missing_safety_links": Value::Null,
-            "artifact_blast_radius": Value::Null,
-        }));
-    }
-
-    let dangling_semantic_edges = query_json_rows_local(
-        conn,
-        "SELECT id, source_ref, target_ref, relation FROM graph_semantic_edges
-         WHERE status IN ('active', 'pending')
-           AND (source_ref NOT IN (SELECT id FROM graph_nodes)
-             OR target_ref NOT IN (SELECT id FROM graph_nodes))",
-    )?;
-    let orphan_memories = query_json_rows_local(
-        conn,
-        "SELECT n.id, n.label, n.scope FROM graph_nodes n
-         WHERE n.kind = 'memory'
-           AND COALESCE(json_extract(n.metadata, '$.lifecycle'), 'active') = 'active'
-           AND NOT EXISTS (
-             SELECT 1 FROM graph_edges e
-             WHERE (e.source_node_id = n.id OR e.target_node_id = n.id)
-               AND e.relation NOT IN ('has_type', 'in_scope', 'from_source')
-           )
-         ORDER BY n.id
-         LIMIT 50",
-    )?;
-    let old_pending_edges = query_json_rows_local(
-        conn,
-        "SELECT id, source_ref, target_ref, relation, confidence, created_at
-         FROM graph_semantic_edges
-         WHERE status = 'pending'
-           AND datetime(created_at) < datetime('now', '-30 days')
-         ORDER BY created_at
-         LIMIT 50",
-    )?;
-    let high_degree_nodes = query_json_rows_local(
-        conn,
-        "SELECT n.id, n.kind, n.label, COUNT(*) AS degree
-         FROM graph_nodes n
-         JOIN graph_edges e ON e.source_node_id = n.id OR e.target_node_id = n.id
-         WHERE e.status = 'active'
-           AND e.relation NOT IN ('has_type', 'in_scope', 'from_source')
-         GROUP BY n.id, n.kind, n.label
-         HAVING COUNT(*) >= 10
-         ORDER BY degree DESC, n.id
-         LIMIT 50",
-    )?;
-    let workflow_missing_safety_links = query_json_rows_local(
-        conn,
-        "SELECT DISTINCT workflow.id, workflow.label, workflow.scope
-         FROM graph_nodes workflow
-         JOIN graph_edges risk
-           ON risk.source_node_id = workflow.id
-          AND risk.target_node_id = 'tag:risk:high'
-          AND risk.relation = 'has_tag'
-         WHERE workflow.kind = 'memory'
-           AND json_extract(workflow.metadata, '$.type') = 'workflow'
-           AND NOT EXISTS (
-             SELECT 1 FROM graph_edges policy
-             WHERE (policy.source_node_id = workflow.id OR policy.target_node_id = workflow.id)
-               AND policy.relation IN ('policy_for', 'risk_for')
-               AND policy.status = 'active'
-           )
-         ORDER BY workflow.id
-         LIMIT 50",
-    )?;
-    let artifact_blast_radius = query_json_rows_local(
-        conn,
-        "SELECT artifact.id, artifact.label, COUNT(DISTINCT edge.source_node_id) AS dependents
-         FROM graph_nodes artifact
-         JOIN graph_edges edge ON edge.target_node_id = artifact.id
-         WHERE artifact.kind = 'artifact'
-           AND edge.relation IN ('references_artifact', 'step_uses_artifact')
-           AND edge.status = 'active'
-         GROUP BY artifact.id, artifact.label
-         ORDER BY dependents DESC, artifact.id
-         LIMIT 50",
-    )?;
-    Ok(json!({
-        "dirty": false,
-        "derived_status": "current",
-        "nodes": stats.nodes,
-        "edges": stats.edges,
-        "pending_edges": pending_edges,
-        "ambiguous_edges": ambiguous_edges,
-        "dangling_semantic_edges": dangling_semantic_edges,
-        "orphan_memories": orphan_memories,
-        "old_pending_edges": old_pending_edges,
-        "high_degree_nodes": high_degree_nodes,
-        "workflow_missing_safety_links": workflow_missing_safety_links,
-        "artifact_blast_radius": artifact_blast_radius,
-    }))
-}
-
 pub fn graph_dirty(conn: &Connection) -> Result<bool> {
     Ok(metadata_value(conn, GRAPH_DIRTY_KEY)?
         .map(|value| matches!(value.as_str(), "true" | "1"))
@@ -1787,7 +1668,7 @@ fn insert_artifact_node(
 }
 
 fn insert_node(conn: &Connection, node: &GraphNode) -> Result<()> {
-    conn.execute(
+    let mut statement = conn.prepare_cached(
         "INSERT INTO graph_nodes
          (id, kind, label, ref_table, ref_id, scope, metadata, origin)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
@@ -1800,22 +1681,22 @@ fn insert_node(conn: &Connection, node: &GraphNode) -> Result<()> {
             metadata = excluded.metadata,
             origin = excluded.origin,
             updated_at = CURRENT_TIMESTAMP",
-        params![
-            node.id,
-            node.kind,
-            node.label,
-            node.ref_table,
-            node.ref_id,
-            node.scope,
-            node.metadata.to_string(),
-            node.origin,
-        ],
     )?;
+    statement.execute(params![
+        node.id,
+        node.kind,
+        node.label,
+        node.ref_table,
+        node.ref_id,
+        node.scope,
+        node.metadata.to_string(),
+        node.origin,
+    ])?;
     Ok(())
 }
 
 fn insert_edge(conn: &Connection, edge: &GraphEdge) -> Result<()> {
-    conn.execute(
+    let mut statement = conn.prepare_cached(
         "INSERT INTO graph_edges
          (id, source_node_id, target_node_id, relation, confidence, status, evidence, source_ref, scope, weight, origin, metadata)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
@@ -1832,21 +1713,21 @@ fn insert_edge(conn: &Connection, edge: &GraphEdge) -> Result<()> {
             origin = excluded.origin,
             metadata = excluded.metadata,
             updated_at = CURRENT_TIMESTAMP",
-        params![
-            edge.id,
-            edge.source_node_id,
-            edge.target_node_id,
-            edge.relation,
-            edge.confidence,
-            edge.status,
-            edge.evidence,
-            edge.source_ref,
-            edge.scope,
-            edge.weight,
-            edge.origin,
-            edge.metadata.to_string(),
-        ],
     )?;
+    statement.execute(params![
+        edge.id,
+        edge.source_node_id,
+        edge.target_node_id,
+        edge.relation,
+        edge.confidence,
+        edge.status,
+        edge.evidence,
+        edge.source_ref,
+        edge.scope,
+        edge.weight,
+        edge.origin,
+        edge.metadata.to_string(),
+    ])?;
     Ok(())
 }
 
