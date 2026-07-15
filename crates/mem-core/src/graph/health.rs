@@ -1,8 +1,10 @@
+//! Materialized graph health and curation diagnostics.
+
 use anyhow::Result;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
-use super::{query_json_rows_local, stats};
+use super::store::{query_json_rows_local, stats};
 
 pub fn graph_health(conn: &Connection) -> Result<Value> {
     let stats = stats(conn)?;

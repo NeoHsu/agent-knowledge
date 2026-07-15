@@ -29,6 +29,9 @@ All notable changes to mnemark are documented here.
 - Added package metadata, stripped release symbols, and stale-binary version
   gates to smoke and benchmark scripts.
 - Split graph health reporting into its own module.
+- Decomposed the graph façade into model, query, materialization, identifier,
+  and store modules, with semantic ingest, merge, projection, and review kept in
+  separate units without changing the public graph API.
 - Removed the dormant hidden `query --semantic` branch; lexical/fuzzy search
   and evidence-bearing graph retrieval remain the explicit non-RAG interfaces.
 
