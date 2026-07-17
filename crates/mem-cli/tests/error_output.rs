@@ -15,6 +15,7 @@ fn json_errors_wrap_runtime_failures() {
     let error = parse_error(&output);
 
     assert_eq!(error["status"], "error");
+    assert_eq!(error["contract_version"], 1);
     assert_eq!(error["code"], "command_failed");
     assert_eq!(error["exit_code"], 1);
     assert!(error["message"]
@@ -31,6 +32,7 @@ fn json_errors_wrap_clap_parse_failures() {
     let error = parse_error(&output);
 
     assert_eq!(error["status"], "error");
+    assert_eq!(error["contract_version"], 1);
     assert_eq!(error["code"], "cli_parse_error");
     assert_eq!(error["exit_code"], 2);
     assert!(error["message"]

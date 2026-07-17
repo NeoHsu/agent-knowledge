@@ -18,7 +18,7 @@ but it is not tracked in this project. Schema-v5 stores reject unexpected
 application tables, views, or trigger definitions; do not extend the runtime
 database with ad hoc DDL. Keep real memory databases in a private data repo, a
 local `MNEMARK_HOME`, or a `knowledge_home` configured in
-`~/.config/mnemark/config.toml`. Version 0.7 does not provide SQLCipher
+`~/.config/mnemark/config.toml`. Version 0.8 does not provide SQLCipher
 encryption: it relies on 0700/0600 Unix permissions, default-reject secret
 scanning, trusted bundle transport, and a private Git remote. Use full-disk
 encryption when at-rest encryption is required. See
@@ -102,7 +102,7 @@ Tantivy files, and dirty/version metadata are rebuildable local state.
 
 | Command class | Durable store effect | Rebuildable or external effect | Network |
 | --- | --- | --- | --- |
-| Default `query`, plain `prime`, `doctor`, memory `stats`/`history`/`export`, `audit`, `retro`, `reconcile`, `context --detect`, `config show`, `bundle inspect`, ordinary workflow/artifact reads, `graph stats`/`review`, ordinary `graph candidates` | None | None | None |
+| `contract`, default `query`, plain `prime`, `doctor`, memory `stats`/`history`/`export`, `audit`, `retro`, `reconcile`, `context --detect`, `config show`, `bundle inspect`, ordinary workflow/artifact reads, `graph stats`/`review`, ordinary `graph candidates` | None | None | None |
 | `query --touch` | Access telemetry | None | None |
 | `query --repair-index`, `reindex` | None | Tantivy index and index metadata | None |
 | `graph rebuild` | None | Replaces graph projection and its metadata | None |

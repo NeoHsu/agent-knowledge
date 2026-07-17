@@ -220,6 +220,29 @@ fn workflow_validation_rejects_invalid_content_without_bypass() {
 }
 
 #[test]
+fn workflow_validation_rejects_unknown_schema_versions() {
+    let repo = TestRepo::new("workflow-schema-version");
+    repo.run(&["init"]);
+
+    let failed = repo.run_fail(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "future_workflow",
+        "--tags",
+        r#"["workflow:future"]"#,
+        "--content",
+        "schema_version: 2\ngoal: Use a future schema.\ntriggers:\n  - future task\nsteps:\n  - id: inspect\n    check: inspect future state\nstop_conditions:\n  - unsupported schema\n",
+    ]);
+
+    assert!(
+        failed.contains("unsupported workflow schema_version 2; expected 1"),
+        "{failed}"
+    );
+}
+
+#[test]
 fn workflow_validate_can_check_knowledge_store_artifacts() {
     let repo = TestRepo::new("workflow-artifact-validation");
     repo.run(&["init"]);

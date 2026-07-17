@@ -1,12 +1,20 @@
 [tools]
-rust = {
-  version = "1.97.0",
-  profile = "default",
-  components = ["rust-analyzer", "rust-src"],
-}
 zig = "0.16.0"
+
+[tools.rust]
+version = "1.97.0"
+profile = "default"
+components = ["rust-analyzer", "rust-src"]
 
 [env]
 CC = "zig cc"
 CXX = "zig c++"
 AR = "zig ar"
+
+[tasks.production-check]
+description = "Run the complete release-readiness gate"
+run = "scripts/check-release-readiness.sh"
+
+[tasks.recovery-drill]
+description = "Verify bundle restore and local recovery invariants"
+run = "scripts/recovery-drill.sh"

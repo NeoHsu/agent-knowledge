@@ -49,6 +49,30 @@ pub(crate) fn cmd_context(args: ContextArgs) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn cmd_contract() -> Result<()> {
+    print_json_pretty(&json!({
+        "status": "ok",
+        "contract_version": CLI_OUTPUT_CONTRACT_VERSION,
+        "cli_version": env!("CARGO_PKG_VERSION"),
+        "compatibility": {
+            "successful_json": "required fields remain compatible within a minor release; additive fields are allowed",
+            "json_errors": "versioned by contract_version and emitted only with --json-errors",
+            "pre_1_0_breaking_changes": "may occur only in a documented minor release"
+        },
+        "json_errors": {
+            "version": CLI_OUTPUT_CONTRACT_VERSION,
+            "required_fields": ["status", "contract_version", "code", "message", "exit_code"]
+        },
+        "schemas": {
+            "store": supported_schema_version(),
+            "bundle": super::bundle::BUNDLE_FORMAT_VERSION,
+            "workflow": mem_core::workflow::WORKFLOW_SCHEMA_VERSION,
+            "graph": mem_core::graph::GRAPH_SCHEMA_VERSION,
+            "benchmark_report": BENCHMARK_REPORT_CONTRACT_VERSION
+        }
+    }))
+}
+
 pub(crate) fn cmd_config(app: &App, command: ConfigCommand) -> Result<()> {
     match command {
         ConfigCommand::Show => {

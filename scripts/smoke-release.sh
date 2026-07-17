@@ -99,4 +99,11 @@ JSON
 	[[ "$bundle_output" == *'sha256:'* ]]
 )
 
+if [[ "${RUN_RECOVERY_DRILL:-1}" == "1" ]]; then
+	MEM_BIN="$install_bin" "$ROOT/scripts/recovery-drill.sh"
+elif [[ "${RUN_RECOVERY_DRILL:-1}" != "0" ]]; then
+	echo "RUN_RECOVERY_DRILL must be 0 or 1" >&2
+	exit 1
+fi
+
 echo "release smoke ok"

@@ -142,7 +142,7 @@ pub(crate) fn cmd_doctor(app: &App, args: DoctorArgs) -> Result<()> {
                 None,
             ));
         } else {
-            match memory_count(&conn) {
+            match active_memory_count(&conn) {
                 Ok(active) => checks.push(check(
                     "store",
                     "ok",

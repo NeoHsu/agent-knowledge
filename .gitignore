@@ -6,4 +6,6 @@
 /.bundle-replace-backup-*
 /.agents/
 /skills-lock.json
+__pycache__/
+*.py[cod]
 *.tmp

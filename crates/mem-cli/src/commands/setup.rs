@@ -77,6 +77,15 @@ pub(crate) fn has_v4_policy(content: &str) -> bool {
     content.contains(AGENT_POLICY_V4) || content.trim_end() == AGENT_POLICY_V4.trim_end()
 }
 
+fn replace_managed_policy(existing: &str, old_policy: &str) -> String {
+    if existing.contains(old_policy) {
+        existing.replace(old_policy, AGENT_POLICY_V5)
+    } else {
+        debug_assert_eq!(existing.trim_end(), old_policy.trim_end());
+        AGENT_POLICY_V5.to_string()
+    }
+}
+
 pub(crate) const LEGACY_HOOK_COMMAND: &str = "mem prime 2>/dev/null || true";
 pub(crate) const HOOK_COMMAND: &str = "mem prime 2>&1 || { status=$?; printf '\\n[mnemark unavailable: mem prime failed with exit %s; continue without memory reads or writes]\\n' \"$status\"; }";
 
@@ -282,7 +291,7 @@ fn install_policy(target: &Path, dry_run: bool) -> Result<Value> {
     let (action, updated) = if has_v4_policy(&existing) {
         (
             "upgraded",
-            existing.replace(AGENT_POLICY_V4, AGENT_POLICY_V5),
+            replace_managed_policy(&existing, AGENT_POLICY_V4),
         )
     } else if existing.contains(POLICY_MARKER_V4) {
         return Ok(json!({
@@ -643,4 +652,15 @@ fn wire_claude_hook(settings_path: &Path, dry_run: bool) -> Result<Value> {
         "target": target_text,
         "command": HOOK_COMMAND
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn policy_upgrade_handles_missing_final_newline() {
+        let upgraded = replace_managed_policy(AGENT_POLICY_V4.trim_end(), AGENT_POLICY_V4);
+        assert_eq!(upgraded, AGENT_POLICY_V5);
+    }
 }

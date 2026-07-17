@@ -1,14 +1,15 @@
 # mem CLI Guide
 
-This guide documents source version `0.7.0`. `mem setup <platform>` installs the
+This guide documents source version `0.8.0`. `mem setup <platform>` installs the
 skill embedded in that binary, so the installed skill and CLI stay matched.
 The `latest` release installer can lag behind source `main`; run `mem --version`
 and use documentation from the matching Git tag when exact behavior matters.
 
 ## Contents
 
-- Store setup: [Setup](#setup), [Setup helpers](#setup-helpers),
-  [Doctor](#doctor), [Session priming](#session-priming)
+- Store setup: [Setup](#setup), [Machine-readable contract](#machine-readable-contract),
+  [Setup helpers](#setup-helpers), [Doctor](#doctor),
+  [Session priming](#session-priming)
 - Memory: [Write](#write), [Query](#query),
   [Update and Lifecycle](#update-and-lifecycle), [Ambiguity](#ambiguity)
 - Runbooks and portability: [Workflow](#workflow), [Artifacts](#artifacts),
@@ -58,8 +59,8 @@ intends that checkout to be the active store.
 
 All commands accept the global `--json-errors` flag. Successful output is
 unchanged; Clap parse failures and runtime failures become one JSON object on
-stderr with stable `status`, `code`, `message`, and `exit_code` fields. Without
-the flag, errors remain human-readable.
+stderr with stable `status`, `contract_version`, `code`, `message`, and
+`exit_code` fields. Without the flag, errors remain human-readable.
 
 ```bash
 mem --json-errors query "release safety" --scope auto
@@ -88,6 +89,20 @@ reranking (default 10,000; valid range 200-100,000). It must be at least as
 large as `query --limit`. `budget.per_scope_max` is a soft cap on active
 memories per scope (default 30; 0 disables). Exceeding it never blocks saves;
 `mem audit` and retro bundles flag the scope for curation instead.
+
+## Machine-readable contract
+
+```bash
+mem contract
+```
+
+`contract` is store-independent and remains available even when user/store
+configuration is missing or malformed. It reports the CLI output contract
+version, required JSON-error fields, and current store, bundle, workflow, graph,
+and benchmark-report schema versions. Automation should pin a compatible
+`mem --version`, inspect this response, and tolerate additive object fields.
+Required fields remain compatible within a minor release; before 1.0, a
+breaking machine-interface change requires a documented minor release.
 
 ## Setup helpers
 

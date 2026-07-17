@@ -46,6 +46,20 @@ actionlint .github/workflows/*.yml
 shellcheck scripts/*.sh
 ```
 
+The complete release-readiness gate combines those checks with metadata,
+clean-tree, release-binary, recovery, and bounded benchmark validation:
+
+```bash
+scripts/check-release-readiness.sh
+# development-only exercise of a dirty checkout
+ALLOW_DIRTY=1 scripts/check-release-readiness.sh
+```
+
+Leave `ALLOW_DIRTY` unset when qualifying a release. The gate requires
+`actionlint` and `shellcheck` by default; `REQUIRE_AUX_TOOLS=0` may skip a
+missing auxiliary tool for bounded development only and cannot provide complete
+release evidence.
+
 CI tests both stable Rust and the declared Rust 1.97 MSRV. The stable lane also
 builds and smoke-tests the release binary and runs a bounded benchmark
 correctness smoke.
@@ -54,21 +68,32 @@ correctness smoke.
 
 ```bash
 scripts/build-release.sh
-scripts/smoke-release.sh
+scripts/smoke-release.sh       # includes the isolated recovery drill
+scripts/recovery-drill.sh      # may also be run independently
 ```
 
-Tag releases are gated by formatting, Clippy, tests, dependency audit, and a
-release-binary smoke test on Linux. The same test and smoke flow also runs on
-native macOS and Windows runners. Published platform archives receive GitHub
-build-provenance attestations.
+`build-release.sh` ignores only the known inherited `CC="zig cc"` /
+`CXX="zig c++"` override on native macOS, where cc-rs receives an incompatible
+architecture spelling; other explicitly selected toolchains are preserved.
+The recovery drill verifies a clean bundle restore, durable memory/workflow/
+artifact/graph state, corruption rejection, migration preview, and local sync
+checkpoint without network access.
+
+Tag releases are gated by formatting, Clippy, tests, dependency audit, a
+release-binary smoke/recovery test, and bounded benchmark guardrails on Linux.
+The same test and smoke/recovery flow also runs on native macOS and Windows
+runners. Published platform archives receive GitHub build-provenance
+attestations.
 
 Before creating a release tag:
 
 1. Match the workspace version, `Cargo.lock`, changelog, and intended tag.
-2. Start from a clean working tree and run the full validation above.
-3. Run `scripts/build-release.sh` and `scripts/smoke-release.sh`; both reject a
-   stale binary whose version differs from `Cargo.toml`.
-4. Retain a clean benchmark JSON report for performance claims.
+2. Start from a clean working tree and run
+   `RELEASE_TAG=v<version> scripts/check-release-readiness.sh`.
+3. Retain the clean benchmark JSON/CSV emitted below `target/` and the CI
+   benchmark artifact for performance claims.
+4. Exercise the deployment-specific backup and rollback procedure from
+   [`production.md`](production.md).
 5. Push the release commit and wait for branch CI before creating the tag.
 
 Creating or pushing a tag publishes through the release workflow and is an
@@ -91,7 +116,20 @@ The script uses isolated temporary stores and reports import, query, prime,
 graph rebuild, and bundle export latency as CSV. It performs no network access
 and deletes its stores on exit. It rejects a binary whose version differs from
 `Cargo.toml`; set `ALLOW_VERSION_MISMATCH=1` only for an intentional controlled
-comparison.
+comparison. CI checks the JSON report against
+`scripts/benchmark-guardrails.json` and retains both JSON and CSV evidence.
+For a controlled same-platform comparison against a retained report:
+
+```bash
+python3 scripts/check-benchmark-regression.py \
+  --report /tmp/candidate.json \
+  --guardrails scripts/benchmark-guardrails.json \
+  --baseline /tmp/baseline.json \
+  --max-regression-percent 35
+```
+
+The portable guardrails detect catastrophic regressions; they are deliberately
+not cross-machine performance SLOs.
 
 For an explicit capacity canary beyond the published 10,000-memory baseline:
 

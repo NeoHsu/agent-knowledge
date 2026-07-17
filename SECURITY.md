@@ -45,7 +45,7 @@ The local operating-system account is trusted. A process with permission to modi
 
 ### No at-rest encryption
 
-Version 0.7 does not use SQLCipher and does not encrypt bundle archives. Protect runtime stores and bundles with full-disk encryption, an encrypted private volume, or an encrypted transport appropriate to the host. Do not place a store in a public repository or shared directory.
+Version 0.8 does not use SQLCipher and does not encrypt bundle archives. Protect runtime stores and bundles with full-disk encryption, an encrypted private volume, or an encrypted transport appropriate to the host. Do not place a store in a public repository or shared directory.
 
 Adding database encryption requires a separately reviewed key-management design covering non-interactive agents, recovery, rotation, migration, bundle export, and multi-machine sync. It must not silently derive a key from weak local metadata.
 
@@ -74,6 +74,8 @@ Unix modes are enforced and checked. On Windows, the current implementation cann
 5. Inspect bundle provenance before import; avoid `--allow-unverified` unless a legacy bundle is independently trusted.
 6. Use full-disk or volume encryption when memory confidentiality matters.
 7. Back up the store before migration and retain a verified bundle or SQLite snapshot.
+8. Before deploying a release, run the clean-tree gate and recovery procedure in
+   [`docs/production.md`](docs/production.md); retain its benchmark and restore evidence.
 
 ## Reporting a vulnerability
 

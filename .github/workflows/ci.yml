@@ -20,11 +20,15 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: Verify release metadata and clean checkout
+        if: matrix.rust == 'stable'
+        run: python3 scripts/check-release-metadata.py
       - if: matrix.rust == 'stable'
         run: cargo fmt --all -- --check
       - if: matrix.rust == 'stable'
@@ -38,6 +42,9 @@ jobs:
         run: cargo audit --deny warnings
       - if: matrix.rust == 'stable'
         run: python3 scripts/check-dependency-policy.py
+      - name: Test release helper scripts
+        if: matrix.rust == 'stable'
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
       - if: matrix.rust == 'stable'
         run: scripts/build-release.sh
       - if: matrix.rust == 'stable'
@@ -53,3 +60,20 @@ jobs:
           WARMUP_RUNS: "0"
           REPORT_FILE: ${{ runner.temp }}/benchmark-report.json
         run: scripts/benchmark-scale.sh | tee "$RUNNER_TEMP/benchmark.csv"
+      - name: Enforce benchmark guardrails
+        if: matrix.rust == 'stable'
+        run: >-
+          python3 scripts/check-benchmark-regression.py
+          --report "$RUNNER_TEMP/benchmark-report.json"
+          --guardrails scripts/benchmark-guardrails.json
+          --require-clean
+      - name: Retain benchmark evidence
+        if: matrix.rust == 'stable' && always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: benchmark-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/benchmark-report.json
+            ${{ runner.temp }}/benchmark.csv
+          if-no-files-found: warn
+          retention-days: 30

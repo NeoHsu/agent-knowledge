@@ -27,11 +27,29 @@ records:
 - database, Tantivy index, and bundle sizes;
 - bundle snapshot, validation, hashing, archive, and install stage timings.
 
+CI retains the JSON and CSV reports and applies
+`scripts/benchmark-guardrails.json` through
+`scripts/check-benchmark-regression.py`. These generous, cross-runner limits
+catch catastrophic regressions and hangs; they are not performance claims.
+For meaningful regression percentages, compare a candidate with a retained
+report from the same platform and unchanged benchmark script:
+
+```bash
+python3 scripts/check-benchmark-regression.py \
+  --report /tmp/candidate.json \
+  --guardrails scripts/benchmark-guardrails.json \
+  --baseline /tmp/baseline.json \
+  --max-regression-percent 35
+```
+
+The checker rejects platform or benchmark-script mismatches by default. Override
+those checks only for an explicitly reviewed protocol comparison.
+
 ## Baseline publication policy
 
-This `main` branch currently targets source version `0.7.0`, while the table
+This `main` branch currently targets source version `0.8.0`, while the table
 below remains the latest retained clean, published-release baseline. Do not
-replace it with a dirty-tree or untagged development run. A 0.7 baseline should
+replace it with a dirty-tree or untagged development run. A 0.8 baseline should
 be added only after the release commit is clean and the tagged platform binary
 has run the same retained benchmark protocol; record the tag/commit, binary and
 script hashes, platform, cache model, and sample counts. Development and 100k

@@ -19,6 +19,7 @@ This is the canonical guidance for agents working in this repository. Read this 
 - `docs/runtime-model.md` — runtime store discovery, config priority, artifacts, and bundles.
 - `docs/graph-memory.md` — graph memory design, deterministic graph commands, and non-RAG stance.
 - `docs/development.md` — local setup, validation, release smoke tests, and developer notes.
+- `docs/production.md` — qualified deployment profile, release gate, recovery, rollback, and incident procedures.
 - `SECURITY.md` — threat model, implemented controls, residual limitations, and reporting guidance.
 - `crates/mem-cli/` — `mem` CLI arguments, command dispatch, command implementations, integration tests.
 - `crates/mem-core/` — app discovery, config, SQLite DB helpers, Tantivy
@@ -137,6 +138,15 @@ Install `cargo-audit` locally when it is unavailable. Use
 `env -u CC -u CXX` on macOS when inherited `CC="zig cc"` or `CXX="zig c++"`
 settings break native dependency builds. CI also tests the declared Rust 1.97
 MSRV and runs a bounded benchmark correctness smoke.
+
+For release qualification, prefer the single mechanism that also checks a
+clean tree, release metadata, recovery, and benchmark guardrails:
+
+```bash
+scripts/check-release-readiness.sh
+```
+
+`ALLOW_DIRTY=1` is development-only and must not qualify a release.
 
 When changing GitHub workflows or shell scripts, additionally run:
 

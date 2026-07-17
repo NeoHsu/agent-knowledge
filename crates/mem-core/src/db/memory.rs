@@ -286,6 +286,12 @@ pub fn list_memories_filtered(
         .map_err(Into::into)
 }
 
+pub fn active_memory_count(conn: &Connection) -> Result<usize> {
+    let sql = format!("SELECT COUNT(*) FROM memories WHERE {ACTIVE_MEMORY_SQL}");
+    let count: i64 = conn.query_row(&sql, [], |row| row.get(0))?;
+    Ok(count.max(0) as usize)
+}
+
 pub fn memory_count(conn: &Connection) -> Result<usize> {
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM memories", [], |row| row.get(0))?;
     Ok(count.max(0) as usize)

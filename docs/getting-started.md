@@ -2,7 +2,7 @@
 
 This guide covers installing `mem`, initializing the active knowledge store,
 saving the first memory, and installing the bundled mnemark skill. It describes
-source version `0.7.0`; the `latest` installer can lag behind `main`, so verify
+source version `0.8.0`; the `latest` installer can lag behind `main`, so verify
 the installed version and use documentation from the matching Git tag when
 necessary. For workflow runbooks, artifacts, bundles, and retrospectives, see
 [Workflows](workflows.md).
@@ -156,3 +156,4 @@ merge, bundle, and run retrospectives through the local `mem` CLI.
 | Security boundaries and safe deployment | [`SECURITY.md`](../SECURITY.md) |
 | Workflow runbooks, artifacts, bundles, retrospectives | [Workflows](workflows.md) |
 | Repository development | [Development](development.md) |
+| Production deployment, recovery, and rollback | [Production Operations](production.md) |

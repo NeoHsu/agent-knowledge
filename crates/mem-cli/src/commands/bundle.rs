@@ -16,6 +16,8 @@ use tar::{Archive, Builder, Header};
 use super::*;
 use mem_core::artifact::{artifact_file_checksum, validate_artifact_path, ArtifactManifest};
 
+pub(super) const BUNDLE_FORMAT_VERSION: i64 = 2;
+
 const MAX_BUNDLE_ENTRIES: usize = 10_000;
 const MAX_BUNDLE_FILE_BYTES: u64 = 1_073_741_824;
 const MAX_BUNDLE_TOTAL_BYTES: u64 = 4_294_967_296;
@@ -69,7 +71,7 @@ fn cmd_bundle_export(app: &App, args: BundleExportArgs) -> Result<()> {
     let hashes = bundle_hashes(&snapshot_root, args.no_config)?;
     let hash_ms = elapsed_ms(hash_started);
     let metadata = json!({
-        "version": 2,
+        "version": BUNDLE_FORMAT_VERSION,
         "created_at": now(),
         "schema_version": schema_version,
         "contains": {
@@ -441,7 +443,7 @@ fn read_bundle_metadata(root: &Path) -> Result<Value> {
         bail!("bundle metadata must be a JSON object");
     }
     let version = metadata.get("version").and_then(Value::as_i64).unwrap_or(1);
-    if !(1..=2).contains(&version) {
+    if !(1..=BUNDLE_FORMAT_VERSION).contains(&version) {
         bail!("unsupported bundle format version: {version}");
     }
     Ok(metadata)

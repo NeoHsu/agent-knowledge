@@ -72,6 +72,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
           submodules: recursive
 
       - name: Install Rust 1.97
@@ -79,6 +80,12 @@ jobs:
         with:
           toolchain: 1.97.0
           components: rustfmt, clippy
+
+      - name: Verify release metadata, tag, and clean checkout
+        if: runner.os == 'Linux'
+        env:
+          RELEASE_TAG: ${{ !github.event.pull_request && github.ref_name || '' }}
+        run: python3 scripts/check-release-metadata.py --release-tag "$RELEASE_TAG"
 
       - name: Check formatting
         if: runner.os == 'Linux'
@@ -105,13 +112,47 @@ jobs:
         if: runner.os == 'Linux'
         run: python3 scripts/check-dependency-policy.py
 
+      - name: Test release helper scripts
+        if: runner.os == 'Linux'
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
       - name: Build release binary
         shell: bash
         run: scripts/build-release.sh
 
-      - name: Smoke-test installed release binary
+      - name: Smoke-test installed release binary and recovery drill
         shell: bash
         run: scripts/smoke-release.sh
+
+      - name: Benchmark release candidate
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          SCALES: "100 1000"
+          INTERACTIVE_RUNS: "2"
+          MAINTENANCE_RUNS: "1"
+          WARMUP_RUNS: "0"
+          REPORT_FILE: ${{ runner.temp }}/release-benchmark-report.json
+        run: scripts/benchmark-scale.sh | tee "$RUNNER_TEMP/release-benchmark.csv"
+
+      - name: Enforce release benchmark guardrails
+        if: runner.os == 'Linux'
+        run: >-
+          python3 scripts/check-benchmark-regression.py
+          --report "$RUNNER_TEMP/release-benchmark-report.json"
+          --guardrails scripts/benchmark-guardrails.json
+          --require-clean
+
+      - name: Retain release benchmark evidence
+        if: runner.os == 'Linux' && always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-benchmark-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/release-benchmark-report.json
+            ${{ runner.temp }}/release-benchmark.csv
+          if-no-files-found: warn
+          retention-days: 90
 
   build-local-artifacts:
     name: build-local-artifacts (${{ join(matrix.targets, ', ') }})

@@ -15,6 +15,9 @@ use mem_core::scope;
 use mem_core::util::*;
 use mem_core::workflow as workflow_core;
 
+pub(crate) const CLI_OUTPUT_CONTRACT_VERSION: u64 = 1;
+pub(crate) const BENCHMARK_REPORT_CONTRACT_VERSION: u64 = 1;
+
 pub(crate) enum Output {
     Json,
     Text,
@@ -150,8 +153,8 @@ mod sync;
 mod workflow;
 
 pub(crate) use admin::{
-    audit_report, cmd_audit, cmd_config, cmd_context, cmd_gc, cmd_history, cmd_migrate, cmd_stats,
-    stats_report,
+    audit_report, cmd_audit, cmd_config, cmd_context, cmd_contract, cmd_gc, cmd_history,
+    cmd_migrate, cmd_stats, stats_report,
 };
 pub(crate) use ambiguity::cmd_ambiguity;
 pub(crate) use artifact::cmd_artifact;

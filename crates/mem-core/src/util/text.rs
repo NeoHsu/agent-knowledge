@@ -21,10 +21,15 @@ pub fn normalized_text(input: &str) -> String {
 }
 
 pub fn remote_to_scope(remote: &str) -> String {
-    let cleaned = remote
-        .trim_end_matches(".git")
-        .replace("git@github.com:", "")
-        .replace("https://github.com/", "");
+    let remote = remote.trim().trim_end_matches(".git");
+    let cleaned = [
+        "git@github.com:",
+        "https://github.com/",
+        "ssh://git@github.com/",
+    ]
+    .iter()
+    .find_map(|prefix| remote.strip_prefix(prefix))
+    .unwrap_or(remote);
     if cleaned.contains('/') {
         format!("project:{cleaned}")
     } else {
@@ -64,6 +69,10 @@ mod tests {
         );
         assert_eq!(
             remote_to_scope("https://github.com/NeoHsu/mnemark.git"),
+            "project:NeoHsu/mnemark"
+        );
+        assert_eq!(
+            remote_to_scope("ssh://git@github.com/NeoHsu/mnemark.git"),
             "project:NeoHsu/mnemark"
         );
     }

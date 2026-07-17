@@ -4,6 +4,33 @@ All notable changes to mnemark are documented here.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-17
+
+### Added
+
+- Added `mem contract` for store-independent machine-interface and persisted-
+  format version discovery, plus versioned JSON error envelopes and contract
+  regression tests.
+- Added a clean-tree release-readiness gate, an isolated bundle recovery drill,
+  portable benchmark guardrails, retained CI benchmark artifacts, and a
+  production deployment/recovery/rollback guide.
+
+### Changed
+
+- Release smoke verification now restores and validates memory, workflow-run,
+  artifact, graph, and local-sync state; release CI also gates bounded benchmark
+  correctness on Linux.
+- Workflow validation now rejects unsupported schema versions instead of only
+  checking that `schema_version` is present.
+
+### Fixed
+
+- Native macOS release builds ignore the known inherited Mise Zig `CC`/`CXX`
+  override that passes an incompatible architecture spelling to cc-rs.
+- Doctor reports active rather than historical memory count, v4 policy upgrades
+  handle a missing final newline, and scope detection recognizes GitHub's
+  `ssh://git@github.com/...` remote form.
+
 ## [0.7.0] - 2026-07-14
 
 ### Breaking changes

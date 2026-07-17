@@ -4,7 +4,7 @@ Portable agent memory and workflow runbook system, exposed through the `mem`
 CLI.
 
 > [!NOTE]
-> This `main` branch documents source version `0.7.0`. The `latest` installer
+> This `main` branch documents source version `0.8.0`. The `latest` installer
 > follows the newest published GitHub release and can temporarily lag behind
 > `main`; run `mem --version` and use the documentation from the matching Git
 > tag when exact released behavior matters.
@@ -106,6 +106,7 @@ output.
 | [Workflow Rules](skills/mnemark/references/workflow-rules.md) | How agents should interpret and safely execute workflow memory runbooks |
 | [Agent Reference](docs/agent-reference.md) | Canonical instructions for agents changing this repo: safety rules, repo map, task routing, validation |
 | [Development](docs/development.md) | Local setup, source commands, validation, release smoke tests, developer notes |
+| [Production Operations](docs/production.md) | Qualified deployment profile, release gate, recovery, upgrade, rollback, and incidents |
 | [Security](SECURITY.md) | Threat model, implemented controls, explicit limitations, and reporting guidance |
 | [Performance](docs/performance.md) | Published release baseline, regression protocol, and capacity-canary rules |
 | [Changelog](CHANGELOG.md) | Breaking changes, features, and fixes by release |
@@ -169,6 +170,8 @@ npx skills add ./skills/mnemark
 
 ### Portability and integrations
 
+- **Machine contract:** `mem contract` reports the versioned JSON-error and
+  persisted-format contracts without reading or initializing a store.
 - **Bundles:** `mem bundle export <file>`, `mem bundle inspect <file>`, and
   `mem bundle import <file>`.
 - **Migration and transfer:** `mem migrate`,

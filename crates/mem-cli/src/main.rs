@@ -33,6 +33,7 @@ fn main() -> ExitCode {
                     "{}",
                     json!({
                         "status": "error",
+                        "contract_version": CLI_OUTPUT_CONTRACT_VERSION,
                         "code": "cli_parse_error",
                         "message": safe_error_message(error.to_string()),
                         "exit_code": exit_code
@@ -54,6 +55,7 @@ fn main() -> ExitCode {
                     "{}",
                     json!({
                         "status": "error",
+                        "contract_version": CLI_OUTPUT_CONTRACT_VERSION,
                         "code": "command_failed",
                         "message": safe_error_message(message),
                         "exit_code": 1
@@ -72,8 +74,15 @@ fn safe_error_message(message: String) -> String {
 }
 
 fn run(cli: Cli) -> Result<()> {
-    // Every command uses explicit/runtime discovery. A source checkout is never
-    // selected implicitly; development stores must use --home or MNEMARK_HOME.
+    // Contract introspection must remain available even when the user or store
+    // configuration is missing or malformed.
+    if matches!(&cli.command, Command::Contract) {
+        return cmd_contract();
+    }
+
+    // Every store-facing command uses explicit/runtime discovery. A source
+    // checkout is never selected implicitly; development stores must use
+    // --home or MNEMARK_HOME.
     let app = App::discover_runtime_with_home(cli.home.as_deref())?;
 
     match cli.command {
@@ -107,6 +116,7 @@ fn run(cli: Cli) -> Result<()> {
         })?,
         Command::Context(args) => cmd_context(args)?,
         Command::Config { command } => cmd_config(&app, command)?,
+        Command::Contract => unreachable!("contract handled before store discovery"),
         Command::Setup { command } => cmd_setup(command)?,
         Command::History(args) => cmd_history(&app, args)?,
         Command::Stats(args) => cmd_stats(&app, args)?,

@@ -94,6 +94,8 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+    #[command(about = "Describe machine-readable output and persisted format contracts")]
+    Contract,
     #[command(about = "Install mnemark setup helpers such as coding-agent memory policy")]
     Setup {
         #[command(subcommand)]

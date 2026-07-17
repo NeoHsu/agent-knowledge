@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "purpose": "Portable catastrophic-regression guardrails, not release performance claims or cross-machine SLOs.",
+  "scales": {
+    "100": {
+      "operations": {
+        "import": { "median_ms_max": 10000 },
+        "query": { "median_ms_max": 1500 },
+        "prime": { "median_ms_max": 2000 },
+        "graph_rebuild": { "median_ms_max": 10000 },
+        "bundle_export": { "median_ms_max": 10000 }
+      }
+    },
+    "1000": {
+      "operations": {
+        "import": { "median_ms_max": 30000 },
+        "query": { "median_ms_max": 2000 },
+        "prime": { "median_ms_max": 3000 },
+        "graph_rebuild": { "median_ms_max": 30000 },
+        "bundle_export": { "median_ms_max": 30000 }
+      }
+    },
+    "10000": {
+      "operations": {
+        "import": { "median_ms_max": 120000 },
+        "query": { "median_ms_max": 5000 },
+        "prime": { "median_ms_max": 5000 },
+        "graph_rebuild": { "median_ms_max": 180000 },
+        "bundle_export": { "median_ms_max": 180000 }
+      }
+    }
+  }
+}

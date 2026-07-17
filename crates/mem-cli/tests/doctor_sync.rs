@@ -84,6 +84,36 @@ fn doctor_reports_store_and_platform_wiring() {
 }
 
 #[test]
+fn doctor_reports_only_active_memory_count() {
+    let store = TestRuntimeStore::new("doctor-active-count");
+    store.run(&["init"]);
+    store.run(&[
+        "save",
+        "--name",
+        "active_note",
+        "--content",
+        "Trigger: doctor active count test. Action: remain active. Why: regression coverage added on 2026-07-17.",
+        "--force",
+    ]);
+    store.run(&[
+        "save",
+        "--name",
+        "deleted_note",
+        "--content",
+        "Trigger: doctor deleted count test. Action: become inactive. Why: regression coverage added on 2026-07-17.",
+        "--force",
+    ]);
+    store.run(&["delete", "deleted_note"]);
+
+    let report: serde_json::Value =
+        serde_json::from_str(&store.run(&["doctor"])).expect("doctor json");
+    let detail = find_check(&report["checks"], "store")["detail"]
+        .as_str()
+        .expect("store detail");
+    assert!(detail.ends_with(", 1 active memories"), "{detail}");
+}
+
+#[test]
 fn doctor_reports_missing_index_without_recreating_it() {
     let store = TestRuntimeStore::new("doctor-missing-index");
     store.run(&["init"]);

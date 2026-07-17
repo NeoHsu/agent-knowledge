@@ -12,6 +12,8 @@ use crate::artifact::{
 };
 use crate::{db::Memory, util::normalized_text};
 
+pub const WORKFLOW_SCHEMA_VERSION: i64 = 1;
+
 pub fn validate_memory(
     memory_type: &str,
     content: &str,
@@ -356,6 +358,14 @@ fn validate_content(content: &str) -> Result<()> {
     ] {
         yaml_get(mapping, field)
             .ok_or_else(|| anyhow!("workflow missing required field: {field}"))?;
+    }
+    let schema_version = yaml_get(mapping, "schema_version")
+        .and_then(YamlValue::as_i64)
+        .ok_or_else(|| anyhow!("workflow schema_version must be an integer"))?;
+    if schema_version != WORKFLOW_SCHEMA_VERSION {
+        bail!(
+            "unsupported workflow schema_version {schema_version}; expected {WORKFLOW_SCHEMA_VERSION}"
+        );
     }
     require_non_empty_sequence(mapping, "triggers")?;
     require_non_empty_sequence(mapping, "stop_conditions")?;
