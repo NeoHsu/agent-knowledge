@@ -6,7 +6,7 @@ use std::process::Command;
 use clap::{error::ErrorKind, Parser};
 
 #[allow(dead_code)]
-#[path = "../src/args.rs"]
+#[path = "../src/args/mod.rs"]
 mod cli_args;
 mod support;
 
