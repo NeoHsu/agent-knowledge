@@ -433,20 +433,3 @@ fn ensure_event_uid(conn: &Connection, table: &str, kind: &str, index: &str) -> 
     ))?;
     Ok(())
 }
-
-fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
-    conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
-        params![table],
-        |row| row.get(0),
-    )
-    .map_err(Into::into)
-}
-
-fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
-    let columns = stmt
-        .query_map([], |row| row.get::<_, String>(1))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(columns.iter().any(|candidate| candidate == column))
-}

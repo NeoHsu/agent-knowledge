@@ -38,6 +38,7 @@ pub struct Memory {
 
 mod ambiguity;
 mod changelog;
+mod introspection;
 mod memory;
 mod metadata;
 mod migration;
@@ -49,6 +50,7 @@ pub use ambiguity::{
     add_ambiguity_record, ambiguity_by_id, ambiguity_rows, resolve_ambiguity_record,
 };
 pub use changelog::log_change;
+pub use introspection::{column_exists, table_exists};
 pub use memory::{
     active_expired_memories, active_memory_count, all_memories, all_memories_compatible,
     all_workflows, gc_candidate_memories, graph_memories, insert_memory_record,

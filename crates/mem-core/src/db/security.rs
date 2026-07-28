@@ -5,6 +5,8 @@ use rusqlite::{params, Connection};
 
 use crate::util::sanitize_secret_field;
 
+use super::introspection::table_exists;
+
 const VALIDATED_TEXT_COLUMNS: &[(&str, &[&str])] = &[
     (
         "memories",
@@ -367,14 +369,6 @@ where
         }
     }
     Ok(())
-}
-
-fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
-    Ok(conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
-        [table],
-        |row| row.get(0),
-    )?)
 }
 
 fn table_columns(conn: &Connection, table: &str) -> Result<Vec<String>> {

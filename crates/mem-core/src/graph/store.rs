@@ -130,14 +130,7 @@ pub(super) fn parse_json_value(raw: &str) -> Value {
     serde_json::from_str(raw).unwrap_or_else(|_| json!(raw))
 }
 
-pub(super) fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
-        params![table],
-        |row| row.get(0),
-    )?;
-    Ok(count > 0)
-}
+pub(super) use crate::db::table_exists;
 
 pub(super) fn insert_simple_node(
     conn: &Connection,

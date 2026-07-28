@@ -8,8 +8,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::db::{
-    add_ambiguity_record, memory_by_id, memory_by_name, new_event_uid, resolve_ambiguity_record,
-    with_transaction,
+    add_ambiguity_record, column_exists, memory_by_id, memory_by_name, new_event_uid,
+    resolve_ambiguity_record, with_transaction,
 };
 use crate::util::{normalize_rfc3339, now, sanitize_secret_field, source_priority, strip_secrets};
 
@@ -326,18 +326,6 @@ fn semantic_ref_label(conn: &Connection, reference: &str) -> Result<Option<Strin
     Ok(reference
         .strip_prefix("concept:")
         .map(|label| label.to_string()))
-}
-
-fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
-    let sql = format!("PRAGMA table_info(\"{}\")", table.replace('"', "\"\""));
-    let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
-    for row in rows {
-        if row? == column {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 fn load_semantic_edges(conn: &Connection) -> Result<Vec<GraphSemanticEdgeRow>> {
