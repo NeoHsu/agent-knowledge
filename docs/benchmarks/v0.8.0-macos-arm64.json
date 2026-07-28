@@ -1,0 +1,308 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-28T15:02:14Z",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "python": "3.14.6",
+  "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+  "binary": "/private/tmp/mnemark-v0.8.0-target/release/mem",
+  "binary_sha256": "390f2dd191378c49c7b1e4eafdeffec66b4f29763d4d4849f986a80a6685e70a",
+  "benchmark_script_sha256": "dc951fc976d114dd365d0f9624bb00adec88eed336e0b954e2077b7402e904c9",
+  "mem_version": "mem 0.8.0",
+  "git_commit": "c7026b0ace895a404e327d8245565f67c3b4c265",
+  "git_dirty": false,
+  "cache_model": {
+    "import": "fresh initialized store per measured run",
+    "interactive": "separate process per run after configured warmups; OS cache retained",
+    "maintenance": "same populated store for graph and bundle repetitions"
+  },
+  "seed": 42,
+  "execution_order": [
+    1000,
+    100,
+    10000
+  ],
+  "interactive_runs": 20,
+  "maintenance_runs": 3,
+  "warmup_runs": 1,
+  "results": [
+    {
+      "scale": 100,
+      "sizes": {
+        "payload_bytes": 38090,
+        "database_bytes": 323584,
+        "index_bytes": 28741,
+        "bundle_bytes": 81238
+      },
+      "operations": {
+        "import": {
+          "median": 273.99195899488404,
+          "p95": null,
+          "min": 265.804583003046,
+          "max": 320.71254099719226,
+          "runs": 3,
+          "peak_rss_mib": 173.75,
+          "input_bytes": 38090,
+          "output_bytes": 352325
+        },
+        "query": {
+          "median": 30.947666498832405,
+          "p95": 32.79987498535775,
+          "min": 28.989166021347046,
+          "max": 33.983125002123415,
+          "runs": 20,
+          "peak_rss_mib": 41.609375,
+          "input_bytes": 352325,
+          "output_bytes": 0
+        },
+        "prime": {
+          "median": 34.03368747967761,
+          "p95": 37.99729098682292,
+          "min": 30.02979201846756,
+          "max": 38.12587499851361,
+          "runs": 20,
+          "peak_rss_mib": 10.53125,
+          "input_bytes": 323584,
+          "output_bytes": 4000
+        },
+        "graph_rebuild": {
+          "median": 35.82962500513531,
+          "p95": null,
+          "min": 29.172124981414527,
+          "max": 36.637250013882294,
+          "runs": 3,
+          "peak_rss_mib": 12.375,
+          "input_bytes": 323584,
+          "output_bytes": 323584
+        },
+        "bundle_export": {
+          "median": 59.948749985778704,
+          "p95": null,
+          "min": 56.38579197693616,
+          "max": 61.02700001792982,
+          "runs": 3,
+          "peak_rss_mib": 14.40625,
+          "input_bytes": 323584,
+          "output_bytes": 81238,
+          "stages_ms": {
+            "snapshot_ms": {
+              "median": 3.41825,
+              "p95": null,
+              "min": 3.3378330000000003,
+              "max": 3.702333
+            },
+            "validation_ms": {
+              "median": 19.226792,
+              "p95": null,
+              "min": 19.085459,
+              "max": 20.508499999999998
+            },
+            "hash_ms": {
+              "median": 8.300708,
+              "p95": null,
+              "min": 8.298375,
+              "max": 8.406
+            },
+            "archive_ms": {
+              "median": 8.936625,
+              "p95": null,
+              "min": 8.821667,
+              "max": 9.117750000000001
+            },
+            "install_ms": {
+              "median": 0.4425,
+              "p95": null,
+              "min": 0.406541,
+              "max": 0.474416
+            }
+          }
+        }
+      }
+    },
+    {
+      "scale": 1000,
+      "sizes": {
+        "payload_bytes": 382880,
+        "database_bytes": 4190208,
+        "index_bytes": 115252,
+        "bundle_bytes": 645898
+      },
+      "operations": {
+        "import": {
+          "median": 477.00454099685885,
+          "p95": null,
+          "min": 462.9694999894127,
+          "max": 675.1868749852292,
+          "runs": 3,
+          "peak_rss_mib": 177.71875,
+          "input_bytes": 382880,
+          "output_bytes": 4305460
+        },
+        "query": {
+          "median": 30.664291509310715,
+          "p95": 34.91291598766111,
+          "min": 27.44558302219957,
+          "max": 36.26045800046995,
+          "runs": 20,
+          "peak_rss_mib": 42.078125,
+          "input_bytes": 4305460,
+          "output_bytes": 0
+        },
+        "prime": {
+          "median": 33.00322900759056,
+          "p95": 35.431416996289045,
+          "min": 29.272499989019707,
+          "max": 66.78183400072157,
+          "runs": 20,
+          "peak_rss_mib": 11.125,
+          "input_bytes": 4190208,
+          "output_bytes": 4000
+        },
+        "graph_rebuild": {
+          "median": 308.07108400040306,
+          "p95": null,
+          "min": 269.3065000057686,
+          "max": 323.9669579779729,
+          "runs": 3,
+          "peak_rss_mib": 17.140625,
+          "input_bytes": 4190208,
+          "output_bytes": 4190208
+        },
+        "bundle_export": {
+          "median": 323.84058300522156,
+          "p95": null,
+          "min": 318.604415981099,
+          "max": 335.2271670009941,
+          "runs": 3,
+          "peak_rss_mib": 18.984375,
+          "input_bytes": 4190208,
+          "output_bytes": 645898,
+          "stages_ms": {
+            "snapshot_ms": {
+              "median": 30.798583,
+              "p95": null,
+              "min": 30.041541000000002,
+              "max": 30.941583
+            },
+            "validation_ms": {
+              "median": 133.781584,
+              "p95": null,
+              "min": 132.61166699999998,
+              "max": 139.523292
+            },
+            "hash_ms": {
+              "median": 58.822708,
+              "p95": null,
+              "min": 58.300625000000004,
+              "max": 59.320040999999996
+            },
+            "archive_ms": {
+              "median": 75.898583,
+              "p95": null,
+              "min": 75.763542,
+              "max": 76.579333
+            },
+            "install_ms": {
+              "median": 0.645917,
+              "p95": null,
+              "min": 0.5145419999999999,
+              "max": 1.0104160000000002
+            }
+          }
+        }
+      }
+    },
+    {
+      "scale": 10000,
+      "sizes": {
+        "payload_bytes": 3848780,
+        "database_bytes": 40513536,
+        "index_bytes": 814643,
+        "bundle_bytes": 6354160
+      },
+      "operations": {
+        "import": {
+          "median": 2123.6271660018247,
+          "p95": null,
+          "min": 2104.530665994389,
+          "max": 2462.903333012946,
+          "runs": 3,
+          "peak_rss_mib": 209.3125,
+          "input_bytes": 3848780,
+          "output_bytes": 41328179
+        },
+        "query": {
+          "median": 44.9566665047314,
+          "p95": 54.03920900425874,
+          "min": 32.65329200075939,
+          "max": 59.881041990593076,
+          "runs": 20,
+          "peak_rss_mib": 43.140625,
+          "input_bytes": 41328179,
+          "output_bytes": 0
+        },
+        "prime": {
+          "median": 54.76802050543483,
+          "p95": 68.23462501051836,
+          "min": 50.68849999224767,
+          "max": 73.743499990087,
+          "runs": 20,
+          "peak_rss_mib": 12.875,
+          "input_bytes": 40513536,
+          "output_bytes": 4000
+        },
+        "graph_rebuild": {
+          "median": 3203.2913750153966,
+          "p95": null,
+          "min": 2929.4653750257567,
+          "max": 3320.5910830001812,
+          "runs": 3,
+          "peak_rss_mib": 41.828125,
+          "input_bytes": 40513536,
+          "output_bytes": 40513536
+        },
+        "bundle_export": {
+          "median": 2909.7072499862406,
+          "p95": null,
+          "min": 2864.6285419818014,
+          "max": 2925.738416000968,
+          "runs": 3,
+          "peak_rss_mib": 31.265625,
+          "input_bytes": 40513536,
+          "output_bytes": 6354160,
+          "stages_ms": {
+            "snapshot_ms": {
+              "median": 329.744833,
+              "p95": null,
+              "min": 327.113625,
+              "max": 330.87224999999995
+            },
+            "validation_ms": {
+              "median": 1257.6595,
+              "p95": null,
+              "min": 1242.0225,
+              "max": 1258.864125
+            },
+            "hash_ms": {
+              "median": 571.3881250000001,
+              "p95": null,
+              "min": 558.687541,
+              "max": 572.0062919999999
+            },
+            "archive_ms": {
+              "median": 721.659208,
+              "p95": null,
+              "min": 708.221916,
+              "max": 732.602042
+            },
+            "install_ms": {
+              "median": 0.6299170000000001,
+              "p95": null,
+              "min": 0.495625,
+              "max": 0.636708
+            }
+          }
+        }
+      }
+    }
+  ]
+}
