@@ -94,6 +94,11 @@ tokenization and a local Tantivy tokenizer adapter.
 
 ## Command effects
 
+Command lock routing is classified centrally in
+`crates/mem-cli/src/command_effect.rs`; its tests cover every top-level command
+family and the conditional cases below. Keep this matrix aligned with that
+registry instead of adding lock decisions directly to command dispatch.
+
 “Durable” means user-authored memory, provenance, semantic assertions, workflow
 runs, ambiguity records, config, manifests, or artifacts. Graph projections,
 Tantivy files, and dirty/version metadata are rebuildable local state.
