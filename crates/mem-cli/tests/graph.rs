@@ -274,6 +274,73 @@ fn graph_path_honors_direction_and_uses_global_weighted_tie_breaks() {
         "incoming",
     ]));
     assert_eq!(incoming["status"], "ok");
+    let any = json(&repo.run(&["graph", "path", "path_d", "path_a", "--direction", "any"]));
+    assert_eq!(any["status"], "ok");
+}
+
+#[test]
+fn graph_path_uses_stable_identity_for_equal_score_ties() {
+    let repo = TestRepo::new("graph-stable-path-tie");
+    repo.run(&["init"]);
+    for name in ["tie_a", "tie_b", "tie_c", "tie_d"] {
+        repo.run(&[
+            "save",
+            "--name",
+            name,
+            "--content",
+            &format!("Action: use {name} in a deterministic path tie."),
+            "--force",
+        ]);
+    }
+    let payload = repo.join("equal-edges.json");
+    fs::write(
+        &payload,
+        r#"{"schema_version":1,"edges":[
+          {"source":"tie_a","target":"tie_b","relation":"related_to","confidence":"EXTRACTED","evidence":"Equal path through B, first hop."},
+          {"source":"tie_b","target":"tie_d","relation":"related_to","confidence":"EXTRACTED","evidence":"Equal path through B, second hop."},
+          {"source":"tie_a","target":"tie_c","relation":"related_to","confidence":"EXTRACTED","evidence":"Equal path through C, first hop."},
+          {"source":"tie_c","target":"tie_d","relation":"related_to","confidence":"EXTRACTED","evidence":"Equal path through C, second hop."}
+        ]}"#,
+    )
+    .expect("write equal-score graph payload");
+    repo.run(&["graph", "ingest", payload.to_str().expect("payload")]);
+
+    let conn = Connection::open(repo.join("memory.db")).expect("open graph db");
+    for (source, target, edge_id) in [
+        ("tie_a", "tie_b", "z-tie-a-b"),
+        ("tie_b", "tie_d", "z-tie-b-d"),
+        ("tie_a", "tie_c", "a-tie-a-c"),
+        ("tie_c", "tie_d", "a-tie-c-d"),
+    ] {
+        conn.execute(
+            "UPDATE graph_edges SET id = ?1
+             WHERE source_node_id = (SELECT id FROM graph_nodes WHERE label = ?2)
+               AND target_node_id = (SELECT id FROM graph_nodes WHERE label = ?3)
+               AND relation = 'related_to'",
+            rusqlite::params![edge_id, source, target],
+        )
+        .expect("set deterministic edge id");
+    }
+    drop(conn);
+
+    let first = json(&repo.run(&["graph", "path", "tie_a", "tie_d", "--direction", "outgoing"]));
+    let second = json(&repo.run(&["graph", "path", "tie_a", "tie_d", "--direction", "outgoing"]));
+    assert_eq!(first, second);
+    assert_eq!(first["hops"], 2);
+    let labels = first["nodes"]
+        .as_array()
+        .expect("path nodes")
+        .iter()
+        .filter_map(|node| node["label"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(labels, vec!["tie_a", "tie_c", "tie_d"]);
+    let edge_ids = first["edges"]
+        .as_array()
+        .expect("path edges")
+        .iter()
+        .filter_map(|edge| edge["id"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(edge_ids, vec!["a-tie-a-c", "a-tie-c-d"]);
 }
 
 #[test]
@@ -338,6 +405,19 @@ fn graph_query_expands_lexical_start_nodes() {
         .expect("query nodes")
         .iter()
         .any(|node| node["node"]["id"] == "memory:release_policy"));
+}
+
+#[test]
+fn graph_traversal_rejects_depth_and_result_limits_above_contract_bounds() {
+    let repo = TestRepo::new("graph-query-bounds");
+    repo.run(&["init"]);
+
+    let query_depth = repo.run_fail(&["graph", "query", "anything", "--depth", "9"]);
+    assert!(query_depth.contains("graph query depth must be between 0 and 8"));
+    let query_limit = repo.run_fail(&["graph", "query", "anything", "--limit", "501"]);
+    assert!(query_limit.contains("graph limit must be between 1 and 500"));
+    let path_depth = repo.run_fail(&["graph", "path", "from", "to", "--max-depth", "21"]);
+    assert!(path_depth.contains("graph path max depth must be between 1 and 20"));
 }
 
 #[test]
@@ -665,6 +745,15 @@ fn cross_project_semantic_edges_require_review_for_agent_sources() {
     let agent = json(&repo.run(&["graph", "ingest", payload.to_str().expect("payload")]));
     assert_eq!(agent["pending"], 1);
     assert_eq!(agent["results"][0]["edge_status"], "pending");
+    let pending_path = json(&repo.run(&[
+        "graph",
+        "path",
+        "project_a_policy",
+        "project_b_policy",
+        "--scope",
+        "all",
+    ]));
+    assert_eq!(pending_path["status"], "not_found");
     let edge_id = agent["results"][0]["id"].as_str().expect("edge id");
     repo.run(&["graph", "accept", edge_id]);
 
