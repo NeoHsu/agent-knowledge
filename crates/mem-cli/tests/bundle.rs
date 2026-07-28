@@ -340,7 +340,7 @@ fn bundle_export_rejects_secrets_or_redacts_only_the_exported_copy() {
 }
 
 #[test]
-fn bundle_inspect_rejects_checksum_mismatch() {
+fn bundle_validation_rejects_checksum_mismatch_before_replace() {
     let source = TestRepo::new("bundle-checksum-source");
     source.run(&["init"]);
     source.run(&[
@@ -376,6 +376,40 @@ fn bundle_inspect_rejects_checksum_mismatch() {
         tampered.to_str().expect("tampered bundle"),
     ]);
     assert!(error.contains("bundle checksum mismatch for config.toml"));
+
+    let target = TestRepo::new("bundle-checksum-replace-target");
+    target.run(&["init"]);
+    target.run(&[
+        "save",
+        "--name",
+        "preserved_before_validation",
+        "--content",
+        "Action: validation must finish before replacement mutates this store.",
+        "--force",
+    ]);
+    fs::write(target.join("config.toml"), "[query]\ndefault_limit = 7\n")
+        .expect("write target config");
+    let database_before = fs::read(target.join("memory.db")).expect("read target database");
+
+    let error = target.run_fail(&[
+        "bundle",
+        "import",
+        tampered.to_str().expect("tampered bundle"),
+        "--replace",
+        "--force",
+    ]);
+    assert!(error.contains("bundle checksum mismatch for config.toml"));
+    assert_eq!(
+        fs::read(target.join("memory.db")).expect("reread target database"),
+        database_before
+    );
+    assert_eq!(
+        fs::read_to_string(target.join("config.toml")).expect("read target config"),
+        "[query]\ndefault_limit = 7\n"
+    );
+    assert!(target
+        .run(&["query", "validation must finish", "--no-touch"])
+        .contains("preserved_before_validation"));
 }
 
 #[test]
