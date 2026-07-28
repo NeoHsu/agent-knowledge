@@ -124,6 +124,7 @@ rules. Lint warnings do not block a save; validation and security errors do.
        v
   Tantivy index upsert
        | failure after DB commit -> mark index stale; SQLite remains authoritative
+       | --json-errors -> index_stale_after_write + durable_write_committed=true
        v
   lint (non-blocking):  no_tags · content_long · relative_date_language · vague_name
                         · claims_outside_backticks

@@ -232,7 +232,14 @@ pub(crate) fn merge_database(
         Ok((semantic_merge, durable_events))
     })?;
 
-    memory_index::upsert_batch_or_mark_stale(app, &conn, &changed_index_ids)?;
+    finish_committed_index_write(
+        memory_index::upsert_batch_or_mark_stale(app, &conn, &changed_index_ids),
+        "database merge",
+        json!({
+            "source_store": incoming_store,
+            "changed_count": changed_index_ids.len()
+        }),
+    )?;
 
     Ok(json!({
         "status": "merged",

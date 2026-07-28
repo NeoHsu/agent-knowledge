@@ -334,7 +334,11 @@ pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
             Ok(())
         })?;
         let saved_ids = saved_ids.into_iter().collect::<Vec<_>>();
-        memory_index::complete_bulk_write(app, &conn, &saved_ids, rebuild_index)?;
+        finish_committed_index_write(
+            memory_index::complete_bulk_write(app, &conn, &saved_ids, rebuild_index),
+            "JSON import",
+            json!({"changed_count": saved_ids.len()}),
+        )?;
     } else {
         let text = fs::read_to_string(&args.file)
             .with_context(|| format!("read {}", args.file.display()))?;

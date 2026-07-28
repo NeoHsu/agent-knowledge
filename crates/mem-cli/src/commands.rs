@@ -8,6 +8,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::args::*;
+use crate::cli_error::committed_index_error;
 use mem_core::app::App;
 use mem_core::db::*;
 use mem_core::index as memory_index;
@@ -76,6 +77,14 @@ pub(crate) fn print_json_pretty<T: Serialize + ?Sized>(value: &T) -> Result<()> 
 
 pub(crate) fn print_text(value: impl AsRef<str>) -> Result<()> {
     Output::Text.text(value)
+}
+
+pub(crate) fn finish_committed_index_write<T>(
+    result: Result<T>,
+    operation: &str,
+    details: Value,
+) -> Result<T> {
+    result.map_err(|error| committed_index_error(operation, details, error))
 }
 
 pub(crate) fn render_table(headers: &[&str], rows: &[Vec<String>]) -> String {

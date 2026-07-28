@@ -5,10 +5,12 @@ use clap::{error::ErrorKind, Parser};
 use serde_json::json;
 
 mod args;
+mod cli_error;
 mod command_effect;
 mod commands;
 
 use args::*;
+use cli_error::StructuredCommandError;
 use command_effect::{CommandEffect, StoreAccess};
 use commands::*;
 use mem_core::app::{with_lock, with_shared_lock, App};
@@ -53,16 +55,18 @@ fn main() -> ExitCode {
         Err(error) => {
             let message = format!("{error:#}");
             if json_errors {
-                eprintln!(
-                    "{}",
-                    json!({
-                        "status": "error",
-                        "contract_version": CLI_OUTPUT_CONTRACT_VERSION,
-                        "code": "command_failed",
-                        "message": safe_error_message(message),
-                        "exit_code": 1
-                    })
-                );
+                let structured = error.downcast_ref::<StructuredCommandError>();
+                let mut response = json!({
+                    "status": "error",
+                    "contract_version": CLI_OUTPUT_CONTRACT_VERSION,
+                    "code": structured.map_or("command_failed", StructuredCommandError::code),
+                    "message": safe_error_message(message),
+                    "exit_code": 1
+                });
+                if let Some(structured) = structured {
+                    response["details"] = structured.details().clone();
+                }
+                eprintln!("{response}");
             } else {
                 eprintln!("Error: {message}");
             }

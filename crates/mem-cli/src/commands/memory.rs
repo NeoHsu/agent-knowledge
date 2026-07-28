@@ -72,7 +72,14 @@ pub(crate) fn save_memory(app: &App, args: SaveArgs) -> Result<Value> {
             Ok(persisted)
         })?;
         if let Some(id) = persisted.changed_id.as_deref() {
-            memory_index::upsert_or_mark_stale(app, &conn, id)?;
+            finish_committed_index_write(
+                memory_index::upsert_or_mark_stale(app, &conn, id),
+                "memory update",
+                json!({
+                    "memory_id": id,
+                    "version": persisted.result.get("version").and_then(Value::as_i64)
+                }),
+            )?;
         }
         return Ok(persisted.result);
     }
@@ -99,7 +106,11 @@ pub(crate) fn save_memory(app: &App, args: SaveArgs) -> Result<Value> {
         .changed_id
         .as_deref()
         .ok_or_else(|| anyhow!("new save did not return a changed memory id"))?;
-    memory_index::upsert_or_mark_stale(app, &conn, id)?;
+    finish_committed_index_write(
+        memory_index::upsert_or_mark_stale(app, &conn, id),
+        "memory save",
+        json!({"memory_id": id, "version": 1}),
+    )?;
 
     let mut result = persisted.result;
     let warnings = lint_memory(&args.r#type, &args.name, &content, &args.tags);
@@ -514,10 +525,13 @@ pub(crate) fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
         )?;
         mem_core::graph::set_graph_dirty(conn, true)
     })?;
-    memory_index::upsert_or_mark_stale(app, &conn, &old.id)?;
-
     let updated = memory_by_id(&conn, &old.id)?
         .ok_or_else(|| anyhow!("updated memory missing: {}", old.id))?;
+    finish_committed_index_write(
+        memory_index::upsert_or_mark_stale(app, &conn, &old.id),
+        "memory update",
+        json!({"memory_id": old.id, "version": updated.version}),
+    )?;
     let warnings = lint_memory(
         &updated.r#type,
         &updated.name,
@@ -637,8 +651,21 @@ pub(crate) fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
         )?;
         mem_core::graph::set_graph_dirty(conn, true)
     })?;
-    memory_index::upsert_or_mark_stale(app, &conn, &new_id)?;
-    memory_index::reindex_or_mark_stale(app, "rebuild index after supersede")?;
+    let index_details = json!({
+        "old_memory_id": old.id,
+        "new_memory_id": new_id,
+        "new_version": 1
+    });
+    finish_committed_index_write(
+        memory_index::upsert_or_mark_stale(app, &conn, &new_id),
+        "memory supersede",
+        index_details.clone(),
+    )?;
+    finish_committed_index_write(
+        memory_index::reindex_or_mark_stale(app, "rebuild index after supersede"),
+        "memory supersede",
+        index_details,
+    )?;
 
     print_write_json(
         app,
@@ -695,7 +722,11 @@ pub(crate) fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
             )?;
             mem_core::graph::set_graph_dirty(conn, true)
         })?;
-        memory_index::reindex_or_mark_stale(app, "rebuild index after delete")?;
+        finish_committed_index_write(
+            memory_index::reindex_or_mark_stale(app, "rebuild index after delete"),
+            "hard memory delete",
+            json!({"memory_id": old.id, "mode": "hard"}),
+        )?;
         print_write_json(
             app,
             json!({"status": "deleted", "mode": "hard", "id": old.id}),
@@ -719,7 +750,15 @@ pub(crate) fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
             )?;
             mem_core::graph::set_graph_dirty(conn, true)
         })?;
-        memory_index::reindex_or_mark_stale(app, "rebuild index after delete")?;
+        finish_committed_index_write(
+            memory_index::reindex_or_mark_stale(app, "rebuild index after delete"),
+            "soft memory delete",
+            json!({
+                "memory_id": old.id,
+                "mode": "soft",
+                "version": old.version + 1
+            }),
+        )?;
         print_write_json(
             app,
             json!({"status": "deleted", "mode": "soft", "id": old.id}),

@@ -16,6 +16,14 @@ fn contract_is_store_independent_and_versions_machine_interfaces() {
     assert_eq!(output["contract_version"], 1);
     assert_eq!(output["cli_version"], env!("CARGO_PKG_VERSION"));
     assert_eq!(output["json_errors"]["version"], 1);
+    assert!(output["json_errors"]["optional_fields"]
+        .as_array()
+        .expect("optional error fields")
+        .contains(&serde_json::json!("details")));
+    assert!(output["json_errors"]["known_codes"]
+        .as_array()
+        .expect("known error codes")
+        .contains(&serde_json::json!("index_stale_after_write")));
     assert_eq!(output["schemas"]["store"], 5);
     assert_eq!(output["schemas"]["bundle"], 2);
     assert_eq!(output["schemas"]["workflow"], 1);

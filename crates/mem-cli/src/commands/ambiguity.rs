@@ -128,9 +128,16 @@ pub(crate) fn cmd_ambiguity(app: &App, command: AmbiguityCommand) -> Result<()> 
                 Ok(!soft_deleted.is_empty())
             })?;
             if reindex_needed {
-                memory_index::reindex_or_mark_stale(
-                    app,
-                    "rebuild index after ambiguity resolution",
+                finish_committed_index_write(
+                    memory_index::reindex_or_mark_stale(
+                        app,
+                        "rebuild index after ambiguity resolution",
+                    ),
+                    "ambiguity resolution",
+                    json!({
+                        "ambiguity_id": args.id,
+                        "soft_deleted_count": soft_deleted.len()
+                    }),
                 )?;
             }
             print_json_pretty(&json!({

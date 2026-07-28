@@ -60,7 +60,13 @@ intends that checkout to be the active store.
 All commands accept the global `--json-errors` flag. Successful output is
 unchanged; Clap parse failures and runtime failures become one JSON object on
 stderr with stable `status`, `contract_version`, `code`, `message`, and
-`exit_code` fields. Without the flag, errors remain human-readable.
+`exit_code` fields. Without the flag, errors remain human-readable. A mutating
+command whose SQLite transaction committed before its Tantivy update failed
+uses `code: "index_stale_after_write"` and adds a `details` object with
+`durable_write_committed: true`, the affected operation, and `mem reindex`
+recovery guidance. Do not blindly retry that write; inspect the returned ids or
+query SQLite-backed state, repair the index, then decide whether another
+mutation is needed. `mem contract` lists known error codes and optional fields.
 
 ```bash
 mem --json-errors query "release safety" --scope auto

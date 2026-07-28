@@ -83,6 +83,12 @@ or when rebuildable materialized tables are missing; `mem graph stats` is
 deliberately non-mutating. Durable semantic tables are never silently recreated
 as if their data were disposable.
 
+SQLite commit and Tantivy update are deliberately separate. If a durable write
+commits but its index update fails, the CLI marks `index_dirty=true` and, with
+`--json-errors`, returns `code: "index_stale_after_write"` plus
+`details.durable_write_committed=true`. Treat that as a committed write needing
+index recovery, not as authorization to retry the mutation blindly.
+
 If the search index is stale, run:
 
 ```bash

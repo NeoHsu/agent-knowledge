@@ -61,7 +61,9 @@ pub(crate) fn cmd_contract() -> Result<()> {
         },
         "json_errors": {
             "version": CLI_OUTPUT_CONTRACT_VERSION,
-            "required_fields": ["status", "contract_version", "code", "message", "exit_code"]
+            "required_fields": ["status", "contract_version", "code", "message", "exit_code"],
+            "optional_fields": ["details"],
+            "known_codes": ["cli_parse_error", "command_failed", "index_stale_after_write"]
         },
         "schemas": {
             "store": supported_schema_version(),
@@ -285,7 +287,14 @@ pub(crate) fn audit_report(conn: &Connection, app: &App, fix: bool) -> Result<Va
             Ok(())
         })?;
         mem_core::graph::set_graph_dirty(conn, true)?;
-        memory_index::reindex_or_mark_stale(app, "rebuild index after audit --fix")?;
+        finish_committed_index_write(
+            memory_index::reindex_or_mark_stale(app, "rebuild index after audit --fix"),
+            "audit repair",
+            json!({
+                "fixed_expired": fixed_expired,
+                "fixed_broken_links": fixed_broken_links
+            }),
+        )?;
     }
 
     Ok(json!({
@@ -372,7 +381,11 @@ pub(crate) fn cmd_gc(app: &App, args: GcArgs) -> Result<()> {
         Ok(changed)
     })?;
     mem_core::graph::set_graph_dirty(&conn, true)?;
-    memory_index::reindex_or_mark_stale(app, "rebuild index after gc")?;
+    finish_committed_index_write(
+        memory_index::reindex_or_mark_stale(app, "rebuild index after gc"),
+        "garbage collection",
+        json!({"deleted": changed}),
+    )?;
     print_json(&json!({"status": "gc_complete", "deleted": changed}))?;
     Ok(())
 }

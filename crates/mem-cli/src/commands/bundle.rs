@@ -218,10 +218,10 @@ fn cmd_bundle_import(app: &App, args: BundleImportArgs) -> Result<()> {
             if std::env::var_os("MNEMARK_TEST_FAIL_BUNDLE_REPLACE_AFTER_CLEAR").is_some() {
                 bail!("injected post-clear bundle replacement failure");
             }
-            import_bundle_clean(app, &temp, entries, bundle)
+            import_bundle_clean(app, &temp, entries, bundle, false)
         })
     } else {
-        import_bundle_clean(app, &temp, entries, bundle)
+        import_bundle_clean(app, &temp, entries, bundle, true)
     };
     fs::remove_dir_all(&temp).ok();
     match (result, replacement_backup) {
@@ -240,7 +240,13 @@ fn cmd_bundle_import(app: &App, args: BundleImportArgs) -> Result<()> {
     }
 }
 
-fn import_bundle_clean(app: &App, temp: &Path, entries: Vec<String>, bundle: Value) -> Result<()> {
+fn import_bundle_clean(
+    app: &App,
+    temp: &Path,
+    entries: Vec<String>,
+    bundle: Value,
+    report_committed_index_failure: bool,
+) -> Result<()> {
     fs::create_dir_all(&app.root)?;
     copy_if_exists(temp.join("memory.db"), app.root.join("memory.db"))?;
     copy_if_exists(temp.join("config.toml"), app.root.join("config.toml"))?;
@@ -250,7 +256,12 @@ fn import_bundle_clean(app: &App, temp: &Path, entries: Vec<String>, bundle: Val
     app.harden_permissions()?;
     let conn = app.conn()?;
     mem_core::graph::set_graph_dirty(&conn, true)?;
-    memory_index::reindex_or_mark_stale(app, "bundle import")?;
+    let index_result = memory_index::reindex_or_mark_stale(app, "bundle import");
+    if report_committed_index_failure {
+        finish_committed_index_write(index_result, "bundle import", json!({"mode": "clean"}))?;
+    } else {
+        index_result?;
+    }
     print_json_pretty(&json!({
         "status": "imported",
         "mode": "clean",
@@ -279,7 +290,11 @@ fn import_bundle_merge(
     let artifact_result = merge_artifacts(app, temp)?;
     let conn = app.conn()?;
     mem_core::graph::set_graph_dirty(&conn, true)?;
-    memory_index::reindex_or_mark_stale(app, "bundle merge import")?;
+    finish_committed_index_write(
+        memory_index::reindex_or_mark_stale(app, "bundle merge import"),
+        "bundle merge import",
+        json!({"mode": "merge"}),
+    )?;
     print_json_pretty(&json!({
         "status": "imported",
         "mode": "merge",
