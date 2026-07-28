@@ -130,6 +130,7 @@ env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings
 env -u CC -u CXX cargo test --workspace --locked
 cargo audit --deny warnings
 python3 scripts/check-dependency-policy.py
+python3 scripts/check-source-hygiene.py
 scripts/build-release.sh
 scripts/smoke-release.sh
 ```

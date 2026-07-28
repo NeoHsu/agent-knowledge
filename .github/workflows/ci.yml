@@ -29,6 +29,9 @@ jobs:
       - name: Verify release metadata and clean checkout
         if: matrix.rust == 'stable'
         run: python3 scripts/check-release-metadata.py
+      - name: Reject runtime artifacts in the source checkout
+        if: matrix.rust == 'stable'
+        run: python3 scripts/check-source-hygiene.py
       - if: matrix.rust == 'stable'
         run: cargo fmt --all -- --check
       - if: matrix.rust == 'stable'

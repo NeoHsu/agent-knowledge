@@ -31,7 +31,13 @@ env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings
 env -u CC -u CXX cargo test --workspace --locked
 cargo audit --deny warnings
 python3 scripts/check-dependency-policy.py
+python3 scripts/check-source-hygiene.py
 ```
+
+The source-hygiene check rejects runtime `memory.db`, `index/`, lock/WAL/SHM,
+and bundle-replacement backup state from this checkout without reading database
+contents. Move required data to the intended private runtime store before
+continuing; dirty-tree development overrides do not bypass this safety gate.
 
 Install `cargo-audit` locally when it is unavailable. Use
 `env -u CC -u CXX` on macOS when inherited Zig compiler variables break native

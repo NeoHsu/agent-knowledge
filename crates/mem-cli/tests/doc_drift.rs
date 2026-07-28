@@ -286,6 +286,30 @@ fn versioned_docs_match_package_version() {
 }
 
 #[test]
+fn agent_entrypoints_describe_runtime_only_store_discovery() {
+    let root = repository_root();
+    for relative in ["AGENTS.md", "CLAUDE.md"] {
+        let path = root.join(relative);
+        let content = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+        assert!(
+            content.contains("docs/agent-reference.md"),
+            "{relative} must route repository work through the canonical agent reference"
+        );
+    }
+
+    let claude = fs::read_to_string(root.join("CLAUDE.md")).expect("read CLAUDE.md");
+    assert!(
+        claude.contains("source checkouts are never selected implicitly"),
+        "CLAUDE.md must describe runtime-only store discovery"
+    );
+    assert!(
+        !claude.contains("store discovery would treat the repo itself as a runtime store"),
+        "CLAUDE.md must not retain the removed source-checkout discovery behavior"
+    );
+}
+
+#[test]
 fn mnemark_skill_keeps_safety_and_routing_boundaries() {
     let root = repository_root();
     let skill_path = root.join("skills/mnemark/SKILL.md");

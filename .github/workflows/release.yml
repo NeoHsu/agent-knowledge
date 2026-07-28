@@ -87,6 +87,10 @@ jobs:
           RELEASE_TAG: ${{ !github.event.pull_request && github.ref_name || '' }}
         run: python3 scripts/check-release-metadata.py --release-tag "$RELEASE_TAG"
 
+      - name: Reject runtime artifacts in the source checkout
+        if: runner.os == 'Linux'
+        run: python3 scripts/check-source-hygiene.py
+
       - name: Check formatting
         if: runner.os == 'Linux'
         run: cargo fmt --all -- --check

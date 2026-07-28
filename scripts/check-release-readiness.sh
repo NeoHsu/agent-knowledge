@@ -41,6 +41,7 @@ if [[ -n "$RELEASE_TAG" ]]; then
 	metadata_args+=(--release-tag "$RELEASE_TAG")
 fi
 python3 scripts/check-release-metadata.py "${metadata_args[@]}"
+python3 scripts/check-source-hygiene.py
 
 for command in cargo python3 git; do
 	if ! command -v "$command" >/dev/null 2>&1; then

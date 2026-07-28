@@ -1,0 +1,7 @@
+target/**
+index/**
+memory.db
+memory.db-*
+.mem.lock
+graphify-out/**
+.git/**

@@ -20,8 +20,9 @@ if [[ "$(uname -s)" == "Darwin" && ("${CC:-}" == "zig cc" || "${CXX:-}" == "zig 
 	unset CC CXX
 fi
 
-"$CARGO_BIN" build --release --locked --manifest-path "$ROOT/Cargo.toml"
-MEM_BIN="$ROOT/target/release/mem"
+TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
+"$CARGO_BIN" build --release --locked --manifest-path "$ROOT/Cargo.toml" --target-dir "$TARGET_DIR"
+MEM_BIN="$TARGET_DIR/release/mem"
 if [[ "${OS:-}" == "Windows_NT" ]]; then
 	MEM_BIN+=".exe"
 fi

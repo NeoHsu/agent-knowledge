@@ -1,4 +1,5 @@
 /target/
+/graphify-out/
 /index/
 /memory.db
 /memory.db-*
