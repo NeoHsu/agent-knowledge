@@ -38,7 +38,9 @@ def report(median: float = 50.0) -> dict[str, object]:
     }
 
 
-def v2_report(*, label: str = "candidate", comparison: bool = False) -> dict[str, object]:
+def v2_report(
+    *, label: str = "candidate", comparison: bool = False
+) -> dict[str, object]:
     value = report()
     value.update(
         {

@@ -44,7 +44,9 @@ def validate_report_schema(
 ) -> int | None:
     version = report.get("schema_version")
     if version not in SUPPORTED_REPORT_SCHEMA_VERSIONS:
-        supported = ", ".join(str(value) for value in sorted(SUPPORTED_REPORT_SCHEMA_VERSIONS))
+        supported = ", ".join(
+            str(value) for value in sorted(SUPPORTED_REPORT_SCHEMA_VERSIONS)
+        )
         errors.append(f"{label} schema_version must be one of: {supported}")
         return None
     if version == 2:
@@ -52,7 +54,9 @@ def validate_report_schema(
             errors.append(f"{label}.benchmark_protocol_version must be 2")
         protocol_hash = report.get("benchmark_protocol_sha256")
         if not isinstance(protocol_hash, str) or not protocol_hash:
-            errors.append(f"{label}.benchmark_protocol_sha256 must be a non-empty string")
+            errors.append(
+                f"{label}.benchmark_protocol_sha256 must be a non-empty string"
+            )
         elif protocol_hash != report.get("benchmark_script_sha256"):
             errors.append(
                 f"{label} protocol and compatibility script hashes must match"
@@ -162,9 +166,10 @@ def check_baseline(
             errors.append(f"candidate and baseline {field} differ")
 
     if candidate_version == 2 and baseline_version == 2:
-        if report.get("comparison_mode") is not True or baseline.get(
-            "comparison_mode"
-        ) is not True:
+        if (
+            report.get("comparison_mode") is not True
+            or baseline.get("comparison_mode") is not True
+        ):
             errors.append(
                 "schema v2 baseline comparisons must come from one interleaved run"
             )
@@ -176,13 +181,21 @@ def check_baseline(
             errors.append("interleaved reports must identify their comparison peers")
         else:
             if candidate_peer.get("binary_sha256") != baseline.get("binary_sha256"):
-                errors.append("candidate comparison peer does not match baseline binary")
+                errors.append(
+                    "candidate comparison peer does not match baseline binary"
+                )
             if baseline_peer.get("binary_sha256") != report.get("binary_sha256"):
-                errors.append("baseline comparison peer does not match candidate binary")
+                errors.append(
+                    "baseline comparison peer does not match candidate binary"
+                )
             if candidate_peer.get("git_commit") != baseline.get("git_commit"):
-                errors.append("candidate comparison peer does not match baseline commit")
+                errors.append(
+                    "candidate comparison peer does not match baseline commit"
+                )
             if baseline_peer.get("git_commit") != report.get("git_commit"):
-                errors.append("baseline comparison peer does not match candidate commit")
+                errors.append(
+                    "baseline comparison peer does not match candidate commit"
+                )
     if not allow_platform_mismatch and report.get("platform") != baseline.get(
         "platform"
     ):
