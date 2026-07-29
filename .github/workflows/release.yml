@@ -29,6 +29,11 @@ jobs:
           persist-credentials: false
           submodules: recursive
 
+      - name: Install Python 3.13
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.13"
+
       - name: Verify exact CLI, skill, and release-tag version lockstep
         env:
           RELEASE_TAG: ${{ !github.event.pull_request && github.ref_name || '' }}
@@ -82,6 +87,12 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
           submodules: recursive
+
+      - name: Install Python 3.13
+        if: runner.os == 'Linux'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.13"
 
       - name: Install Rust 1.97
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master

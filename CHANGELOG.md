@@ -59,6 +59,12 @@ All notable changes to mnemark are documented here.
   stats, audit, garbage-collection, and rendering modules without changing SQL
   or output formats.
 
+### Fixed
+
+- Release verification now installs Python 3.13 before running the
+  `tomllib`-based version checker, and CLI-surface drift tests normalize CRLF
+  checkouts on Windows.
+
 ### Performance
 
 - Reduced the Tantivy writer memory budget from 50 MB to 20 MB after

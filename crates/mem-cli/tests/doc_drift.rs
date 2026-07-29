@@ -371,6 +371,10 @@ fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+fn normalize_line_endings(text: &str) -> String {
+    text.replace("\r\n", "\n")
+}
+
 #[test]
 fn cli_surface_snapshot_matches_clap() {
     let mut command = cli_args::Cli::command();
@@ -386,11 +390,16 @@ fn cli_surface_snapshot_matches_clap() {
         fs::write(&path, &actual).expect("write CLI surface snapshot");
         return;
     }
-    let expected = fs::read_to_string(&path).unwrap_or_default();
+    let expected = normalize_line_endings(&fs::read_to_string(&path).unwrap_or_default());
     assert_eq!(
         expected, actual,
         "CLI surface changed. Run UPDATE_CLI_SURFACE=1 cargo test -p mnemark --test doc_drift cli_surface_snapshot_matches_clap, then update docs and skills."
     );
+}
+
+#[test]
+fn cli_surface_snapshot_normalizes_windows_line_endings() {
+    assert_eq!(normalize_line_endings("one\r\ntwo\r\n"), "one\ntwo\n");
 }
 
 #[test]
