@@ -13,6 +13,8 @@ All notable changes to mnemark are documented here.
   bootstrap confidence intervals.
 - Added a release-build SHA-256 gate for the exact CC-CEDICT source archive
   embedded by Lindera.
+- Added a retained 100,000-memory development canary report covering import,
+  query, Prime, graph rebuild, bundle export, sizes, and peak RSS.
 - Added the `index_stale_after_write` JSON error code and structured recovery
   details when a durable SQLite write commits before its Tantivy update fails,
   allowing automation to repair the index without blindly retrying the write.

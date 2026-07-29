@@ -28,6 +28,15 @@
         "graph_rebuild": { "median_ms_max": 180000 },
         "bundle_export": { "median_ms_max": 180000 }
       }
+    },
+    "100000": {
+      "operations": {
+        "import": { "median_ms_max": 600000 },
+        "query": { "median_ms_max": 10000 },
+        "prime": { "median_ms_max": 30000 },
+        "graph_rebuild": { "median_ms_max": 900000 },
+        "bundle_export": { "median_ms_max": 900000 }
+      }
     }
   }
 }

@@ -173,8 +173,47 @@ INTERACTIVE_RUNS=5 \
 MAINTENANCE_RUNS=1 \
 REPORT_FILE=/tmp/mnemark-100k.json \
 scripts/benchmark-scale.sh
+
+python3 scripts/check-benchmark-regression.py \
+  --report /tmp/mnemark-100k.json \
+  --guardrails scripts/benchmark-guardrails.json
 ```
 
-Do not infer a service-level objective from that canary. Review correctness,
+The 100,000-memory entries are deliberately broad catastrophic guardrails for
+manual canaries, not CI performance targets. Do not infer a service-level
+objective from that canary. Review correctness,
 peak RSS, database/index size, graph rebuild latency, and bundle stages before
 raising the documented support envelope beyond 10,000 memories.
+
+### Retained 100,000-memory development canary
+
+A clean development build from commit
+`d67823742da2a650b31cce81fdcf498dce615f86` was exercised on 2026-07-29 on
+the same Apple M2 Max platform with Rust 1.97.0 and Python 3.14.6. The binary
+SHA-256 was
+`198fa025e11f428a5cd5534fe13d6af2187cca4cf1d09e74bc8cedcfbf798025`.
+All operation-level correctness assertions and the portable 100,000-memory
+catastrophic guardrails passed.
+
+| Operation | Samples | Median | Median 95% interval | Peak RSS |
+| --- | ---: | ---: | ---: | ---: |
+| Import | 1 | 18.86 s | — | 276.34 MiB |
+| Query | 5 | 32.74 ms | 31.32–35.85 ms | 46.03 MiB |
+| Prime | 5 | 160.04 ms | 158.46–164.77 ms | 12.77 MiB |
+| Graph rebuild | 1 | 23.29 s | — | 235.39 MiB |
+| Bundle export | 1 | 16.81 s | — | 120.28 MiB |
+
+The populated database was 388.61 MiB, the Tantivy index was 6.77 MiB, and the
+bundle was 55.68 MiB. Bundle export spent 3.11 s on the SQLite snapshot and
+8.76 s on validation; its 4.07 s hash and 4.89 s archive observations overlap.
+The single maintenance samples establish capacity and correctness evidence,
+not a latency distribution. They did not show a correctness failure or an
+obvious nonlinear graph-growth alarm, so no graph insertion or parsing change
+was made.
+
+Retained evidence:
+
+- [`benchmarks/v0.9.0-dev-100k-macos-arm64.json`](benchmarks/v0.9.0-dev-100k-macos-arm64.json)
+  (SHA-256 `e19c56afe9d7916a9d0c42f0d71ffeaf0df32dbc1ae0b6986689d4c040413fa7`);
+- [`benchmarks/v0.9.0-dev-100k-macos-arm64.csv`](benchmarks/v0.9.0-dev-100k-macos-arm64.csv)
+  (SHA-256 `dc1d93eeaaa8aa08c0af84c7528ef9a89ca29588c5b389bd6cdf916ac6b073b1`).

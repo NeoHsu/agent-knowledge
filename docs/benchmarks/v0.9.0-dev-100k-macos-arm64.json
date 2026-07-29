@@ -1,0 +1,212 @@
+{
+  "schema_version": 2,
+  "benchmark_protocol_version": 2,
+  "generated_at": "2026-07-29T07:32:24Z",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "python": "3.14.6",
+  "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+  "binary": "/Users/neo/Documents/work/github/code/mnemark/target/release/mem",
+  "binary_sha256": "198fa025e11f428a5cd5534fe13d6af2187cca4cf1d09e74bc8cedcfbf798025",
+  "benchmark_script_sha256": "88cefa9f427e68a082f9913b0722de989239b31356cea58345321e99d5b88546",
+  "benchmark_protocol_sha256": "88cefa9f427e68a082f9913b0722de989239b31356cea58345321e99d5b88546",
+  "benchmark_protocol_files": [
+    "scripts/benchmark-scale.sh",
+    "scripts/benchmark_scale.py"
+  ],
+  "mem_version": "mem 0.9.0",
+  "git_commit": "d67823742da2a650b31cce81fdcf498dce615f86",
+  "git_dirty": false,
+  "run_label": "candidate",
+  "comparison_mode": false,
+  "comparison_peer": null,
+  "cache_model": {
+    "import": "fresh initialized store per measured run",
+    "interactive": "separate process per run after configured warmups; OS cache retained",
+    "maintenance": "same populated store for graph and bundle repetitions",
+    "comparison": "single binary"
+  },
+  "seed": 42,
+  "execution_order": [
+    100000
+  ],
+  "sample_schedule": {
+    "100000": {
+      "import": [
+        [
+          "candidate"
+        ]
+      ],
+      "warmup": [
+        [
+          "candidate"
+        ]
+      ],
+      "interactive": [
+        [
+          "candidate:prime",
+          "candidate:query"
+        ],
+        [
+          "candidate:prime",
+          "candidate:query"
+        ],
+        [
+          "candidate:query",
+          "candidate:prime"
+        ],
+        [
+          "candidate:prime",
+          "candidate:query"
+        ],
+        [
+          "candidate:prime",
+          "candidate:query"
+        ]
+      ],
+      "graph_rebuild": [
+        [
+          "candidate"
+        ]
+      ],
+      "bundle_export": [
+        [
+          "candidate"
+        ]
+      ]
+    }
+  },
+  "interactive_runs": 5,
+  "maintenance_runs": 1,
+  "warmup_runs": 1,
+  "statistic_model": {
+    "center": "median",
+    "dispersion": "median absolute deviation",
+    "confidence_interval": "deterministic nonparametric bootstrap median, 2000 resamples",
+    "p95": "nearest-rank, emitted only with at least 20 samples"
+  },
+  "results": [
+    {
+      "scale": 100000,
+      "sizes": {
+        "payload_bytes": 38687780,
+        "database_bytes": 407486464,
+        "index_bytes": 7094371,
+        "bundle_bytes": 58379607
+      },
+      "operations": {
+        "import": {
+          "median": 18858.906292007305,
+          "p95": null,
+          "min": 18858.906292007305,
+          "max": 18858.906292007305,
+          "mad": 0.0,
+          "median_ci95_low": null,
+          "median_ci95_high": null,
+          "runs": 1,
+          "peak_rss_mib": 276.34375,
+          "input_bytes": 38687780,
+          "output_bytes": 414580835
+        },
+        "query": {
+          "median": 32.738042005803436,
+          "p95": null,
+          "min": 31.32174999336712,
+          "max": 35.847124992869794,
+          "mad": 1.4162920124363154,
+          "median_ci95_low": 31.32174999336712,
+          "median_ci95_high": 35.847124992869794,
+          "runs": 5,
+          "peak_rss_mib": 46.03125,
+          "input_bytes": 414580835,
+          "output_bytes": 0
+        },
+        "prime": {
+          "median": 160.03620901028626,
+          "p95": null,
+          "min": 158.45812499173917,
+          "max": 164.76962500019,
+          "mad": 1.320459006819874,
+          "median_ci95_low": 158.45812499173917,
+          "median_ci95_high": 164.76962500019,
+          "runs": 5,
+          "peak_rss_mib": 12.765625,
+          "input_bytes": 407486464,
+          "output_bytes": 4000
+        },
+        "graph_rebuild": {
+          "median": 23291.804165986832,
+          "p95": null,
+          "min": 23291.804165986832,
+          "max": 23291.804165986832,
+          "mad": 0.0,
+          "median_ci95_low": null,
+          "median_ci95_high": null,
+          "runs": 1,
+          "peak_rss_mib": 235.390625,
+          "input_bytes": 407486464,
+          "output_bytes": 407486464
+        },
+        "bundle_export": {
+          "median": 16809.68137498712,
+          "p95": null,
+          "min": 16809.68137498712,
+          "max": 16809.68137498712,
+          "mad": 0.0,
+          "median_ci95_low": null,
+          "median_ci95_high": null,
+          "runs": 1,
+          "peak_rss_mib": 120.28125,
+          "input_bytes": 407486464,
+          "output_bytes": 58379607,
+          "stages_ms": {
+            "snapshot_ms": {
+              "median": 3111.619375,
+              "p95": null,
+              "min": 3111.619375,
+              "max": 3111.619375,
+              "mad": 0.0,
+              "median_ci95_low": null,
+              "median_ci95_high": null
+            },
+            "validation_ms": {
+              "median": 8763.217125000001,
+              "p95": null,
+              "min": 8763.217125000001,
+              "max": 8763.217125000001,
+              "mad": 0.0,
+              "median_ci95_low": null,
+              "median_ci95_high": null
+            },
+            "hash_ms": {
+              "median": 4072.556875,
+              "p95": null,
+              "min": 4072.556875,
+              "max": 4072.556875,
+              "mad": 0.0,
+              "median_ci95_low": null,
+              "median_ci95_high": null
+            },
+            "archive_ms": {
+              "median": 4894.44975,
+              "p95": null,
+              "min": 4894.44975,
+              "max": 4894.44975,
+              "mad": 0.0,
+              "median_ci95_low": null,
+              "median_ci95_high": null
+            },
+            "install_ms": {
+              "median": 0.6595000000000001,
+              "p95": null,
+              "min": 0.6595000000000001,
+              "max": 0.6595000000000001,
+              "mad": 0.0,
+              "median_ci95_low": null,
+              "median_ci95_high": null
+            }
+          }
+        }
+      }
+    }
+  ]
+}
