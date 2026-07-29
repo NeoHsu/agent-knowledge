@@ -41,8 +41,12 @@ Read:
 1. `README.md`
 2. `docs/getting-started.md`
 3. `skills/mnemark/references/cli-guide.md`
-4. `crates/mem-cli/src/args.rs`
-5. the relevant file under `crates/mem-cli/src/commands/`
+4. `crates/mem-cli/src/args/mod.rs` and the relevant domain module under
+   `crates/mem-cli/src/args/`
+5. the relevant file or module under `crates/mem-cli/src/commands/`; memory,
+   merge, and bundle implementations live under
+   `crates/mem-cli/src/commands/memory/`, `crates/mem-cli/src/commands/merge/`,
+   and `crates/mem-cli/src/commands/bundle/`
 6. related tests under `crates/mem-cli/tests/`
 
 Update docs and tests with behavior changes.
@@ -79,7 +83,9 @@ Read:
 3. `crates/mem-core/src/graph.rs` for the public façade
 4. the relevant module under `crates/mem-core/src/graph/`:
    - `model.rs` for public request/report types;
-   - `query.rs` for explain/path/query/export/candidates;
+   - `crates/mem-core/src/graph/query/mod.rs` and the modules under
+     `crates/mem-core/src/graph/query/` for resolution, traversal, path,
+     neighborhood, candidates, and export;
    - `materialize.rs` for deterministic rebuild and extraction;
    - `health.rs` for graph audit and health reports;
    - `ids.rs` and `store.rs` for shared identifiers and SQLite operations;
@@ -103,7 +109,8 @@ Read:
 3. `skills/mnemark/references/workflow-rules.md`
 4. `templates/workflow.yaml`
 5. `crates/mem-core/src/workflow.rs`
-6. `crates/mem-core/src/artifact.rs`
+6. `crates/mem-core/src/artifact/mod.rs` and the relevant module under
+   `crates/mem-core/src/artifact/`
 7. `crates/mem-cli/tests/workflow.rs` and `crates/mem-cli/tests/artifact.rs`
 
 Workflow helpers must discover, show, and validate only; they must not execute

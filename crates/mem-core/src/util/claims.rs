@@ -216,9 +216,9 @@ mod tests {
 
     #[test]
     fn extracts_backticked_path_span() {
-        let extracted = extract_claims("檢查 `crates/mem-cli/src/args.rs` 的定義");
+        let extracted = extract_claims("檢查 `crates/mem-cli/src/args/mod.rs` 的定義");
         let paths = claim_texts(&extracted, ClaimKind::Path);
-        assert_eq!(paths, vec!["crates/mem-cli/src/args.rs"]);
+        assert_eq!(paths, vec!["crates/mem-cli/src/args/mod.rs"]);
         assert!(extracted.claims[0].backticked);
     }
 

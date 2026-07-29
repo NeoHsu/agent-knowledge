@@ -286,6 +286,46 @@ fn versioned_docs_match_package_version() {
 }
 
 #[test]
+fn agent_reference_tracks_split_module_paths() {
+    let root = repository_root();
+    let path = root.join("docs/agent-reference.md");
+    let reference = fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+
+    for relative in [
+        "crates/mem-cli/src/args/mod.rs",
+        "crates/mem-cli/src/commands/memory/",
+        "crates/mem-cli/src/commands/merge/",
+        "crates/mem-cli/src/commands/bundle/",
+        "crates/mem-core/src/graph/query/mod.rs",
+        "crates/mem-core/src/artifact/mod.rs",
+    ] {
+        assert!(
+            root.join(relative).exists(),
+            "expected split module path to exist: {relative}"
+        );
+        assert!(
+            reference.contains(relative),
+            "agent reference must route readers to split module path: {relative}"
+        );
+    }
+
+    for removed in [
+        "crates/mem-cli/src/args.rs",
+        "crates/mem-cli/src/commands/memory.rs",
+        "crates/mem-cli/src/commands/merge.rs",
+        "crates/mem-cli/src/commands/bundle.rs",
+        "crates/mem-core/src/graph/query.rs",
+        "crates/mem-core/src/artifact.rs",
+    ] {
+        assert!(
+            !reference.contains(removed),
+            "agent reference must not point to removed module: {removed}"
+        );
+    }
+}
+
+#[test]
 fn agent_entrypoints_describe_runtime_only_store_discovery() {
     let root = repository_root();
     for relative in ["AGENTS.md", "CLAUDE.md"] {
