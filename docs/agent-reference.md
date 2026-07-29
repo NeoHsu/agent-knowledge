@@ -86,7 +86,9 @@ Read:
    - `crates/mem-core/src/graph/query/mod.rs` and the modules under
      `crates/mem-core/src/graph/query/` for resolution, traversal, path,
      neighborhood, candidates, and export;
-   - `materialize.rs` for deterministic rebuild and extraction;
+   - `crates/mem-core/src/graph/materialize/mod.rs` and the modules under
+     `crates/mem-core/src/graph/materialize/` for deterministic rebuild
+     orchestration and memory, workflow, and artifact extraction;
    - `health.rs` for graph audit and health reports;
    - `ids.rs` and `store.rs` for shared identifiers and SQLite operations;
    - `semantic.rs` for shared durable semantic-edge validation/persistence;

@@ -219,7 +219,8 @@ in the dedicated modules:
 - `ids.rs` — stable node identifiers;
 - `store.rs` — shared SQLite rows, metadata, and low-level writes;
 - `query.rs` — explain, path, query, export, and candidates;
-- `materialize.rs` — deterministic rebuild and source extraction;
+- `materialize/mod.rs` and `materialize/` — deterministic rebuild orchestration,
+  memory/workflow/artifact extraction, and shared insertion helpers;
 - `health.rs` — graph audit and health reporting;
 - `semantic.rs` and `semantic/` — shared validation/persistence plus ingest,
   merge, projection, and review operations.

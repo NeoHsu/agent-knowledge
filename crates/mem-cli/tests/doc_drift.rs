@@ -298,6 +298,7 @@ fn agent_reference_tracks_split_module_paths() {
         "crates/mem-cli/src/commands/merge/",
         "crates/mem-cli/src/commands/bundle/",
         "crates/mem-core/src/graph/query/mod.rs",
+        "crates/mem-core/src/graph/materialize/mod.rs",
         "crates/mem-core/src/artifact/mod.rs",
     ] {
         assert!(
@@ -316,6 +317,7 @@ fn agent_reference_tracks_split_module_paths() {
         "crates/mem-cli/src/commands/merge.rs",
         "crates/mem-cli/src/commands/bundle.rs",
         "crates/mem-core/src/graph/query.rs",
+        "crates/mem-core/src/graph/materialize.rs",
         "crates/mem-core/src/artifact.rs",
     ] {
         assert!(

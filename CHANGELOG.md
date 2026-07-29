@@ -22,6 +22,9 @@ All notable changes to mnemark are documented here.
 - Removed the duplicate Ubuntu MSRV lane from pull-request CI while retaining
   stable Linux and Rust 1.97 Linux/macOS/Windows coverage across the two
   workflows; direct `main` pushes still run both stable and MSRV lanes.
+- Split deterministic graph materialization into rebuild orchestration,
+  memory, workflow, artifact, and shared insertion modules without changing
+  graph identities or traversal behavior.
 
 ### Performance
 
