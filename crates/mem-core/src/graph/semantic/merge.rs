@@ -1,6 +1,7 @@
 //! Idempotent semantic-edge merge and conflict handling.
 
 use super::*;
+use crate::error;
 
 pub fn merge_semantic_edges(
     conn: &Connection,
@@ -41,23 +42,31 @@ pub fn merge_semantic_edges(
             allow_secret_redaction,
         )?;
         let tags = sanitize_json_secrets(&edge.tags, "semantic edge tags", allow_secret_redaction)?;
-        let tags = normalized_string_array(&tags).map_err(anyhow::Error::msg)?;
+        let tags = normalized_string_array(&tags).map_err(error::safety_violation)?;
         if evidence.chars().count() > 20_000 {
-            bail!("merged semantic edge evidence exceeds 20000 characters");
+            return Err(error::safety_violation(
+                "merged semantic edge evidence exceeds 20000 characters",
+            ));
         }
         if rationale
             .as_deref()
             .is_some_and(|value| value.chars().count() > 10_000)
         {
-            bail!("merged semantic edge rationale exceeds 10000 characters");
+            return Err(error::safety_violation(
+                "merged semantic edge rationale exceeds 10000 characters",
+            ));
         }
         if source_spans.to_string().len() > 100_000 {
-            bail!("merged semantic edge source_spans exceeds 100000 bytes");
+            return Err(error::safety_violation(
+                "merged semantic edge source_spans exceeds 100000 bytes",
+            ));
         }
         if tags.as_array().is_some_and(|values| values.len() > 100) {
-            bail!("merged semantic edge tags cannot exceed 100 entries");
+            return Err(error::safety_violation(
+                "merged semantic edge tags cannot exceed 100 entries",
+            ));
         }
-        validate_semantic_edge_id(&edge.id).map_err(anyhow::Error::msg)?;
+        validate_semantic_edge_id(&edge.id).map_err(error::safety_violation)?;
         let (source_ref, source_resolved) =
             remap_merge_endpoint(conn, &edge.source_ref, memory_id_map)?;
         let (target_ref, target_resolved) =

@@ -1,8 +1,9 @@
 use std::collections::BTreeSet;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use rusqlite::{params, Connection};
 
+use crate::error;
 use crate::util::sanitize_secret_field;
 
 use super::introspection::table_exists;
@@ -201,35 +202,47 @@ pub fn validate_store_schema_objects(conn: &Connection) -> Result<()> {
                     .iter()
                     .find(|(expected, _, _)| *expected == name)
                 else {
-                    bail!("store contains unexpected trigger: {name}");
+                    return Err(error::integrity(format!(
+                        "store contains unexpected trigger: {name}"
+                    )));
                 };
                 let expected = format!(
                     "CREATE TRIGGER {name} BEFORE {action} ON {table} \
                      WHEN NEW.uid IS NULL OR NEW.uid = '' \
                      BEGIN SELECT RAISE(ABORT, 'durable event uid is required'); END"
                 );
-                let actual =
-                    sql.ok_or_else(|| anyhow::anyhow!("store trigger {name} has no SQL"))?;
+                let actual = sql
+                    .ok_or_else(|| error::integrity(format!("store trigger {name} has no SQL")))?;
                 if normalize_schema_sql(&actual) != normalize_schema_sql(&expected) {
-                    bail!("store trigger definition is not trusted: {name}");
+                    return Err(error::integrity(format!(
+                        "store trigger definition is not trusted: {name}"
+                    )));
                 }
                 found_triggers.insert(name);
             }
-            _ => bail!("store contains unexpected {kind}: {name}"),
+            _ => {
+                return Err(error::integrity(format!(
+                    "store contains unexpected {kind}: {name}"
+                )))
+            }
         }
     }
     if REQUIRED_TABLES
         .iter()
         .any(|name| !found_tables.contains(*name))
     {
-        bail!("store is missing durable schema-v5 tables");
+        return Err(error::integrity(
+            "store is missing durable schema-v5 tables",
+        ));
     }
     let expected_triggers = UID_TRIGGERS
         .iter()
         .map(|(name, _, _)| (*name).to_string())
         .collect();
     if found_triggers != expected_triggers {
-        bail!("store trigger set does not match schema v5");
+        return Err(error::integrity(
+            "store trigger set does not match schema v5",
+        ));
     }
     Ok(())
 }

@@ -3,7 +3,7 @@ use std::fs::{self, OpenOptions};
 use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use chrono::Utc;
 use fs2::FileExt;
 use rusqlite::{Connection, OpenFlags};
@@ -14,6 +14,7 @@ use crate::db::{
     ensure_store_id, migrate_schema, schema_compatibility_required, supported_schema_version,
     validate_store_schema_objects,
 };
+use crate::error;
 use crate::search_index;
 
 const MEMORY_SCHEMA: &str = include_str!("../../../schema/memory-schema.sql");
@@ -120,21 +121,23 @@ impl App {
 
     pub fn require_schema(&self) -> Result<()> {
         if !self.db_path.exists() {
-            bail!(
+            return Err(error::not_found(format!(
                 "memory store not found at {}; run `mem init` explicitly",
                 self.db_path.display()
-            );
+            )));
         }
         let actual = self.schema_version()?;
         let supported = supported_schema_version();
         if actual < supported {
-            bail!(
+            return Err(error::compatibility(format!(
                 "database schema v{actual} requires explicit migration to v{supported}; \
                  back up the store and run `mem migrate --dry-run`, then `mem migrate`"
-            );
+            )));
         }
         if actual > supported {
-            bail!("database schema v{actual} is newer than this binary supports (v{supported})");
+            return Err(error::compatibility(format!(
+                "database schema v{actual} is newer than this binary supports (v{supported})"
+            )));
         }
         let conn = self.read_conn()?;
         let has_store_id: bool = conn
@@ -145,13 +148,15 @@ impl App {
             )
             .unwrap_or(false);
         if !has_store_id {
-            bail!("store identity metadata is missing; run `mem migrate` explicitly to repair it");
+            return Err(error::compatibility(
+                "store identity metadata is missing; run `mem migrate` explicitly to repair it",
+            ));
         }
         if schema_compatibility_required(&conn)? {
-            bail!(
+            return Err(error::compatibility(format!(
                 "database schema v{actual} requires explicit compatibility repair; \
                  run `mem migrate --dry-run`, then `mem migrate`"
-            );
+            )));
         }
         validate_store_schema_objects(&conn)
             .context("store contains unexpected schema objects; restore a trusted backup")?;
@@ -160,15 +165,17 @@ impl App {
 
     pub fn migrate(&self) -> Result<Option<PathBuf>> {
         if !self.db_path.exists() {
-            bail!(
+            return Err(error::not_found(format!(
                 "memory store not found at {}; run `mem init` explicitly",
                 self.db_path.display()
-            );
+            )));
         }
         let current = self.schema_version()?;
         let supported = supported_schema_version();
         if current > supported {
-            bail!("database schema v{current} is newer than this binary supports (v{supported})");
+            return Err(error::compatibility(format!(
+                "database schema v{current} is newer than this binary supports (v{supported})"
+            )));
         }
         if current == supported {
             let conn = self.read_conn()?;
@@ -207,7 +214,9 @@ impl App {
         };
         if backup_check != "ok" {
             fs::remove_file(&backup).ok();
-            bail!("migration backup failed SQLite quick_check: {backup_check}");
+            return Err(error::integrity(format!(
+                "migration backup failed SQLite quick_check: {backup_check}"
+            )));
         }
         harden_file_permissions(&backup)?;
 
@@ -219,7 +228,9 @@ impl App {
         }
         let validation = (|| -> Result<()> {
             if schema_compatibility_required(&conn)? {
-                bail!("compatibility invariants are still missing after migration");
+                return Err(error::compatibility(
+                    "compatibility invariants are still missing after migration",
+                ));
             }
             validate_store_schema_objects(&conn)?;
             Ok(())
@@ -234,18 +245,18 @@ impl App {
         }
         let quick_check: String = conn.query_row("PRAGMA quick_check", [], |row| row.get(0))?;
         if quick_check != "ok" {
-            bail!(
+            return Err(error::integrity(format!(
                 "database migration completed but quick_check returned {quick_check:?}; \
                  stop using the store and restore {}",
                 backup.display()
-            );
+            )));
         }
         if schema_compatibility_required(&conn)? {
-            bail!(
+            return Err(error::compatibility(format!(
                 "database migration completed but compatibility invariants are still missing; \
                  stop using the store and restore {}",
                 backup.display()
-            );
+            )));
         }
         validate_store_schema_objects(&conn).with_context(|| {
             format!(
@@ -259,10 +270,10 @@ impl App {
 
     pub fn read_conn(&self) -> Result<Connection> {
         if !validate_database_path(&self.db_path)? {
-            bail!(
+            return Err(error::not_found(format!(
                 "memory store not found at {}; run `mem init` explicitly",
                 self.db_path.display()
-            );
+            )));
         }
         let conn = Connection::open_with_flags(
             &self.db_path,
@@ -300,7 +311,10 @@ where
     let lock_path = app.root.join(".mem.lock");
     if let Ok(metadata) = fs::symlink_metadata(&lock_path) {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
-            bail!("refusing unsafe lock path: {}", lock_path.display());
+            return Err(error::safety_violation(format!(
+                "refusing unsafe lock path: {}",
+                lock_path.display()
+            )));
         }
     }
     let lock = OpenOptions::new()
@@ -325,7 +339,10 @@ where
     let lock_path = app.root.join(".mem.lock");
     if let Ok(metadata) = fs::symlink_metadata(&lock_path) {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
-            bail!("refusing unsafe lock path: {}", lock_path.display());
+            return Err(error::safety_violation(format!(
+                "refusing unsafe lock path: {}",
+                lock_path.display()
+            )));
         }
     }
     let lock = OpenOptions::new()
@@ -346,9 +363,9 @@ where
 
 fn validate_database_path(path: &std::path::Path) -> Result<bool> {
     match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
-            bail!("refusing unsafe database path: {}", path.display())
-        }
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => Err(
+            error::safety_violation(format!("refusing unsafe database path: {}", path.display())),
+        ),
         Ok(_) => Ok(true),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(error.into()),

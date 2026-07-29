@@ -14,6 +14,7 @@ use cli_error::StructuredCommandError;
 use command_effect::{CommandEffect, StoreAccess};
 use commands::*;
 use mem_core::app::{with_lock, with_shared_lock, App};
+use mem_core::error::MnemarkError;
 use mem_core::index as memory_index;
 use mem_core::util::strip_secrets;
 
@@ -40,7 +41,8 @@ fn main() -> ExitCode {
                         "contract_version": CLI_OUTPUT_CONTRACT_VERSION,
                         "code": "cli_parse_error",
                         "message": safe_error_message(error.to_string()),
-                        "exit_code": exit_code
+                        "exit_code": exit_code,
+                        "retryable": false
                     })
                 );
             } else {
@@ -53,15 +55,25 @@ fn main() -> ExitCode {
     match run(cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            let structured = error.downcast_ref::<StructuredCommandError>();
+            let core = error.downcast_ref::<MnemarkError>();
+            let exit_code = structured.map_or_else(
+                || core.map_or(1, |error| error.code().exit_code()),
+                StructuredCommandError::exit_code,
+            );
+            let code = structured.map_or_else(
+                || core.map_or("command_failed", |error| error.code().as_str()),
+                StructuredCommandError::code,
+            );
             let message = format!("{error:#}");
             if json_errors {
-                let structured = error.downcast_ref::<StructuredCommandError>();
                 let mut response = json!({
                     "status": "error",
                     "contract_version": CLI_OUTPUT_CONTRACT_VERSION,
-                    "code": structured.map_or("command_failed", StructuredCommandError::code),
+                    "code": code,
                     "message": safe_error_message(message),
-                    "exit_code": 1
+                    "exit_code": exit_code,
+                    "retryable": structured.is_some_and(StructuredCommandError::retryable)
                 });
                 if let Some(structured) = structured {
                     response["details"] = structured.details().clone();
@@ -70,7 +82,7 @@ fn main() -> ExitCode {
             } else {
                 eprintln!("Error: {message}");
             }
-            ExitCode::FAILURE
+            ExitCode::from(exit_code)
         }
     }
 }

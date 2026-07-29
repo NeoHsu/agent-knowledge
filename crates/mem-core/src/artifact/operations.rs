@@ -2,9 +2,10 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use serde::Serialize;
 
+use crate::error;
 use crate::util::now;
 
 use super::checksum::{file_sha256, is_executable, valid_sha256_checksum};
@@ -112,13 +113,13 @@ pub struct AddArtifact<'a> {
 
 pub fn add_artifact(root: &Path, args: AddArtifact<'_>) -> Result<ArtifactEntry> {
     let relative_path = path_to_manifest_string(args.path)?;
-    validate_artifact_path(&relative_path).map_err(|reason| anyhow::anyhow!(reason))?;
+    validate_artifact_path(&relative_path).map_err(error::safety_violation)?;
     let group = artifact_group(&relative_path)?;
     if group != kind_group(&args.kind) {
-        bail!(
+        return Err(error::usage(format!(
             "artifact kind {:?} does not match path group {group}",
             args.kind
-        );
+        )));
     }
     let full_path = validate_artifact_file(root, &relative_path)?;
     let short_name = match args.name {
@@ -133,7 +134,9 @@ pub fn add_artifact(root: &Path, args: AddArtifact<'_>) -> Result<ArtifactEntry>
             .iter()
             .any(|entry| entry.name == name || entry.record.path == relative_path)
     {
-        bail!("artifact name or path already exists; use --force to replace metadata");
+        return Err(error::conflict(
+            "artifact name or path already exists; use --force to replace metadata",
+        ));
     }
     if args.force {
         remove_matching_entries(&mut manifest, &name, &relative_path);
@@ -167,8 +170,8 @@ pub fn update_artifact_checksum(root: &Path, reference: &str) -> Result<Artifact
         .artifacts
         .get_mut(&group)
         .and_then(|group| group.get_mut(&short_name))
-        .ok_or_else(|| anyhow::anyhow!("artifact not found: {reference}"))?;
-    validate_artifact_path(&record.path).map_err(|reason| anyhow::anyhow!(reason))?;
+        .ok_or_else(|| error::not_found(format!("artifact not found: {reference}")))?;
+    validate_artifact_path(&record.path).map_err(error::safety_violation)?;
     let full_path = validate_artifact_file(root, &record.path)?;
     record.checksum = file_sha256(&full_path)?;
     record.updated_at = Some(now());
@@ -183,7 +186,7 @@ pub fn remove_artifact(root: &Path, reference: &str, delete_file: bool) -> Resul
         .artifacts
         .get_mut(&group)
         .and_then(|records| records.remove(&short_name))
-        .ok_or_else(|| anyhow::anyhow!("artifact not found: {reference}"))?;
+        .ok_or_else(|| error::not_found(format!("artifact not found: {reference}")))?;
     if manifest
         .artifacts
         .get(&group)
@@ -192,7 +195,7 @@ pub fn remove_artifact(root: &Path, reference: &str, delete_file: bool) -> Resul
         manifest.artifacts.remove(&group);
     }
     if delete_file {
-        validate_artifact_path(&record.path).map_err(|reason| anyhow::anyhow!(reason))?;
+        validate_artifact_path(&record.path).map_err(error::safety_violation)?;
         let full_path = root.join(&record.path);
         if full_path.exists() {
             fs::remove_file(&full_path)

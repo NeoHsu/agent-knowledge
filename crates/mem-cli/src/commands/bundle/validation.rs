@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use mem_core::artifact::artifact_file_checksum;
+use mem_core::error as core_error;
 use serde_json::Value;
 
 use super::archive::validate_bundle_path;
@@ -11,26 +12,28 @@ use super::*;
 pub(super) fn prepare_bundle_import(root: &Path, redact_secrets: bool) -> Result<()> {
     let database = root.join("memory.db");
     if !database.is_file() {
-        bail!("bundle does not contain memory.db");
+        return Err(core_error::integrity("bundle does not contain memory.db"));
     }
     let mut conn = Connection::open(&database)?;
     let schema_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     let supported = mem_core::db::supported_schema_version();
     if schema_version != supported {
-        bail!(
+        return Err(core_error::compatibility(format!(
             "bundle database schema v{schema_version} is not supported by this binary (v{supported}); \
              import it into a temporary store, run `mem migrate`, then export a new bundle"
-        );
+        )));
     }
     if mem_core::db::schema_compatibility_required(&conn)? {
-        bail!(
+        return Err(core_error::compatibility(format!(
             "bundle database schema v{schema_version} needs compatibility repair; \
              import it into a temporary store, run `mem migrate`, then export a new bundle"
-        );
+        )));
     }
     let quick_check: String = conn.query_row("PRAGMA quick_check", [], |row| row.get(0))?;
     if quick_check != "ok" {
-        bail!("bundle database failed SQLite quick_check: {quick_check}");
+        return Err(core_error::integrity(format!(
+            "bundle database failed SQLite quick_check: {quick_check}"
+        )));
     }
     mem_core::db::validate_store_schema_objects(&conn)?;
     if redact_secrets {
@@ -208,7 +211,9 @@ pub(super) fn validate_bundle_hashes(root: &Path, bundle: &Value) -> Result<()> 
         if bundle.get("version").and_then(Value::as_i64).unwrap_or(1) <= 1 {
             return Ok(());
         }
-        bail!("bundle metadata is missing required hashes");
+        return Err(core_error::integrity(
+            "bundle metadata is missing required hashes",
+        ));
     };
     let hashes = hashes
         .as_object()
@@ -226,10 +231,10 @@ pub(super) fn validate_bundle_hashes(root: &Path, bundle: &Value) -> Result<()> 
             .difference(&actual_paths)
             .cloned()
             .collect::<Vec<_>>();
-        bail!(
+        return Err(core_error::integrity(format!(
             "bundle file manifest mismatch; files without hashes: {missing_hashes:?}; \
              hashes without files: {missing_files:?}"
-        );
+        )));
     }
     for (relative, expected) in hashes {
         let expected = expected
@@ -239,11 +244,15 @@ pub(super) fn validate_bundle_hashes(root: &Path, bundle: &Value) -> Result<()> 
         validate_bundle_path(relative_path, false)?;
         let path = root.join(relative_path);
         if !path.is_file() {
-            bail!("bundle hash references missing file: {relative}");
+            return Err(core_error::integrity(format!(
+                "bundle hash references missing file: {relative}"
+            )));
         }
         let actual = artifact_file_checksum(&path)?;
         if actual != expected {
-            bail!("bundle checksum mismatch for {relative}: expected {expected}, got {actual}");
+            return Err(core_error::integrity(format!(
+                "bundle checksum mismatch for {relative}: expected {expected}, got {actual}"
+            )));
         }
     }
     Ok(())

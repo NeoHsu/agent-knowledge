@@ -1,23 +1,25 @@
 //! Semantic-edge ingest validation and trust handling.
 
 use super::*;
+use crate::error;
 
 pub fn ingest_semantic_edges(
     conn: &Connection,
     payload: Value,
     options: GraphIngestOptions,
 ) -> Result<GraphIngestReport> {
-    let payload: SemanticEdgePayload =
-        serde_json::from_value(payload).context("parse semantic edge payload")?;
+    let payload: SemanticEdgePayload = serde_json::from_value(payload)
+        .map_err(|source| error::usage(format!("parse semantic edge payload: {source}")))?;
     if payload.schema_version != GRAPH_SCHEMA_VERSION {
-        bail!(
+        return Err(error::compatibility(format!(
             "unsupported semantic edge schema_version {}; expected {}",
-            payload.schema_version,
-            GRAPH_SCHEMA_VERSION
-        );
+            payload.schema_version, GRAPH_SCHEMA_VERSION
+        )));
     }
     if payload.edges.len() > 1_000 {
-        bail!("semantic edge payload cannot exceed 1000 edges");
+        return Err(error::usage(
+            "semantic edge payload cannot exceed 1000 edges",
+        ));
     }
     let inputs = payload.edges;
 
@@ -150,13 +152,13 @@ fn ingest_one_semantic_edge(
         "semantic edge source_spans",
         options.allow_secret_redaction,
     )?;
-    let source_spans = normalized_json_array(&source_spans).map_err(|err| anyhow::anyhow!(err))?;
+    let source_spans = normalized_json_array(&source_spans).map_err(error::usage)?;
     let tags = sanitize_json_secrets(
         &input.tags,
         "semantic edge tags",
         options.allow_secret_redaction,
     )?;
-    let tags = normalized_string_array(&tags).map_err(|err| anyhow::anyhow!(err))?;
+    let tags = normalized_string_array(&tags).map_err(error::usage)?;
     let valid_until = input
         .valid_until
         .as_deref()
@@ -192,7 +194,7 @@ fn ingest_one_semantic_edge(
     }
 
     let id = match input.id.as_deref().filter(|id| !id.trim().is_empty()) {
-        Some(id) => validate_semantic_edge_id(id).map_err(|err| anyhow::anyhow!(err))?,
+        Some(id) => validate_semantic_edge_id(id).map_err(error::usage)?,
         None => format!(
             "sem_{}",
             stable_hash_hex(&format!(
@@ -404,7 +406,7 @@ fn normalize_endpoint_for_ingest(conn: &Connection, reference: &str) -> Result<O
     if reference.starts_with("concept:") {
         return validate_concept_node_id(reference)
             .map(Some)
-            .map_err(|err| anyhow::anyhow!(err));
+            .map_err(error::usage);
     }
     if node_by_id(conn, reference)?.is_some() {
         return Ok(Some(reference.to_string()));

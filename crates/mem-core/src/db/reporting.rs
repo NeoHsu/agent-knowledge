@@ -1,4 +1,5 @@
 use super::*;
+use crate::error;
 
 /// Whitelisted columns allowed in `grouped_count` to prevent SQL injection.
 enum GroupColumn {
@@ -30,8 +31,11 @@ impl GroupColumn {
 }
 
 pub fn grouped_count(conn: &Connection, column: &str) -> Result<Value> {
-    let col = GroupColumn::from_str(column)
-        .ok_or_else(|| anyhow::anyhow!("grouped_count: unsupported column '{column}'; expected one of: type, scope, source, confidence"))?;
+    let col = GroupColumn::from_str(column).ok_or_else(|| {
+        error::usage(format!(
+            "grouped_count: unsupported column '{column}'; expected one of: type, scope, source, confidence"
+        ))
+    })?;
     let sql = format!(
         "SELECT {}, COUNT(*) FROM memories WHERE {} GROUP BY {}",
         col.as_sql_column(),

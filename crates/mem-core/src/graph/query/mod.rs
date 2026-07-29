@@ -1,7 +1,9 @@
 //! Read-only graph explanation, path, export, candidate, and neighborhood operations.
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use rusqlite::{params, Connection};
+
+use crate::error;
 
 use super::model::{GraphEdge, GraphExplain, GraphNeighbor};
 use super::store::{node_by_id, parse_json_value};
@@ -28,12 +30,17 @@ pub fn explain(
     scope_filter: Option<&[String]>,
 ) -> Result<GraphExplain> {
     if depth > 1 {
-        bail!("graph explain currently supports --depth 0 or 1");
+        return Err(error::usage(
+            "graph explain currently supports --depth 0 or 1",
+        ));
     }
     let node_id = resolve_node_id(conn, reference, scope_filter)?;
-    let node = node_by_id(conn, &node_id)?.with_context(|| format!("node not found: {node_id}"))?;
+    let node = node_by_id(conn, &node_id)?
+        .ok_or_else(|| error::not_found(format!("node not found: {node_id}")))?;
     if !scope_allowed(node.scope.as_deref(), scope_filter) {
-        bail!("graph node is outside the selected scope: {node_id}");
+        return Err(error::not_found(format!(
+            "graph node is outside the selected scope: {node_id}"
+        )));
     }
     if depth == 0 {
         return Ok(GraphExplain {

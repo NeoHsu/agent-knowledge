@@ -1,7 +1,9 @@
 use std::fs;
 use std::path::{Component, Path};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
+
+use crate::error;
 
 use super::manifest::ArtifactKind;
 
@@ -55,28 +57,47 @@ pub fn validate_artifact_path(path: &str) -> std::result::Result<(), String> {
 /// component. The returned path is guaranteed to name an existing regular
 /// file at validation time.
 pub fn validate_artifact_file(root: &Path, relative: &str) -> Result<std::path::PathBuf> {
-    validate_artifact_path(relative).map_err(anyhow::Error::msg)?;
+    validate_artifact_path(relative).map_err(error::safety_violation)?;
     let components = Path::new(relative).components().collect::<Vec<_>>();
     let mut current = root.to_path_buf();
     for (index, component) in components.iter().enumerate() {
         let Component::Normal(component) = component else {
-            bail!("refusing unsafe artifact path: {relative}");
+            return Err(error::safety_violation(format!(
+                "refusing unsafe artifact path: {relative}"
+            )));
         };
         current.push(component);
-        let metadata = fs::symlink_metadata(&current)
-            .with_context(|| format!("inspect artifact path {}", current.display()))?;
+        let metadata = match fs::symlink_metadata(&current) {
+            Ok(metadata) => metadata,
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+                return Err(error::not_found(format!(
+                    "artifact path not found: {}",
+                    current.display()
+                )))
+            }
+            Err(source) => {
+                return Err(source)
+                    .with_context(|| format!("inspect artifact path {}", current.display()))
+            }
+        };
         if metadata.file_type().is_symlink() {
-            bail!("refusing artifact symlink: {}", current.display());
+            return Err(error::safety_violation(format!(
+                "refusing artifact symlink: {}",
+                current.display()
+            )));
         }
         let is_last = index + 1 == components.len();
         if is_last && !metadata.is_file() {
-            bail!("refusing non-regular artifact file: {}", current.display());
+            return Err(error::safety_violation(format!(
+                "refusing non-regular artifact file: {}",
+                current.display()
+            )));
         }
         if !is_last && !metadata.is_dir() {
-            bail!(
+            return Err(error::safety_violation(format!(
                 "refusing non-directory artifact path: {}",
                 current.display()
-            );
+            )));
         }
     }
     Ok(current)
@@ -85,7 +106,7 @@ pub fn validate_artifact_file(root: &Path, relative: &str) -> Result<std::path::
 pub(super) fn path_to_manifest_string(path: &Path) -> Result<String> {
     let value = path
         .to_str()
-        .ok_or_else(|| anyhow::anyhow!("artifact path is not valid UTF-8"))?;
+        .ok_or_else(|| error::usage("artifact path is not valid UTF-8"))?;
     Ok(value.trim_start_matches("./").to_string())
 }
 
@@ -93,7 +114,7 @@ pub(super) fn artifact_group(path: &str) -> Result<String> {
     let mut components = Path::new(path).components();
     let _artifact = components.next();
     let Some(Component::Normal(group)) = components.next() else {
-        bail!("artifact path missing group");
+        return Err(error::usage("artifact path missing group"));
     };
     Ok(group.to_string_lossy().to_string())
 }
@@ -102,9 +123,9 @@ pub(super) fn artifact_name(path: &Path) -> Result<String> {
     let stem = path
         .file_stem()
         .and_then(|value| value.to_str())
-        .ok_or_else(|| anyhow::anyhow!("artifact path must include a file name"))?;
+        .ok_or_else(|| error::usage("artifact path must include a file name"))?;
     if stem.is_empty() {
-        bail!("artifact name is empty");
+        return Err(error::usage("artifact name is empty"));
     }
     Ok(stem.to_string())
 }
@@ -112,13 +133,17 @@ pub(super) fn artifact_name(path: &Path) -> Result<String> {
 pub(super) fn validate_artifact_name(name: &str) -> Result<String> {
     let name = name.trim();
     if name.is_empty() {
-        bail!("artifact name is empty");
+        return Err(error::usage("artifact name is empty"));
     }
     if name.len() > 256 || name.chars().any(char::is_control) {
-        bail!("artifact name exceeds 256 bytes or contains control characters");
+        return Err(error::usage(
+            "artifact name exceeds 256 bytes or contains control characters",
+        ));
     }
     if name.contains('.') || name.contains('/') || name.contains('\\') {
-        bail!("artifact name must not contain '.', '/', or '\\'");
+        return Err(error::usage(
+            "artifact name must not contain '.', '/', or '\\'",
+        ));
     }
     Ok(name.to_string())
 }

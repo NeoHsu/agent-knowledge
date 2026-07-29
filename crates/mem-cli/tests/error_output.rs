@@ -23,11 +23,12 @@ fn assert_committed_index_error(output: &str, operation: &str) -> serde_json::Va
     assert_eq!(error["details"]["durable_write_committed"], true);
     assert_eq!(error["details"]["index_stale"], true);
     assert_eq!(error["details"]["recovery"], "mem reindex");
+    assert_eq!(error["retryable"], false);
     error
 }
 
 #[test]
-fn json_errors_wrap_runtime_failures() {
+fn json_errors_classify_missing_stores() {
     let repo = TestRepo::new("json-runtime-error");
 
     let output = repo.run_fail(&["--json-errors", "query", "missing"]);
@@ -35,12 +36,99 @@ fn json_errors_wrap_runtime_failures() {
 
     assert_eq!(error["status"], "error");
     assert_eq!(error["contract_version"], 1);
-    assert_eq!(error["code"], "command_failed");
-    assert_eq!(error["exit_code"], 1);
+    assert_eq!(error["code"], "not_found");
+    assert_eq!(error["exit_code"], 4);
+    assert_eq!(error["retryable"], false);
     assert!(error["message"]
         .as_str()
         .expect("message")
         .contains("memory store not found"));
+}
+
+#[test]
+fn json_errors_classify_core_failures() {
+    let safety = TestRepo::new("json-safety-error");
+    safety.run(&["init"]);
+    let secret = ["ghp_", "abcdefghijklmnop1234567890"].concat();
+    let output = safety.run_fail(&[
+        "--json-errors",
+        "save",
+        "--name",
+        "unsafe_value",
+        "--content",
+        &secret,
+        "--force",
+    ]);
+    let error = parse_error(&output);
+    assert_eq!(error["code"], "safety_violation");
+    assert_eq!(error["exit_code"], 2);
+    assert!(!output.contains(&secret));
+
+    let usage = TestRepo::new("json-usage-error");
+    usage.run(&["init"]);
+    let output = usage.run_fail(&[
+        "--json-errors",
+        "save",
+        "--name",
+        "invalid_scope",
+        "--scope",
+        "not-a-scope",
+        "--content",
+        "invalid input",
+        "--force",
+    ]);
+    let error = parse_error(&output);
+    assert_eq!(error["code"], "usage");
+    assert_eq!(error["exit_code"], 2);
+
+    let compatibility = TestRepo::new("json-compatibility-error");
+    compatibility.run(&["init"]);
+    let connection = Connection::open(compatibility.join("memory.db")).expect("open store");
+    connection
+        .pragma_update(None, "user_version", 999)
+        .expect("future schema");
+    drop(connection);
+    let output = compatibility.run_fail(&["--json-errors", "query"]);
+    let error = parse_error(&output);
+    assert_eq!(error["code"], "compatibility");
+    assert_eq!(error["exit_code"], 2);
+
+    let integrity = TestRepo::new("json-integrity-error");
+    integrity.run(&["init"]);
+    let connection = Connection::open(integrity.join("memory.db")).expect("open store");
+    connection
+        .execute("CREATE TABLE unexpected_private_state (id INTEGER)", [])
+        .expect("unexpected table");
+    drop(connection);
+    let output = integrity.run_fail(&["--json-errors", "query"]);
+    let error = parse_error(&output);
+    assert_eq!(error["code"], "integrity");
+    assert_eq!(error["exit_code"], 1);
+
+    let conflict = TestRepo::new("json-conflict-error");
+    conflict.run(&["init"]);
+    fs::write(
+        conflict.join("manifest.toml"),
+        r#"version = 1
+
+[artifacts.scripts.shared]
+path = "artifacts/scripts/shared.sh"
+kind = "script"
+scope = "global"
+checksum = "sha256:fixture"
+
+[artifacts.templates.shared]
+path = "artifacts/templates/shared.md"
+kind = "template"
+scope = "global"
+checksum = "sha256:fixture"
+"#,
+    )
+    .expect("ambiguous manifest");
+    let output = conflict.run_fail(&["--json-errors", "artifact", "show", "shared"]);
+    let error = parse_error(&output);
+    assert_eq!(error["code"], "conflict");
+    assert_eq!(error["exit_code"], 1);
 }
 
 #[test]
@@ -221,6 +309,7 @@ fn json_errors_wrap_clap_parse_failures() {
     assert_eq!(error["contract_version"], 1);
     assert_eq!(error["code"], "cli_parse_error");
     assert_eq!(error["exit_code"], 2);
+    assert_eq!(error["retryable"], false);
     assert!(error["message"]
         .as_str()
         .expect("message")

@@ -1,10 +1,13 @@
 use super::*;
+use crate::error;
 use crate::graph::{GRAPH_DIRTY_KEY, GRAPH_SCHEMA_VERSION, GRAPH_SCHEMA_VERSION_KEY};
 
 pub fn migrate_schema(conn: &Connection) -> Result<()> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     if version > SCHEMA_VERSION {
-        bail!("database schema version {version} is newer than supported version {SCHEMA_VERSION}");
+        return Err(error::compatibility(format!(
+            "database schema version {version} is newer than supported version {SCHEMA_VERSION}"
+        )));
     }
     if version < 2 {
         migrate_memories_type_check_v2(conn)?;

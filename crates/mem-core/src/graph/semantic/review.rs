@@ -1,6 +1,7 @@
 //! Semantic-edge review listing and lifecycle transitions.
 
 use super::*;
+use crate::error;
 
 pub fn review_semantic_edges(
     conn: &Connection,
@@ -48,11 +49,15 @@ pub fn set_semantic_edge_status(
     allow_secret_redaction: bool,
 ) -> Result<GraphSemanticUpdateReport> {
     if !matches!(status, "active" | "pending" | "rejected" | "superseded") {
-        bail!("invalid semantic edge status: {status}");
+        return Err(error::usage(format!(
+            "invalid semantic edge status: {status}"
+        )));
     }
     let id = edge_id.strip_prefix("semantic:").unwrap_or(edge_id);
     if note.is_some_and(|value| value.len() > 10_000) {
-        bail!("semantic edge review note exceeds 10000 bytes");
+        return Err(error::usage(
+            "semantic edge review note exceeds 10000 bytes",
+        ));
     }
     let note = note
         .map(|value| {
@@ -60,7 +65,7 @@ pub fn set_semantic_edge_status(
         })
         .transpose()?;
     let existing = semantic_edge_by_id(conn, id)?
-        .with_context(|| format!("semantic edge not found: {edge_id}"))?;
+        .ok_or_else(|| error::not_found(format!("semantic edge not found: {edge_id}")))?;
     if existing.status == status && note.is_none() {
         return Ok(GraphSemanticUpdateReport {
             status: "unchanged".to_string(),

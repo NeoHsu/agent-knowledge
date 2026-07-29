@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -11,6 +11,7 @@ use crate::db::{
     add_ambiguity_record, column_exists, memory_by_id, memory_by_name, new_event_uid,
     resolve_ambiguity_record, with_transaction,
 };
+use crate::error;
 use crate::util::{normalize_rfc3339, now, sanitize_secret_field, source_priority, strip_secrets};
 
 use super::ids::{artifact_node_id, memory_node_id, stable_hash_hex, workflow_step_node_id};
@@ -119,10 +120,10 @@ fn normalized_string_array(value: &Value) -> std::result::Result<Value, String> 
 fn sanitize_json_secrets(value: &Value, field: &str, allow_redaction: bool) -> Result<Value> {
     let redacted = strip_json_secrets(value);
     if redacted != *value && !allow_redaction {
-        bail!(
+        return Err(error::safety_violation(format!(
             "secret-like value detected in {field}; merge rejected. \
              Remove the secret or pass --redact-secrets explicitly"
-        );
+        )));
     }
     Ok(redacted)
 }
@@ -490,7 +491,9 @@ fn unique_semantic_edge_id(conn: &Connection, preferred: &str) -> Result<String>
             return Ok(candidate);
         }
     }
-    bail!("could not allocate semantic edge id for {preferred}")
+    Err(error::conflict(format!(
+        "could not allocate semantic edge id for {preferred}"
+    )))
 }
 
 fn row_to_semantic_edge(row: &rusqlite::Row<'_>) -> rusqlite::Result<GraphSemanticEdgeRow> {

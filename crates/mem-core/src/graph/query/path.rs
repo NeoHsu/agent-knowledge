@@ -1,7 +1,9 @@
 use std::collections::{HashMap, VecDeque};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use rusqlite::Connection;
+
+use crate::error;
 
 use super::super::model::{GraphEdge, GraphPathEdge, GraphPathOptions, GraphPathReport};
 use super::super::store::node_by_id;
@@ -15,18 +17,23 @@ pub fn shortest_path(
     options: GraphPathOptions,
 ) -> Result<GraphPathReport> {
     if options.max_depth > 20 {
-        bail!("graph path --max-depth cannot exceed 20");
+        return Err(error::usage("graph path --max-depth cannot exceed 20"));
     }
     let from_id = resolve_node_id(conn, from, options.scope_filter.as_deref())?;
     let to_id = resolve_node_id(conn, to, options.scope_filter.as_deref())?;
-    let from_node =
-        node_by_id(conn, &from_id)?.with_context(|| format!("node not found: {from_id}"))?;
-    let to_node = node_by_id(conn, &to_id)?.with_context(|| format!("node not found: {to_id}"))?;
+    let from_node = node_by_id(conn, &from_id)?
+        .ok_or_else(|| error::not_found(format!("node not found: {from_id}")))?;
+    let to_node = node_by_id(conn, &to_id)?
+        .ok_or_else(|| error::not_found(format!("node not found: {to_id}")))?;
     if !scope_allowed(from_node.scope.as_deref(), options.scope_filter.as_deref()) {
-        bail!("graph node is outside the selected scope: {from_id}");
+        return Err(error::not_found(format!(
+            "graph node is outside the selected scope: {from_id}"
+        )));
     }
     if !scope_allowed(to_node.scope.as_deref(), options.scope_filter.as_deref()) {
-        bail!("graph node is outside the selected scope: {to_id}");
+        return Err(error::not_found(format!(
+            "graph node is outside the selected scope: {to_id}"
+        )));
     }
 
     if from_id == to_id {

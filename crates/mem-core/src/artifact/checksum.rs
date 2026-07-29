@@ -2,7 +2,9 @@ use std::fs;
 use std::io::Read;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
+
+use crate::error;
 
 const SHA256_PREFIX: &str = "sha256:";
 
@@ -16,7 +18,10 @@ pub(super) fn valid_sha256_checksum(value: &str) -> bool {
 pub(super) fn file_sha256(path: &Path) -> Result<String> {
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
-        bail!("refusing to hash non-regular file: {}", path.display());
+        return Err(error::safety_violation(format!(
+            "refusing to hash non-regular file: {}",
+            path.display()
+        )));
     }
     let mut file = fs::File::open(path).with_context(|| format!("read {}", path.display()))?;
     let mut state = sha256_initial_state();
@@ -31,7 +36,10 @@ pub(super) fn file_sha256(path: &Path) -> Result<String> {
     file.read_exact(&mut tail)?;
     let mut extra = [0_u8; 1];
     if file.read(&mut extra)? != 0 {
-        bail!("file changed while hashing: {}", path.display());
+        return Err(error::integrity(format!(
+            "file changed while hashing: {}",
+            path.display()
+        )));
     }
     finalize_sha256(&mut state, &tail, metadata.len())?;
     Ok(format!("{SHA256_PREFIX}{}", format_sha256(&state)))
@@ -87,11 +95,11 @@ fn sha256_initial_state() -> [u32; 8] {
 
 fn finalize_sha256(state: &mut [u32; 8], tail: &[u8], total_bytes: u64) -> Result<()> {
     if tail.len() >= 64 {
-        bail!("invalid SHA-256 tail length");
+        return Err(error::integrity("invalid SHA-256 tail length"));
     }
     let bit_len = total_bytes
         .checked_mul(8)
-        .ok_or_else(|| anyhow::anyhow!("file is too large to hash with SHA-256"))?;
+        .ok_or_else(|| error::usage("file is too large to hash with SHA-256"))?;
     let mut padding = Vec::with_capacity(128);
     padding.extend_from_slice(tail);
     padding.push(0x80);

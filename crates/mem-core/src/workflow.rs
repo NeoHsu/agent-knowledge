@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::Result;
 use serde::Serialize;
 use serde_json::Value;
 use serde_yaml::Value as YamlValue;
@@ -10,7 +10,7 @@ use crate::artifact::{
     artifact_file_checksum, artifact_file_is_executable, validate_artifact_file,
     validate_artifact_path, ArtifactManifest,
 };
-use crate::{db::Memory, util::normalized_text};
+use crate::{db::Memory, error, util::normalized_text};
 
 pub const WORKFLOW_SCHEMA_VERSION: i64 = 1;
 
@@ -32,7 +32,10 @@ pub fn validate_memory(
 
 pub fn validate_record(memory: &Memory) -> Result<()> {
     if memory.r#type != "workflow" {
-        bail!("memory is not a workflow: {}", memory.name);
+        return Err(error::conflict(format!(
+            "memory is not a workflow: {}",
+            memory.name
+        )));
     }
     validate_record_content(memory)
 }
@@ -66,10 +69,11 @@ pub fn validate_artifact_references(
     content: &str,
     store_root: &Path,
 ) -> Result<WorkflowArtifactReport> {
-    let value: YamlValue = serde_yaml::from_str(content).context("parse workflow YAML/JSON")?;
+    let value: YamlValue = serde_yaml::from_str(content)
+        .map_err(|source| error::usage(format!("parse workflow YAML/JSON: {source}")))?;
     let mapping = value
         .as_mapping()
-        .ok_or_else(|| anyhow!("workflow content must be a YAML/JSON object"))?;
+        .ok_or_else(|| error::usage("workflow content must be a YAML/JSON object"))?;
     let manifest = ArtifactManifest::load(store_root)?;
     let mut errors = Vec::new();
     let mut references = Vec::new();
@@ -78,7 +82,7 @@ pub fn validate_artifact_references(
     if let Some(reusable_scripts) = yaml_get(mapping, "reusable_scripts") {
         let scripts = reusable_scripts
             .as_sequence()
-            .ok_or_else(|| anyhow!("workflow reusable_scripts must be an array"))?;
+            .ok_or_else(|| error::usage("workflow reusable_scripts must be an array"))?;
         for (index, script) in scripts.iter().enumerate() {
             let Some(script) = script.as_mapping() else {
                 errors.push(format!("reusable_scripts[{index}] must be an object"));
@@ -145,7 +149,10 @@ pub fn validate_artifact_references(
     }
 
     if !errors.is_empty() {
-        bail!("workflow artifact validation failed: {}", errors.join("; "));
+        return Err(error::safety_violation(format!(
+            "workflow artifact validation failed: {}",
+            errors.join("; ")
+        )));
     }
     Ok(WorkflowArtifactReport {
         checked: references
@@ -268,7 +275,9 @@ fn step_artifact_runs(mapping: &serde_yaml::Mapping) -> Result<Vec<(usize, Strin
             continue;
         };
         if let Err(reason) = validate_artifact_path(&path) {
-            bail!("workflow step {index} run has unsafe artifact path: {reason}");
+            return Err(error::safety_violation(format!(
+                "workflow step {index} run has unsafe artifact path: {reason}"
+            )));
         }
         paths.push((index, path));
     }
@@ -336,19 +345,24 @@ pub fn rank(memory: &Memory, intent: &str, scope_filter: Option<&[String]>) -> i
 
 fn validate_tags(tags: &[String], scope: &str) -> Result<()> {
     if !tags.iter().any(|tag| tag.starts_with("workflow:")) {
-        bail!("workflow memory requires at least one workflow:* tag");
+        return Err(error::usage(
+            "workflow memory requires at least one workflow:* tag",
+        ));
     }
     if scope.starts_with("project:") && !tags.iter().any(|tag| tag == scope) {
-        bail!("project-scoped workflow requires matching {scope} tag");
+        return Err(error::usage(format!(
+            "project-scoped workflow requires matching {scope} tag"
+        )));
     }
     Ok(())
 }
 
 fn validate_content(content: &str) -> Result<()> {
-    let value: YamlValue = serde_yaml::from_str(content).context("parse workflow YAML/JSON")?;
+    let value: YamlValue = serde_yaml::from_str(content)
+        .map_err(|source| error::usage(format!("parse workflow YAML/JSON: {source}")))?;
     let mapping = value
         .as_mapping()
-        .ok_or_else(|| anyhow!("workflow content must be a YAML/JSON object"))?;
+        .ok_or_else(|| error::usage("workflow content must be a YAML/JSON object"))?;
     for field in [
         "schema_version",
         "goal",
@@ -357,43 +371,49 @@ fn validate_content(content: &str) -> Result<()> {
         "stop_conditions",
     ] {
         yaml_get(mapping, field)
-            .ok_or_else(|| anyhow!("workflow missing required field: {field}"))?;
+            .ok_or_else(|| error::usage(format!("workflow missing required field: {field}")))?;
     }
     let schema_version = yaml_get(mapping, "schema_version")
         .and_then(YamlValue::as_i64)
-        .ok_or_else(|| anyhow!("workflow schema_version must be an integer"))?;
+        .ok_or_else(|| error::usage("workflow schema_version must be an integer"))?;
     if schema_version != WORKFLOW_SCHEMA_VERSION {
-        bail!(
+        return Err(error::compatibility(format!(
             "unsupported workflow schema_version {schema_version}; expected {WORKFLOW_SCHEMA_VERSION}"
-        );
+        )));
     }
     require_non_empty_sequence(mapping, "triggers")?;
     require_non_empty_sequence(mapping, "stop_conditions")?;
     let steps = yaml_get(mapping, "steps")
         .and_then(YamlValue::as_sequence)
-        .ok_or_else(|| anyhow!("workflow steps must be a non-empty array"))?;
+        .ok_or_else(|| error::usage("workflow steps must be a non-empty array"))?;
     if steps.is_empty() {
-        bail!("workflow steps must be a non-empty array");
+        return Err(error::usage("workflow steps must be a non-empty array"));
     }
     for (index, step) in steps.iter().enumerate() {
         let step_mapping = step
             .as_mapping()
-            .ok_or_else(|| anyhow!("workflow step {index} must be an object"))?;
+            .ok_or_else(|| error::usage(format!("workflow step {index} must be an object")))?;
         let id = yaml_get(step_mapping, "id")
             .and_then(YamlValue::as_str)
             .unwrap_or_default();
         if id.trim().is_empty() {
-            bail!("workflow step {index} requires non-empty id");
+            return Err(error::usage(format!(
+                "workflow step {index} requires non-empty id"
+            )));
         }
         if !["run", "check", "manual", "ask"]
             .iter()
             .any(|key| yaml_get(step_mapping, key).is_some())
         {
-            bail!("workflow step {id} requires one of run, check, manual, or ask");
+            return Err(error::usage(format!(
+                "workflow step {id} requires one of run, check, manual, or ask"
+            )));
         }
         if let Some(confirm) = yaml_get(step_mapping, "confirm") {
             if !matches!(confirm, YamlValue::Bool(_)) {
-                bail!("workflow step {id} confirm must be boolean");
+                return Err(error::usage(format!(
+                    "workflow step {id} confirm must be boolean"
+                )));
             }
         }
     }
@@ -407,9 +427,11 @@ fn yaml_get<'a>(mapping: &'a serde_yaml::Mapping, key: &str) -> Option<&'a YamlV
 fn require_non_empty_sequence(mapping: &serde_yaml::Mapping, field: &str) -> Result<()> {
     let sequence = yaml_get(mapping, field)
         .and_then(YamlValue::as_sequence)
-        .ok_or_else(|| anyhow!("workflow {field} must be a non-empty array"))?;
+        .ok_or_else(|| error::usage(format!("workflow {field} must be a non-empty array")))?;
     if sequence.is_empty() {
-        bail!("workflow {field} must be a non-empty array");
+        return Err(error::usage(format!(
+            "workflow {field} must be a non-empty array"
+        )));
     }
     Ok(())
 }
@@ -463,14 +485,15 @@ fn intent_key(input: &str) -> String {
 }
 
 fn parse_string_array(raw: &str) -> Result<Vec<String>> {
-    let value: Value = serde_json::from_str(raw).context("parse JSON array")?;
+    let value: Value = serde_json::from_str(raw)
+        .map_err(|source| error::usage(format!("parse JSON array: {source}")))?;
     let Some(array) = value.as_array() else {
-        bail!("expected JSON array");
+        return Err(error::usage("expected JSON array"));
     };
     let mut strings = Vec::with_capacity(array.len());
     for item in array {
         let Some(value) = item.as_str() else {
-            bail!("expected array of strings");
+            return Err(error::usage("expected array of strings"));
         };
         strings.push(value.to_string());
     }
@@ -503,7 +526,8 @@ pub fn post_run_memory(content: &str) -> Vec<String> {
 pub fn render_checklist(memory: &Memory) -> Result<String> {
     validate_record(memory)?;
     let content = memory.content.as_deref().unwrap_or_default();
-    let value: YamlValue = serde_yaml::from_str(content).context("parse workflow YAML/JSON")?;
+    let value: YamlValue = serde_yaml::from_str(content)
+        .map_err(|source| error::usage(format!("parse workflow YAML/JSON: {source}")))?;
     let goal = value.get("goal").and_then(YamlValue::as_str).unwrap_or("");
 
     let mut out = String::new();

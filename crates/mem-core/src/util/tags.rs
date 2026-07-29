@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::Result;
 use serde_json::Value;
+
+use crate::error;
 
 pub fn validate_tags(tags: &str) -> Result<()> {
     parse_string_array(tags)?;
@@ -9,10 +11,11 @@ pub fn validate_tags(tags: &str) -> Result<()> {
 }
 
 pub fn parse_string_array(raw: &str) -> Result<Vec<String>> {
-    let parsed: Value =
-        serde_json::from_str(raw).context("tags/memory_ids must be a JSON array")?;
+    let parsed: Value = serde_json::from_str(raw).map_err(|source| {
+        error::usage(format!("tags/memory_ids must be a JSON array: {source}"))
+    })?;
     let Value::Array(values) = parsed else {
-        bail!("expected JSON array");
+        return Err(error::usage("expected JSON array"));
     };
     values
         .into_iter()
@@ -20,7 +23,7 @@ pub fn parse_string_array(raw: &str) -> Result<Vec<String>> {
             value
                 .as_str()
                 .map(str::to_string)
-                .ok_or_else(|| anyhow!("array items must be strings"))
+                .ok_or_else(|| error::usage("array items must be strings"))
         })
         .collect()
 }
@@ -34,8 +37,10 @@ pub fn memory_has_tag(tags: &str, wanted: &str) -> bool {
 pub fn merge_tags(existing: &str, add: &str) -> Result<String> {
     let mut set = HashSet::new();
     for raw in [existing, add] {
-        let Value::Array(values) = serde_json::from_str(raw)? else {
-            bail!("tags must be JSON arrays");
+        let parsed: Value = serde_json::from_str(raw)
+            .map_err(|source| error::usage(format!("tags must be JSON arrays: {source}")))?;
+        let Value::Array(values) = parsed else {
+            return Err(error::usage("tags must be JSON arrays"));
         };
         for value in values {
             if let Some(tag) = value.as_str() {

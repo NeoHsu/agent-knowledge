@@ -2,7 +2,7 @@ use std::fs;
 use std::ops::Bound;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use chrono::Utc;
 use tantivy::collector::TopDocs;
 use tantivy::query::{
@@ -15,6 +15,7 @@ use tantivy::schema::{
 };
 use tantivy::{doc, Index, IndexWriter, TantivyDocument, Term};
 
+use crate::error;
 use crate::index::{SearchFilters, SearchLifecycle};
 use crate::search_tokenizer;
 
@@ -361,7 +362,10 @@ fn open_existing_index(path: &Path) -> Result<Index> {
 fn validate_index_directory(path: &Path) -> Result<bool> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
-            bail!("refusing unsafe search index path: {}", path.display())
+            Err(error::safety_violation(format!(
+                "refusing unsafe search index path: {}",
+                path.display()
+            )))
         }
         Ok(_) => Ok(true),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),

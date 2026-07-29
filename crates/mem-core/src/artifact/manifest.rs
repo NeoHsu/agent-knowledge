@@ -6,8 +6,10 @@ use std::path::Path;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+
+use crate::error;
 
 const MANIFEST_FILE: &str = "manifest.toml";
 
@@ -66,19 +68,28 @@ impl ArtifactManifest {
         let path = root.join(MANIFEST_FILE);
         let metadata = match fs::symlink_metadata(&path) {
             Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
-                bail!("refusing unsafe artifact manifest path: {}", path.display())
+                return Err(error::safety_violation(format!(
+                    "refusing unsafe artifact manifest path: {}",
+                    path.display()
+                )))
             }
             Ok(metadata) => metadata,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(error.into()),
         };
         if metadata.len() > 8_388_608 {
-            bail!("artifact manifest exceeds 8388608 bytes");
+            return Err(error::safety_violation(
+                "artifact manifest exceeds 8388608 bytes",
+            ));
         }
         let content =
             fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
-        let manifest: Self =
-            toml::from_str(&content).with_context(|| format!("parse {}", path.display()))?;
+        let manifest: Self = toml::from_str(&content).map_err(|source| {
+            error::integrity(format!(
+                "parse artifact manifest {}: {source}",
+                path.display()
+            ))
+        })?;
         Ok(Some(manifest))
     }
 
@@ -91,7 +102,9 @@ impl ArtifactManifest {
         let path = root.join(MANIFEST_FILE);
         let content = toml::to_string_pretty(self).context("serialize artifact manifest")?;
         if content.len() > 8_388_608 {
-            bail!("artifact manifest exceeds 8388608 bytes");
+            return Err(error::safety_violation(
+                "artifact manifest exceeds 8388608 bytes",
+            ));
         }
         let temporary = root.join(format!(
             ".manifest.toml.tmp-{}",
@@ -140,8 +153,10 @@ impl ArtifactManifest {
             .collect::<Vec<_>>();
         match matches.as_slice() {
             [entry] => Ok(entry.clone()),
-            [] => bail!("artifact not found: {reference}"),
-            _ => bail!("artifact reference is ambiguous: {reference}"),
+            [] => Err(error::not_found(format!("artifact not found: {reference}"))),
+            _ => Err(error::conflict(format!(
+                "artifact reference is ambiguous: {reference}"
+            ))),
         }
     }
 

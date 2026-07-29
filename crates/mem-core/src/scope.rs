@@ -1,5 +1,6 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 
+use crate::error;
 use crate::util::remote_to_scope;
 
 pub fn detect_scope_set() -> Result<Vec<String>> {
@@ -21,7 +22,9 @@ pub fn validate_scope(scope: &str) -> Result<()> {
         return Ok(());
     }
     let Some(project) = scope.strip_prefix("project:") else {
-        bail!("invalid scope {scope:?}; expected global or project:<owner/repo>");
+        return Err(error::usage(format!(
+            "invalid scope {scope:?}; expected global or project:<owner/repo>"
+        )));
     };
     let mut parts = project.split('/');
     let owner = parts.next().unwrap_or_default();
@@ -40,7 +43,9 @@ pub fn validate_scope(scope: &str) -> Result<()> {
         || !valid_component(repo)
         || parts.next().is_some()
     {
-        bail!("invalid scope {scope:?}; expected project:<owner/repo>");
+        return Err(error::usage(format!(
+            "invalid scope {scope:?}; expected project:<owner/repo>"
+        )));
     }
     Ok(())
 }

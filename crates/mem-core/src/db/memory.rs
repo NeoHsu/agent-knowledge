@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use super::*;
+use crate::error;
 
 pub const ACTIVE_MEMORY_SQL: &str =
     "valid_until IS NULL AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))";
@@ -16,9 +17,9 @@ pub fn memory_by_name(conn: &Connection, name: &str) -> Result<Option<Memory>> {
     match memories.as_slice() {
         [] => Ok(None),
         [memory] => Ok(Some(memory.clone())),
-        _ => bail!(
+        _ => Err(error::conflict(format!(
             "memory name is ambiguous across scopes: {name}; pass --scope or use id:<memory-id>"
-        ),
+        ))),
     }
 }
 
@@ -74,7 +75,7 @@ pub fn resolve_memory_ref_in_scopes(
     if let Some(id) = reference.strip_prefix("id:") {
         return memory_by_id(conn, id)?
             .map(|memory| memory.id)
-            .ok_or_else(|| anyhow::anyhow!("memory id not found: {id}"));
+            .ok_or_else(|| error::not_found(format!("memory id not found: {id}")));
     }
     let Some(scopes) = scopes else {
         if let Some(memory) = memory_by_id(conn, reference)? {
@@ -82,7 +83,7 @@ pub fn resolve_memory_ref_in_scopes(
         }
         return memory_by_name(conn, reference)?
             .map(|memory| memory.id)
-            .ok_or_else(|| anyhow::anyhow!("memory not found: {reference}"));
+            .ok_or_else(|| error::not_found(format!("memory not found: {reference}")));
     };
     let mut project_matches = Vec::new();
     let mut global_match = None;
@@ -103,11 +104,11 @@ pub fn resolve_memory_ref_in_scopes(
             }
             memory_by_id(conn, reference)?
                 .map(|memory| memory.id)
-                .ok_or_else(|| anyhow::anyhow!("memory not found: {reference}"))
+                .ok_or_else(|| error::not_found(format!("memory not found: {reference}")))
         }
-        _ => {
-            bail!("memory name is ambiguous across project scopes: {reference}; use id:<memory-id>")
-        }
+        _ => Err(error::conflict(format!(
+            "memory name is ambiguous across project scopes: {reference}; use id:<memory-id>"
+        ))),
     }
 }
 
@@ -327,16 +328,19 @@ pub fn workflow_by_ref_in_scopes(
 ) -> Result<Memory> {
     let memory_id = resolve_memory_ref_in_scopes(conn, reference, scopes)?;
     let Some(memory) = memory_by_id(conn, &memory_id)? else {
-        bail!("memory not found: {reference}");
+        return Err(error::not_found(format!("memory not found: {reference}")));
     };
     if memory.r#type != "workflow" {
-        bail!("memory is not a workflow: {}", memory.name);
+        return Err(error::conflict(format!(
+            "memory is not a workflow: {}",
+            memory.name
+        )));
     }
     if !memory_is_active(&memory) {
-        bail!(
+        return Err(error::not_found(format!(
             "workflow is expired, deleted, or superseded: {}",
             memory.name
-        );
+        )));
     }
     Ok(memory)
 }

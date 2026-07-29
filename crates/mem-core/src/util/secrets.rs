@@ -2,8 +2,10 @@ use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use regex::Regex;
+
+use crate::error;
 
 const MAX_SECRET_SCAN_FILE_BYTES: u64 = 134_217_728;
 
@@ -75,10 +77,10 @@ pub fn strip_secrets(input: &str) -> Result<String> {
 pub fn sanitize_secret_field(input: &str, field: &str, allow_redaction: bool) -> Result<String> {
     let redacted = strip_secrets(input)?;
     if redacted != input && !allow_redaction {
-        bail!(
+        return Err(error::safety_violation(format!(
             "secret-like value detected in {field}; write rejected without exposing the value. \
              Remove the secret or pass --redact-secrets explicitly"
-        );
+        )));
     }
     Ok(redacted)
 }
@@ -90,11 +92,16 @@ pub fn sanitize_secret_file(path: &Path, field: &str, allow_redaction: bool) -> 
     let metadata =
         fs::symlink_metadata(path).with_context(|| format!("inspect {}", path.display()))?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
-        bail!("refusing to scan non-regular {field}: {}", path.display());
+        return Err(error::safety_violation(format!(
+            "refusing to scan non-regular {field}: {}",
+            path.display()
+        )));
     }
     let file_bytes = metadata.len();
     if file_bytes > MAX_SECRET_SCAN_FILE_BYTES {
-        bail!("{field} exceeds the {MAX_SECRET_SCAN_FILE_BYTES}-byte secret-scan limit");
+        return Err(error::safety_violation(format!(
+            "{field} exceeds the {MAX_SECRET_SCAN_FILE_BYTES}-byte secret-scan limit"
+        )));
     }
     let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
     match String::from_utf8(bytes) {
@@ -110,9 +117,9 @@ pub fn sanitize_secret_file(path: &Path, field: &str, allow_redaction: bool) -> 
             let bytes = error.into_bytes();
             let text = String::from_utf8_lossy(&bytes);
             if strip_secrets(&text)? != text {
-                bail!(
+                return Err(error::safety_violation(format!(
                     "secret-like value detected in {field}; binary files cannot be redacted safely"
-                );
+                )));
             }
             Ok(false)
         }

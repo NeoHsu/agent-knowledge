@@ -1,9 +1,10 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use chrono::DateTime;
 use rusqlite::Connection;
 
 use crate::app::App;
 use crate::db::{self, all_memories, memories_by_ids, memory_by_id, Memory};
+use crate::error;
 use crate::search_index::{self, IndexedMemory};
 use crate::util::parse_string_array;
 
@@ -130,10 +131,9 @@ fn write_batch(app: &App, conn: &Connection, ids: &[String]) -> Result<()> {
         batch
             .iter()
             .map(|id| {
-                stored
-                    .get(id)
-                    .map(indexed_memory)
-                    .ok_or_else(|| anyhow!("memory not found for batch index update: {id}"))
+                stored.get(id).map(indexed_memory).ok_or_else(|| {
+                    error::integrity(format!("memory not found for batch index update: {id}"))
+                })
             })
             .collect::<Result<Vec<_>>>()
     });
@@ -165,8 +165,8 @@ pub fn reindex(app: &App) -> Result<()> {
 }
 
 pub fn upsert(app: &App, conn: &Connection, id: &str) -> Result<()> {
-    let memory =
-        memory_by_id(conn, id)?.ok_or_else(|| anyhow!("memory not found for index: {id}"))?;
+    let memory = memory_by_id(conn, id)?
+        .ok_or_else(|| error::integrity(format!("memory not found for index: {id}")))?;
     search_index::upsert(&app.index_path, &indexed_memory(&memory))?;
     Ok(())
 }
@@ -203,17 +203,17 @@ pub fn search_hits(
             mark_stale(app, &format!("index compatibility: {err:#}"))
                 .context("mark index stale")?;
             reindex(app).map_err(|rebuild_err| {
-                anyhow!(
+                error::compatibility(format!(
                     "index schema version mismatch; explicit rebuild failed; run `mem reindex`: {rebuild_err:#}"
-                )
+                ))
             })?;
             search()?
         }
         Err(err) if search_index::is_compatibility_error(&err) => {
-            return Err(err).context(
+            return Err(error::compatibility(format!(
                 "index schema version mismatch; read-only query will not rebuild it. \
-                 Run `mem reindex` or retry with --repair-index",
-            );
+                 Run `mem reindex` or retry with --repair-index: {err:#}"
+            )));
         }
         Err(err) => return Err(err),
     };

@@ -1,8 +1,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use rusqlite::Connection;
 use serde_json::Value;
+
+use crate::error;
 
 use super::super::model::{
     GraphNode, GraphPathOptions, GraphQueryEdge, GraphQueryNode, GraphQueryOptions,
@@ -19,10 +21,12 @@ pub fn query_neighborhood(
     options: GraphQueryOptions,
 ) -> Result<GraphQueryReport> {
     if options.depth > 8 {
-        bail!("graph query --depth cannot exceed 8");
+        return Err(error::usage("graph query --depth cannot exceed 8"));
     }
     if options.limit == 0 || options.limit > 500 {
-        bail!("graph query --limit must be between 1 and 500");
+        return Err(error::usage(
+            "graph query --limit must be between 1 and 500",
+        ));
     }
     if starts.is_empty() {
         return Ok(GraphQueryReport {

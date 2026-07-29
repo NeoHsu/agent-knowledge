@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::error;
+
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {
@@ -137,11 +139,15 @@ fn read_config(path: &Path) -> Result<Config> {
         .with_context(|| format!("inspect config {}", path.display()))?
         .len();
     if bytes > 1_048_576 {
-        anyhow::bail!("config exceeds 1048576 bytes: {}", path.display());
+        return Err(error::safety_violation(format!(
+            "config exceeds 1048576 bytes: {}",
+            path.display()
+        )));
     }
     let content =
         fs::read_to_string(path).with_context(|| format!("read config {}", path.display()))?;
-    toml::from_str(&content).with_context(|| format!("parse config {}", path.display()))
+    toml::from_str(&content)
+        .map_err(|source| error::usage(format!("parse config {}: {source}", path.display())))
 }
 
 pub fn user_config_path() -> PathBuf {

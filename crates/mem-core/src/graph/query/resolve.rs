@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use rusqlite::{params, Connection};
 
 use crate::db::{memory_by_id, memory_by_name, memory_by_name_in_scope};
+use crate::error;
 
 use super::super::ids::memory_node_id;
 use super::super::model::GraphQueryStart;
@@ -17,7 +18,7 @@ pub fn resolve_query_start_nodes(
     limit: usize,
 ) -> Result<Vec<GraphQueryStart>> {
     if query.chars().count() > 1_000 {
-        bail!("graph query cannot exceed 1000 characters");
+        return Err(error::usage("graph query cannot exceed 1000 characters"));
     }
     let mut scores = HashMap::<String, f64>::new();
     if let Ok(node_id) = resolve_node_id(conn, query, scope_filter) {
@@ -116,7 +117,11 @@ pub(super) fn resolve_node_id(
             match project_matches.as_slice() {
                 [memory] => Some(memory.clone()),
                 [] => global_match,
-                _ => bail!("graph memory reference is ambiguous across scopes: {reference}"),
+                _ => {
+                    return Err(error::conflict(format!(
+                        "graph memory reference is ambiguous across scopes: {reference}"
+                    )))
+                }
             }
         }
         None => memory_by_name(conn, reference)?,
@@ -139,8 +144,12 @@ pub(super) fn resolve_node_id(
     let matches = rows.collect::<rusqlite::Result<Vec<_>>>()?;
     match matches.as_slice() {
         [node_id] => Ok(node_id.clone()),
-        [] => bail!("graph node not found: {reference}"),
-        _ => bail!("graph node reference is ambiguous: {reference}"),
+        [] => Err(error::not_found(format!(
+            "graph node not found: {reference}"
+        ))),
+        _ => Err(error::conflict(format!(
+            "graph node reference is ambiguous: {reference}"
+        ))),
     }
 }
 
