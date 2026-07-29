@@ -52,24 +52,6 @@ pub(super) fn cmd_bundle_export(app: &App, args: BundleExportArgs) -> Result<()>
     let validation_ms = elapsed_ms(validation_started);
 
     let artifacts = snapshot_root.join("artifacts");
-    let hash_started = Instant::now();
-    let hashes = bundle_hashes(&snapshot_root, args.no_config)?;
-    let hash_ms = elapsed_ms(hash_started);
-    let metadata = json!({
-        "version": BUNDLE_FORMAT_VERSION,
-        "created_at": now(),
-        "schema_version": schema_version,
-        "contains": {
-            "memory_db": snapshot_db.exists(),
-            "config": !args.no_config && snapshot_root.join("config.toml").exists(),
-            "manifest": snapshot_root.join("manifest.toml").exists(),
-            "artifacts": artifacts.exists()
-        },
-        "hashes": hashes
-    });
-    if serde_json::to_vec(&metadata)?.len() > 1_048_576 {
-        bail!("bundle metadata exceeds 1048576 bytes");
-    }
     let output_parent = args
         .file
         .parent()
@@ -85,40 +67,20 @@ pub(super) fn cmd_bundle_export(app: &App, args: BundleExportArgs) -> Result<()>
         uuid::Uuid::new_v4().simple()
     ));
     let archive_started = Instant::now();
-    let archive_result = (|| -> Result<()> {
-        let mut options = OpenOptions::new();
-        options.create_new(true).write(true);
-        #[cfg(unix)]
-        options.mode(0o600);
-        let file = options
-            .open(&output_temp)
-            .with_context(|| format!("create {}", output_temp.display()))?;
-        let encoder = GzEncoder::new(file, Compression::default());
-        let mut builder = Builder::new(encoder);
-        append_file_if_exists(&mut builder, &snapshot_db, "memory.db")?;
-        if !args.no_config {
-            append_file_if_exists(
-                &mut builder,
-                &snapshot_root.join("config.toml"),
-                "config.toml",
-            )?;
+    let (metadata, hash_ms) = match write_bundle_archive(
+        &output_temp,
+        &snapshot_root,
+        &snapshot_db,
+        &artifacts,
+        schema_version,
+        args.no_config,
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            fs::remove_file(&output_temp).ok();
+            return Err(error);
         }
-        append_file_if_exists(
-            &mut builder,
-            &snapshot_root.join("manifest.toml"),
-            "manifest.toml",
-        )?;
-        if artifacts.exists() {
-            builder.append_dir_all("artifacts", &artifacts)?;
-        }
-        append_json(&mut builder, "bundle.json", &metadata)?;
-        builder.finish()?;
-        Ok(())
-    })();
-    if let Err(error) = archive_result {
-        fs::remove_file(&output_temp).ok();
-        return Err(error);
-    }
+    };
     let archive_ms = elapsed_ms(archive_started);
     let install_started = Instant::now();
     if let Err(error) = harden_bundle_permissions(&output_temp) {
@@ -151,4 +113,75 @@ pub(super) fn cmd_bundle_export(app: &App, args: BundleExportArgs) -> Result<()>
         });
     }
     print_json_pretty(&result)
+}
+
+fn write_bundle_archive(
+    output: &Path,
+    snapshot_root: &Path,
+    snapshot_db: &Path,
+    artifacts: &Path,
+    schema_version: i64,
+    no_config: bool,
+) -> Result<(serde_json::Value, f64)> {
+    let mut options = OpenOptions::new();
+    options.create_new(true).write(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let file = options
+        .open(output)
+        .with_context(|| format!("create {}", output.display()))?;
+    let encoder = GzEncoder::new(file, Compression::default());
+    let mut builder = Builder::new(encoder);
+
+    let hash_root = snapshot_root.to_path_buf();
+    let hash_worker = std::thread::spawn(move || {
+        let started = Instant::now();
+        let hashes = bundle_hashes(&hash_root, no_config);
+        (hashes, elapsed_ms(started))
+    });
+
+    let append_result = (|| -> Result<()> {
+        append_file_if_exists(&mut builder, snapshot_db, "memory.db")?;
+        if !no_config {
+            append_file_if_exists(
+                &mut builder,
+                &snapshot_root.join("config.toml"),
+                "config.toml",
+            )?;
+        }
+        append_file_if_exists(
+            &mut builder,
+            &snapshot_root.join("manifest.toml"),
+            "manifest.toml",
+        )?;
+        if artifacts.exists() {
+            builder.append_dir_all("artifacts", artifacts)?;
+        }
+        Ok(())
+    })();
+    let hash_result = hash_worker
+        .join()
+        .map_err(|_| anyhow!("bundle hash worker panicked"));
+    append_result?;
+    let (hashes, hash_ms) = hash_result?;
+    let hashes = hashes?;
+
+    let metadata = json!({
+        "version": BUNDLE_FORMAT_VERSION,
+        "created_at": now(),
+        "schema_version": schema_version,
+        "contains": {
+            "memory_db": snapshot_db.exists(),
+            "config": !no_config && snapshot_root.join("config.toml").exists(),
+            "manifest": snapshot_root.join("manifest.toml").exists(),
+            "artifacts": artifacts.exists()
+        },
+        "hashes": hashes
+    });
+    if serde_json::to_vec(&metadata)?.len() > 1_048_576 {
+        bail!("bundle metadata exceeds 1048576 bytes");
+    }
+    append_json(&mut builder, "bundle.json", &metadata)?;
+    builder.finish()?;
+    Ok((metadata, hash_ms))
 }

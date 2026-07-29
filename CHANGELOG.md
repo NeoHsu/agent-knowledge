@@ -22,6 +22,8 @@ All notable changes to mnemark are documented here.
 - Reduced the Tantivy writer memory budget from 50 MB to 20 MB after
   interleaved 10,000-memory trials cut import peak RSS from about 210 MiB to
   about 119 MiB with no material throughput regression.
+- Overlapped bundle hashing with archive compression after validation;
+  interleaved 10,000-memory trials reduced median export latency by about 19%.
 
 ## [0.8.0] - 2026-07-17
 

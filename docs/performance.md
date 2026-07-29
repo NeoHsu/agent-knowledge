@@ -28,6 +28,11 @@ records:
 - database, Tantivy index, and bundle sizes;
 - bundle snapshot, validation, hashing, archive, and install stage timings.
 
+Bundle export overlaps hashing with gzip archive creation after all snapshot and
+secret/schema validation succeeds. Consequently, protocol-v2 `hash_ms` and
+`archive_ms` are concurrent wall-clock observations and must not be summed to
+infer total latency.
+
 CI retains the JSON and CSV reports and applies
 `scripts/benchmark-guardrails.json` through
 `scripts/check-benchmark-regression.py`. These generous, cross-runner limits
