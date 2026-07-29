@@ -39,13 +39,13 @@ The local operating-system account is trusted. A process with permission to modi
 - Bundle path allowlisting, regular-file-only extraction, per-file SHA-256, and rollback-safe replacement.
 - Sync isolation, disabled hooks/signing/prompts, semantic database conflict merge, pulled-state validation, and rollback.
 - Unix store permissions hardened to directory mode `0700` and file mode `0600`.
-- Release CI vulnerability audit, crates.io provenance/license-metadata policy, native tests/smoke checks, SHA-pinned Actions, and build-provenance attestations.
+- Release CI vulnerability audit, crates.io provenance/license-metadata policy, native tests/smoke checks, SHA-pinned Actions, a pinned SHA-256 gate for the CC-CEDICT build input, and build-provenance attestations.
 
 ## Explicit limitations
 
 ### No at-rest encryption
 
-Version 0.8 does not use SQLCipher and does not encrypt bundle archives. Protect runtime stores and bundles with full-disk encryption, an encrypted private volume, or an encrypted transport appropriate to the host. Do not place a store in a public repository or shared directory.
+Version 0.9 does not use SQLCipher and does not encrypt bundle archives. Protect runtime stores and bundles with full-disk encryption, an encrypted private volume, or an encrypted transport appropriate to the host. Do not place a store in a public repository or shared directory.
 
 Adding database encryption requires a separately reviewed key-management design covering non-interactive agents, recovery, rotation, migration, bundle export, and multi-machine sync. It must not silently derive a key from weak local metadata.
 

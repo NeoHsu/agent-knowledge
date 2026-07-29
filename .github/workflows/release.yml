@@ -216,6 +216,9 @@ jobs:
           fi
           dist build "${tag_args[@]}" --print=linkage --output-format=json "${dist_args[@]}" > dist-manifest.json
 
+      - name: Verify pinned CJK dictionary source
+        run: python3 scripts/check-cjk-dictionary.py --target-dir target
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:

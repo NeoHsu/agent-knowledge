@@ -56,7 +56,7 @@ derives `v<workspace-version>`; set `RELEASE_TAG` explicitly when the intended
 tag uses the accepted unprefixed form or needs to be made visible in logs:
 
 ```bash
-RELEASE_TAG=v0.8.0 scripts/check-release-readiness.sh
+RELEASE_TAG=v0.9.0 scripts/check-release-readiness.sh
 ```
 
 The gate requires local `shellcheck` and `actionlint` by default.

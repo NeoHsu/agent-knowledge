@@ -11,6 +11,8 @@ All notable changes to mnemark are documented here.
 - Added benchmark protocol v2 with sample-level interleaved binary comparisons,
   combined protocol hashes, median absolute deviation, and deterministic
   bootstrap confidence intervals.
+- Added a release-build SHA-256 gate for the exact CC-CEDICT source archive
+  embedded by Lindera.
 - Added the `index_stale_after_write` JSON error code and structured recovery
   details when a durable SQLite write commits before its Tantivy update fails,
   allowing automation to repair the index without blindly retrying the write.

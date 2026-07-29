@@ -81,9 +81,13 @@ scripts/recovery-drill.sh      # may also be run independently
 `build-release.sh` ignores only the known inherited `CC="zig cc"` /
 `CXX="zig c++"` override on native macOS, where cc-rs receives an incompatible
 architecture spelling; other explicitly selected toolchains are preserved.
-The recovery drill verifies a clean bundle restore, durable memory/workflow/
-artifact/graph state, corruption rejection, migration preview, and local sync
-checkpoint without network access.
+After Cargo completes, `build-release.sh` verifies the exact upstream
+CC-CEDICT source archive against the repository-pinned SHA-256 before accepting
+the binary. This supplements Lindera's own download check and prevents a
+release from silently embedding different dictionary input. The recovery drill
+verifies a clean bundle restore, durable memory/workflow/artifact/graph state,
+corruption rejection, migration preview, and local sync checkpoint without
+network access.
 
 Tag releases are gated by formatting, Clippy, tests, dependency audit, a
 release-binary smoke/recovery test, and bounded benchmark guardrails on Linux.
