@@ -4,6 +4,8 @@ All notable changes to mnemark are documented here.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-29
+
 ### Added
 
 - Added bundled JSON Schema discovery, representative fixtures, stable
@@ -13,28 +15,11 @@ All notable changes to mnemark are documented here.
   compatibility gate and tag-pinned manual skill installation.
 - Added cargo-deny policy, an 84% measured coverage floor, installer checksum
   sidecars, fail-closed archive verification in both generated installers, a
-  CycloneDX 1.5 binary SBOM, and
-  global artifact attestations.
+  CycloneDX 1.5 binary SBOM, and global artifact attestations.
 - Added a task-oriented documentation hub, compatibility policy, architecture
   decision records, contribution guidance, and GitHub PR/issue templates.
 - Added pre-save workflow file validation, optional full helper examples, and
   explicit repository-root checks for repository-owned workflow scripts.
-
-### Changed
-
-- JSON error envelopes now include the additive `retryable` field. Typed core
-  failures map consistently to usage, compatibility, safety, not-found,
-  conflict, and integrity codes while preserving committed-index recovery
-  semantics and stable exit statuses.
-- Installation documentation now verifies installer bytes before execution.
-- Workflow scaffolds now start as rejected drafts with explicit placeholders,
-  and agent checklists render fail-closed gates before actions, completion
-  criteria, and separate safe success/failure recording commands.
-
-## [0.9.0] - 2026-07-29
-
-### Added
-
 - Added benchmark protocol v2 with sample-level interleaved binary comparisons,
   combined protocol hashes, median absolute deviation, and deterministic
   bootstrap confidence intervals.
@@ -48,6 +33,16 @@ All notable changes to mnemark are documented here.
 
 ### Changed
 
+- JSON error envelopes now include the additive `retryable` field. Typed core
+  failures map consistently to usage, compatibility, safety, not-found,
+  conflict, and integrity codes while preserving committed-index recovery
+  semantics and stable exit statuses.
+- Installation documentation now verifies installer bytes before execution.
+- Workflow scaffolds now start as rejected drafts with explicit placeholders,
+  and agent checklists render fail-closed gates before actions, completion
+  criteria, and separate safe success/failure recording commands.
+- Reworked the README around portable-memory outcomes, an isolated demo,
+  retained evidence, common journeys, and explicit production boundaries.
 - Removed the duplicate Ubuntu MSRV lane from pull-request CI while retaining
   stable Linux and Rust 1.97 Linux/macOS/Windows coverage across the two
   workflows; direct `main` pushes still run both stable and MSRV lanes.
