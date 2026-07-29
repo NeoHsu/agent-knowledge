@@ -66,7 +66,17 @@ pub(crate) enum Command {
         command: ConfigCommand,
     },
     #[command(about = "Describe machine-readable output and persisted format contracts")]
-    Contract,
+    Contract(ContractArgs),
+    #[command(about = "Discover bundled public JSON schemas")]
+    Schema {
+        #[command(subcommand)]
+        command: SchemaCommand,
+    },
+    #[command(about = "Discover stable operation IDs and inspect exact command effects")]
+    Operation {
+        #[command(subcommand)]
+        command: OperationCommand,
+    },
     #[command(about = "Install mnemark setup helpers such as coding-agent memory policy")]
     Setup {
         #[command(subcommand)]

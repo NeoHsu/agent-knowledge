@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.9.0/docs/schemas/operation-inspect-v1.schema.json",
+  "title": "mnemark parsed operation effects v1",
+  "type": "object",
+  "required": ["contract_version", "operation", "store_exists", "effect"],
+  "properties": {
+    "contract_version": { "const": 1 },
+    "operation": { "type": "string" },
+    "store_exists": { "type": "boolean" },
+    "effect": {
+      "type": "object",
+      "required": ["store_access", "durable_write", "rebuildable_write", "output_file_write", "network"],
+      "properties": {
+        "store_access": { "enum": ["none", "read_only", "shared_lock", "exclusive_lock"] },
+        "durable_write": { "type": "boolean" },
+        "rebuildable_write": { "type": "boolean" },
+        "output_file_write": { "type": "boolean" },
+        "network": { "enum": ["none", "fetch", "push"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

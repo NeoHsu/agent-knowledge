@@ -2,8 +2,10 @@ use crate::args::{
     AmbiguityCommand, ArtifactCommand, BundleCommand, Command, GraphCommand, SetupCommand,
     WorkflowCommand,
 };
+use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum StoreAccess {
     None,
     ReadOnly,
@@ -11,14 +13,15 @@ pub(crate) enum StoreAccess {
     ExclusiveLock,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum NetworkEffect {
     None,
     Fetch,
     Push,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub(crate) struct CommandEffect {
     pub(crate) store_access: StoreAccess,
     pub(crate) durable_write: bool,
@@ -92,7 +95,9 @@ impl CommandEffect {
             }
             Command::Reindex => exclusive().rebuildable(),
             Command::Context(_) | Command::Config { .. } => Self::new(StoreAccess::None),
-            Command::Contract => Self::new(StoreAccess::None),
+            Command::Contract(_) | Command::Schema { .. } | Command::Operation { .. } => {
+                Self::new(StoreAccess::None)
+            }
             Command::Setup { command } => {
                 let writes_files = match command {
                     SetupCommand::List => false,
@@ -180,6 +185,8 @@ mod tests {
 
         let cases: &[(&[&str], bool, CommandEffect)] = &[
             (&["mem", "contract"], false, none),
+            (&["mem", "schema", "list"], false, none),
+            (&["mem", "operation", "list"], false, none),
             (&["mem", "context", "--detect"], false, none),
             (&["mem", "config", "show"], false, none),
             (&["mem", "setup", "list"], false, none),
@@ -285,6 +292,8 @@ mod tests {
             &["mem", "context", "--detect"],
             &["mem", "config", "show"],
             &["mem", "contract"],
+            &["mem", "schema", "list"],
+            &["mem", "operation", "list"],
             &["mem", "setup", "list"],
             &["mem", "history"],
             &["mem", "stats"],

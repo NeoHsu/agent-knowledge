@@ -1,0 +1,11 @@
+{
+  "contract_version": 1,
+  "effect_source": "Parse the exact invocation with mem operation inspect; effects can depend on flags and store existence.",
+  "operations": [
+    {
+      "id": "query",
+      "command": "mem query",
+      "inspect": "mem operation inspect -- query <ARGS>"
+    }
+  ]
+}

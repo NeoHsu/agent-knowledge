@@ -2,12 +2,16 @@
 
 This guide documents source version `0.9.0`. `mem setup <platform>` installs the
 skill embedded in that binary, so the installed skill and CLI stay matched.
-The `latest` release installer can lag behind source `main`; run `mem --version`
-and use documentation from the matching Git tag when exact behavior matters.
+Manually installed skills must come from the exact matching release tag. Run
+`mem --json-errors contract --skill-version 0.9.0` once per session before
+store discovery. The `latest` installer can lag behind source `main`; run
+`mem --version` and use documentation from the matching Git tag when exact
+behavior matters.
 
 ## Contents
 
 - Store setup: [Setup](#setup), [Machine-readable contract](#machine-readable-contract),
+  [Schema and operation discovery](#schema-and-operation-discovery),
   [Setup helpers](#setup-helpers), [Doctor](#doctor),
   [Session priming](#session-priming)
 - Memory: [Write](#write), [Query](#query),
@@ -59,8 +63,11 @@ intends that checkout to be the active store.
 
 All commands accept the global `--json-errors` flag. Successful output is
 unchanged; Clap parse failures and runtime failures become one JSON object on
-stderr with stable `status`, `contract_version`, `code`, `message`, and
-`exit_code` fields. Without the flag, errors remain human-readable. A mutating
+stderr with stable `status`, `contract_version`, `code`, `message`, `exit_code`,
+and `retryable` fields. Classified codes distinguish compatibility, conflict,
+integrity, not-found, safety, usage, version mismatch, and committed-index
+failures; unknown failures remain `command_failed`. Without the flag, errors
+remain human-readable. A mutating
 command whose SQLite transaction committed before its Tantivy update failed
 uses `code: "index_stale_after_write"` and adds a `details` object with
 `durable_write_committed: true`, the affected operation, and `mem reindex`
@@ -104,11 +111,33 @@ mem contract
 
 `contract` is store-independent and remains available even when user/store
 configuration is missing or malformed. It reports the CLI output contract
-version, required JSON-error fields, and current store, bundle, workflow, graph,
-and benchmark-report schema versions. Automation should pin a compatible
-`mem --version`, inspect this response, and tolerate additive object fields.
-Required fields remain compatible within a minor release; before 1.0, a
-breaking machine-interface change requires a documented minor release.
+version, required JSON-error fields, published schema names, and current store,
+bundle, workflow, graph, and benchmark-report schema versions. Pass
+`--skill-version <VERSION>` for the exact fail-closed skill gate. Automation
+should pin a compatible `mem --version`, inspect this response, and tolerate
+additive object fields. Required fields remain compatible within a minor
+release; before 1.0, a breaking machine-interface change requires a documented
+minor release.
+
+## Schema and operation discovery
+
+```bash
+mem schema list
+mem schema print error-v1
+mem operation list
+mem operation inspect -- query "release safety"
+mem operation inspect --store-exists -- query "release safety" --touch
+mem operation inspect --store-exists -- sync --push
+```
+
+`schema list` and `schema print` expose the JSON Schemas bundled into the exact
+binary on `PATH`; they do not discover or initialize a store. `operation list`
+derives stable dot-separated leaf IDs from the Clap command tree.
+`operation inspect` reparses the supplied invocation and reports its exact
+store access, durable/rebuildable/output-file writes, and network effect.
+Conditional flags such as `query --touch`, focused priming, and `sync --push`
+are therefore classified from the real invocation instead of a parallel prose
+registry. Pass `--store-exists` when the effect depends on an existing store.
 
 ## Setup helpers
 

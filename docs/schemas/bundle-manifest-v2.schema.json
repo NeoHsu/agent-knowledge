@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.9.0/docs/schemas/bundle-manifest-v2.schema.json",
+  "title": "mnemark bundle manifest v2",
+  "type": "object",
+  "required": ["version", "created_at", "schema_version", "contains", "hashes"],
+  "properties": {
+    "version": { "const": 2 },
+    "created_at": { "type": "string" },
+    "schema_version": { "type": "integer" },
+    "contains": {
+      "type": "object",
+      "required": ["memory_db", "config", "manifest", "artifacts"],
+      "properties": {
+        "memory_db": { "type": "boolean" },
+        "config": { "type": "boolean" },
+        "manifest": { "type": "boolean" },
+        "artifacts": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "hashes": { "type": "object", "additionalProperties": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

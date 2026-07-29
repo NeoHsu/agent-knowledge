@@ -16,6 +16,10 @@ fn contract_is_store_independent_and_versions_machine_interfaces() {
     assert_eq!(output["contract_version"], 1);
     assert_eq!(output["cli_version"], env!("CARGO_PKG_VERSION"));
     assert_eq!(output["json_errors"]["version"], 1);
+    assert!(output["json_errors"]["required_fields"]
+        .as_array()
+        .expect("required error fields")
+        .contains(&serde_json::json!("retryable")));
     assert!(output["json_errors"]["optional_fields"]
         .as_array()
         .expect("optional error fields")
@@ -29,6 +33,14 @@ fn contract_is_store_independent_and_versions_machine_interfaces() {
     assert_eq!(output["schemas"]["workflow"], 1);
     assert_eq!(output["schemas"]["graph"], 1);
     assert_eq!(output["schemas"]["benchmark_report"], 1);
+    assert_eq!(
+        output["published_schemas"]
+            .as_array()
+            .expect("published schemas")
+            .len(),
+        10
+    );
+    assert!(output["skill_compatibility"].is_null());
     assert!(!repo.join("memory.db").exists());
 }
 

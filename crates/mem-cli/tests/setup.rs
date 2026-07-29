@@ -242,6 +242,12 @@ fn setup_pi_uses_shared_skill_directly() {
     let shared = base.join(".agents/skills/mnemark");
     assert!(shared.join("SKILL.md").exists());
     assert!(shared.join("references/graph-rules.md").exists());
+    let compatibility: serde_json::Value = serde_json::from_slice(
+        &fs::read(shared.join("compatibility.json")).expect("installed compatibility manifest"),
+    )
+    .expect("compatibility json");
+    assert_eq!(compatibility["skillVersion"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(compatibility["cliVersion"], env!("CARGO_PKG_VERSION"));
     assert_all_skill_references_exist(&shared);
     assert!(!fs::symlink_metadata(shared)
         .expect("shared skill")

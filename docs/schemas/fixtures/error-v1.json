@@ -1,0 +1,8 @@
+{
+  "status": "error",
+  "contract_version": 1,
+  "code": "not_found",
+  "message": "memory not found: example",
+  "exit_code": 4,
+  "retryable": false
+}

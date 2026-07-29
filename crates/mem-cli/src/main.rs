@@ -92,22 +92,25 @@ fn safe_error_message(message: String) -> String {
 }
 
 fn run(cli: Cli) -> Result<()> {
-    // Contract introspection must remain available even when the user or store
-    // configuration is missing or malformed.
-    if matches!(&cli.command, Command::Contract) {
-        return cmd_contract();
-    }
+    // Contract, schema, and operation introspection remain available even when
+    // user/store configuration is missing or malformed.
+    let command = match cli.command {
+        Command::Contract(args) => return cmd_contract(args),
+        Command::Schema { command } => return cmd_schema(command),
+        Command::Operation { command } => return cmd_operation(command),
+        command => command,
+    };
 
     // Every store-facing command uses explicit/runtime discovery. A source
     // checkout is never selected implicitly; development stores must use
     // --home or MNEMARK_HOME.
     let app = App::discover_runtime_with_home(cli.home.as_deref())?;
-    let effect = CommandEffect::classify(&cli.command, app.db_path.exists());
+    let effect = CommandEffect::classify(&command, app.db_path.exists());
 
     match effect.store_access {
-        StoreAccess::ExclusiveLock => with_lock(&app, || dispatch(&app, cli.command)),
-        StoreAccess::SharedLock => with_shared_lock(&app, || dispatch(&app, cli.command)),
-        StoreAccess::None | StoreAccess::ReadOnly => dispatch(&app, cli.command),
+        StoreAccess::ExclusiveLock => with_lock(&app, || dispatch(&app, command)),
+        StoreAccess::SharedLock => with_shared_lock(&app, || dispatch(&app, command)),
+        StoreAccess::None | StoreAccess::ReadOnly => dispatch(&app, command),
     }
 }
 
@@ -133,7 +136,9 @@ fn dispatch(app: &App, command: Command) -> Result<()> {
         }
         Command::Context(args) => cmd_context(args)?,
         Command::Config { command } => cmd_config(app, command)?,
-        Command::Contract => unreachable!("contract handled before store discovery"),
+        Command::Contract(_) | Command::Schema { .. } | Command::Operation { .. } => {
+            unreachable!("store-independent discovery handled before store discovery")
+        }
         Command::Setup { command } => cmd_setup(command)?,
         Command::History(args) => cmd_history(app, args)?,
         Command::Stats(args) => cmd_stats(app, args)?,

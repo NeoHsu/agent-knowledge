@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.9.0/docs/schemas/graph-export-v1.schema.json",
+  "title": "mnemark graph export v1",
+  "type": "object",
+  "required": ["schema_version", "nodes", "edges"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "nodes": { "type": "array", "items": { "type": "object" } },
+    "edges": { "type": "array", "items": { "type": "object" } }
+  },
+  "additionalProperties": true
+}

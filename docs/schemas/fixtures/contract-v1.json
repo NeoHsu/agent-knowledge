@@ -1,0 +1,47 @@
+{
+  "status": "ok",
+  "contract_version": 1,
+  "cli_version": "0.9.0",
+  "compatibility": {
+    "successful_json": "required fields remain compatible within a minor release; additive fields are allowed",
+    "json_errors": "versioned by contract_version and emitted only with --json-errors",
+    "pre_1_0_breaking_changes": "may occur only in a documented minor release"
+  },
+  "json_errors": {
+    "version": 1,
+    "required_fields": ["status", "contract_version", "code", "message", "exit_code", "retryable"],
+    "optional_fields": ["details"],
+    "known_codes": [
+      "cli_parse_error",
+      "command_failed",
+      "compatibility",
+      "conflict",
+      "index_stale_after_write",
+      "integrity",
+      "not_found",
+      "safety_violation",
+      "usage",
+      "version_mismatch"
+    ]
+  },
+  "schemas": {
+    "store": 5,
+    "bundle": 2,
+    "workflow": 1,
+    "graph": 1,
+    "benchmark_report": 1
+  },
+  "published_schemas": [
+    "bundle-manifest-v2",
+    "contract-v1",
+    "error-v1",
+    "graph-export-v1",
+    "memory-list-v1",
+    "operation-inspect-v1",
+    "operation-list-v1",
+    "prime-v1",
+    "schema-list-v1",
+    "skill-compatibility-v1"
+  ],
+  "skill_compatibility": null
+}

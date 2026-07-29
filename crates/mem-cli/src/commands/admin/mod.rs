@@ -1,14 +1,20 @@
 mod audit;
+mod contract;
 mod gc;
 mod history;
 mod migration;
+mod operation;
 mod render;
 mod runtime;
+mod schema;
 mod stats;
 
 pub(crate) use audit::{audit_report, cmd_audit};
+pub(crate) use contract::cmd_contract;
 pub(crate) use gc::cmd_gc;
 pub(crate) use history::cmd_history;
 pub(crate) use migration::cmd_migrate;
-pub(crate) use runtime::{cmd_config, cmd_context, cmd_contract};
+pub(crate) use operation::cmd_operation;
+pub(crate) use runtime::{cmd_config, cmd_context};
+pub(crate) use schema::cmd_schema;
 pub(crate) use stats::{cmd_stats, stats_report};

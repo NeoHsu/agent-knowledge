@@ -1,0 +1,10 @@
+{
+  "contract_version": 1,
+  "schemas": [
+    {
+      "name": "error-v1",
+      "version": 1,
+      "description": "Versioned JSON error envelope emitted with --json-errors"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.9.0/docs/schemas/contract-v1.schema.json",
+  "title": "mnemark machine contract v1",
+  "type": "object",
+  "required": ["status", "contract_version", "cli_version", "compatibility", "json_errors", "schemas", "published_schemas"],
+  "properties": {
+    "status": { "const": "ok" },
+    "contract_version": { "const": 1 },
+    "cli_version": { "type": "string" },
+    "compatibility": { "type": "object" },
+    "json_errors": {
+      "type": "object",
+      "required": ["version", "required_fields", "optional_fields", "known_codes"],
+      "properties": {
+        "version": { "const": 1 },
+        "required_fields": { "type": "array", "items": { "type": "string" } },
+        "optional_fields": { "type": "array", "items": { "type": "string" } },
+        "known_codes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "schemas": {
+      "type": "object",
+      "required": ["store", "bundle", "workflow", "graph", "benchmark_report"],
+      "properties": {
+        "store": { "type": "integer" },
+        "bundle": { "type": "integer" },
+        "workflow": { "type": "integer" },
+        "graph": { "type": "integer" },
+        "benchmark_report": { "type": "integer" }
+      }
+    },
+    "published_schemas": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "skill_compatibility": { "type": ["object", "null"] }
+  },
+  "additionalProperties": true
+}

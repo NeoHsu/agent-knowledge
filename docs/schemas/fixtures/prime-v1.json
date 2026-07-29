@@ -1,0 +1,18 @@
+{
+  "status": "ok",
+  "root": "/tmp/mnemark",
+  "scopes": ["global"],
+  "sections": {
+    "preference": [
+      {
+        "name": "example_preference",
+        "type": "preference",
+        "scope": "global",
+        "source": "manual",
+        "confidence": "high",
+        "content": "Prefer deterministic contracts."
+      }
+    ]
+  },
+  "graph_context": null
+}

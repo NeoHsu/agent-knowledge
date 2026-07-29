@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.9.0/docs/schemas/error-v1.schema.json",
+  "title": "mnemark JSON error v1",
+  "type": "object",
+  "required": ["status", "contract_version", "code", "message", "exit_code", "retryable"],
+  "properties": {
+    "status": { "const": "error" },
+    "contract_version": { "const": 1 },
+    "code": { "type": "string", "minLength": 1 },
+    "message": { "type": "string" },
+    "exit_code": { "type": "integer" },
+    "retryable": { "type": "boolean" },
+    "details": { "type": "object" }
+  },
+  "additionalProperties": true
+}

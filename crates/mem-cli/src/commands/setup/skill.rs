@@ -8,6 +8,10 @@ pub(crate) const SKILL_FILES: &[(&str, &str)] = &[
         include_str!("../../../../../skills/mnemark/SKILL.md"),
     ),
     (
+        "compatibility.json",
+        include_str!("../../../../../skills/mnemark/compatibility.json"),
+    ),
+    (
         "references/cli-guide.md",
         include_str!("../../../../../skills/mnemark/references/cli-guide.md"),
     ),

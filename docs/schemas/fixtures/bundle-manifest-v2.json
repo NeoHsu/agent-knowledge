@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "created_at": "2026-07-29T00:00:00Z",
+  "schema_version": 5,
+  "contains": {
+    "memory_db": true,
+    "config": false,
+    "manifest": false,
+    "artifacts": false
+  },
+  "hashes": {
+    "memory.db": "sha256:0123456789abcdef"
+  }
+}

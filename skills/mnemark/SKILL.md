@@ -1,6 +1,7 @@
 ---
 name: mnemark
 description: Use mnemark to operate durable agent memory through the local `mem` CLI and its active SQLite + Tantivy store. ALWAYS use this skill for explicit `mem` or mnemark commands; when the user says "remember this", "記住", "幫我存", or asks to recall/update/supersede/delete durable preferences and decisions; for mnemark store setup, health, migration, audit, import/export, bundles, merge, or sync; and for memory-focused daily/weekly retrospectives. Chinese store requests such as "匯入記憶庫", "同步記憶庫", and "記憶回顧" also trigger. Use it when the user wants a recurring procedure persisted or recalled as a mnemark workflow, such as "把這個流程存成 runbook" or "找之前的工作流程". Do not use it for generic Git sync, ordinary data import/export, CI workflows, sprint retrospectives, or auditing/developing a skill or source package unless the task also requires operating the mnemark store.
+compatibility: Requires mem CLI 0.9.0 exactly
 ---
 
 # mnemark Skill
@@ -8,6 +9,20 @@ description: Use mnemark to operate durable agent memory through the local `mem`
 Use the local `mem` CLI for durable memory, workflow runbooks, portable
 artifacts, and store maintenance. SQLite is the durable source of truth;
 Tantivy and graph projections are rebuildable local indexes.
+
+## Execution Gate
+
+Once per session, before store discovery, config, or any memory operation, run:
+
+```bash
+mem --json-errors contract --skill-version 0.9.0
+```
+
+Proceed only when `skill_compatibility.compatible` is `true`. On mismatch, stop
+and show the returned `update_command`; run it only with user approval, then
+rerun the gate. If this CLI does not recognize `--skill-version`, run only
+`mem --version`, report that this skill requires `0.9.0`, and offer the tagged
+skill install command without executing it automatically.
 
 Load only the reference needed for the current operation:
 

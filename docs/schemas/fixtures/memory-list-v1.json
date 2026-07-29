@@ -1,0 +1,25 @@
+[
+  {
+    "id": "example_memory",
+    "type": "reference",
+    "name": "example_memory",
+    "description": "Representative query row",
+    "content": "Trigger: schema tests. Action: validate this fixture. Why: public contract coverage.",
+    "tags": "[\"domain:contracts\"]",
+    "scope": "global",
+    "source": "agent",
+    "confidence": "medium",
+    "protected": false,
+    "created_at": "2026-07-29T00:00:00Z",
+    "updated_at": "2026-07-29T00:00:00Z",
+    "expires_at": null,
+    "valid_until": null,
+    "superseded_by": null,
+    "version": 1,
+    "access_count": 0,
+    "last_accessed_at": null,
+    "origin": "local",
+    "origin_ref": null,
+    "user_confirmed_at": null
+  }
+]

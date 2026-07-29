@@ -4,6 +4,9 @@ use anyhow::Error;
 use serde_json::{json, Map, Value};
 
 pub(crate) const INDEX_STALE_AFTER_WRITE: &str = "index_stale_after_write";
+pub(crate) const NOT_FOUND: &str = "not_found";
+pub(crate) const USAGE: &str = "usage";
+pub(crate) const VERSION_MISMATCH: &str = "version_mismatch";
 
 #[derive(Debug)]
 pub(crate) struct StructuredCommandError {
@@ -54,6 +57,32 @@ fn structured_error(
         details,
     }
     .into()
+}
+
+pub(crate) fn not_found_error(message: impl Into<String>) -> Error {
+    structured_error(NOT_FOUND, message, 4, Value::Object(Map::new()))
+}
+
+pub(crate) fn usage_error(message: impl Into<String>) -> Error {
+    structured_error(USAGE, message, 2, Value::Object(Map::new()))
+}
+
+pub(crate) fn version_mismatch_error(skill_version: &str, update_command: &str) -> Error {
+    structured_error(
+        VERSION_MISMATCH,
+        format!(
+            "mnemark skill {skill_version} is incompatible with mem {}; install the exact matching skill release",
+            env!("CARGO_PKG_VERSION")
+        ),
+        2,
+        json!({
+            "cli_version": env!("CARGO_PKG_VERSION"),
+            "skill_version": skill_version,
+            "compatible": false,
+            "recommended_action": "install the skill release matching the CLI, then rerun the compatibility gate",
+            "update_command": update_command
+        }),
+    )
 }
 
 pub(crate) fn committed_index_error(

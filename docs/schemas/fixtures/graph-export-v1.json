@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "nodes": [
+    {
+      "id": "memory:example",
+      "kind": "memory",
+      "label": "example"
+    }
+  ],
+  "edges": []
+}

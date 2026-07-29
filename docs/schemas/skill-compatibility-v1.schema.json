@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.9.0/docs/schemas/skill-compatibility-v1.schema.json",
+  "title": "mnemark skill compatibility manifest v1",
+  "type": "object",
+  "required": ["schemaVersion", "skillVersion", "cliVersion", "compatibility", "releaseTag"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "skillVersion": { "type": "string" },
+    "cliVersion": { "type": "string" },
+    "compatibility": { "const": "exact" },
+    "releaseTag": { "type": "string" }
+  },
+  "additionalProperties": false
+}

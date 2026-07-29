@@ -1,0 +1,12 @@
+{
+  "contract_version": 1,
+  "operation": "query",
+  "store_exists": true,
+  "effect": {
+    "store_access": "read_only",
+    "durable_write": false,
+    "rebuildable_write": false,
+    "output_file_write": false,
+    "network": "none"
+  }
+}

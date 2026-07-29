@@ -163,7 +163,7 @@ mod workflow;
 
 pub(crate) use admin::{
     audit_report, cmd_audit, cmd_config, cmd_context, cmd_contract, cmd_gc, cmd_history,
-    cmd_migrate, cmd_stats, stats_report,
+    cmd_migrate, cmd_operation, cmd_schema, cmd_stats, stats_report,
 };
 pub(crate) use ambiguity::cmd_ambiguity;
 pub(crate) use artifact::cmd_artifact;

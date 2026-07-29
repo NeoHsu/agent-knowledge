@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.9.0/docs/schemas/operation-list-v1.schema.json",
+  "title": "mnemark operation catalog v1",
+  "type": "object",
+  "required": ["contract_version", "effect_source", "operations"],
+  "properties": {
+    "contract_version": { "const": 1 },
+    "effect_source": { "type": "string" },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "command", "inspect"],
+        "properties": {
+          "id": { "type": "string" },
+          "command": { "type": "string" },
+          "inspect": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -10,6 +10,55 @@ pub(crate) enum ConfigCommand {
     Show,
 }
 
+#[derive(Args)]
+pub(crate) struct ContractArgs {
+    #[arg(
+        long,
+        value_name = "VERSION",
+        help = "Verify exact compatibility with an installed mnemark skill version"
+    )]
+    pub(crate) skill_version: Option<String>,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum SchemaCommand {
+    #[command(about = "List bundled public JSON schemas")]
+    List,
+    #[command(about = "Print one bundled public JSON schema")]
+    Print(SchemaPrintArgs),
+}
+
+#[derive(Args)]
+pub(crate) struct SchemaPrintArgs {
+    #[arg(value_name = "NAME")]
+    pub(crate) name: String,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum OperationCommand {
+    #[command(about = "List stable CLI operation IDs")]
+    List,
+    #[command(about = "Classify the exact effects of a parsed mem invocation")]
+    Inspect(OperationInspectArgs),
+}
+
+#[derive(Args)]
+pub(crate) struct OperationInspectArgs {
+    #[arg(
+        long,
+        help = "Classify conditional behavior as if the active store already exists"
+    )]
+    pub(crate) store_exists: bool,
+    #[arg(
+        value_name = "COMMAND",
+        num_args = 1..,
+        trailing_var_arg = true,
+        allow_hyphen_values = true,
+        help = "Command arguments after mem; use -- before arguments beginning with '-'"
+    )]
+    pub(crate) command: Vec<String>,
+}
+
 #[derive(Subcommand)]
 pub(crate) enum SetupCommand {
     #[command(about = "List supported coding-agent platforms and their default wiring paths")]
