@@ -17,6 +17,12 @@ All notable changes to mnemark are documented here.
   details when a durable SQLite write commits before its Tantivy update fails,
   allowing automation to repair the index without blindly retrying the write.
 
+### Changed
+
+- Removed the duplicate Ubuntu MSRV lane from pull-request CI while retaining
+  stable Linux and Rust 1.97 Linux/macOS/Windows coverage across the two
+  workflows; direct `main` pushes still run both stable and MSRV lanes.
+
 ### Performance
 
 - Reduced the Tantivy writer memory budget from 50 MB to 20 MB after

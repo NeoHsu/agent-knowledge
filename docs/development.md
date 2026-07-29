@@ -66,9 +66,12 @@ Leave `ALLOW_DIRTY` unset when qualifying a release. The gate requires
 missing auxiliary tool for bounded development only and cannot provide complete
 release evidence.
 
-CI tests both stable Rust and the declared Rust 1.97 MSRV. The stable lane also
-builds and smoke-tests the release binary and runs a bounded benchmark
-correctness smoke.
+CI tests both stable Rust and the declared Rust 1.97 MSRV. Pull requests use the
+stable Linux lane in `ci.yml` plus the Rust 1.97 Linux/macOS/Windows release
+verification matrix; direct `main` pushes run stable and MSRV lanes in `ci.yml`.
+This avoids duplicating the same Ubuntu MSRV test on every pull request. The
+stable lane also builds and smoke-tests the release binary and runs a bounded
+benchmark correctness smoke.
 
 ## Release build and smoke test
 
