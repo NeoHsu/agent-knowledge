@@ -31,6 +31,9 @@ All notable changes to mnemark are documented here.
   while preserving managed-file conflict checks and upgrade behavior.
 - Split doctor diagnostics into store, platform, and report modules while
   preserving check order, status levels, and recovery guidance.
+- Split maintenance commands into migration, runtime contract/config, history,
+  stats, audit, garbage-collection, and rendering modules without changing SQL
+  or output formats.
 
 ### Performance
 

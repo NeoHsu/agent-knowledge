@@ -47,9 +47,12 @@ Read:
    implementations live under `crates/mem-cli/src/commands/memory/`,
    `crates/mem-cli/src/commands/merge/`, `crates/mem-cli/src/commands/bundle/`,
    `crates/mem-cli/src/commands/workflow/`,
-   `crates/mem-cli/src/commands/setup/`, and
-   `crates/mem-cli/src/commands/doctor/`; specifically,
-   `crates/mem-cli/src/commands/doctor/mod.rs` orchestrates checks
+   `crates/mem-cli/src/commands/setup/`,
+   `crates/mem-cli/src/commands/doctor/`, and
+   `crates/mem-cli/src/commands/admin/`; specifically,
+   `crates/mem-cli/src/commands/admin/mod.rs` groups maintenance and reporting
+   commands, while `crates/mem-cli/src/commands/doctor/mod.rs` orchestrates
+   diagnostics
 6. related tests under `crates/mem-cli/tests/`
 
 Update docs and tests with behavior changes.
