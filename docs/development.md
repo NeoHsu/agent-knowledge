@@ -119,20 +119,33 @@ SCALES="100 1000" scripts/benchmark-scale.sh
 ```
 
 The script uses isolated temporary stores and reports import, query, prime,
-graph rebuild, and bundle export latency as CSV. It performs no network access
-and deletes its stores on exit. It rejects a binary whose version differs from
-`Cargo.toml`; set `ALLOW_VERSION_MISMATCH=1` only for an intentional controlled
-comparison. CI checks the JSON report against
+graph rebuild, and bundle export latency as CSV. Protocol v2 includes MAD and a
+deterministic bootstrap interval for every median. It performs no network
+access and deletes its stores on exit. The candidate binary must match
+`Cargo.toml`; `ALLOW_VERSION_MISMATCH=1` is reserved for an intentional
+candidate mismatch. CI checks the JSON report against
 `scripts/benchmark-guardrails.json` and retains both JSON and CSV evidence.
-For a controlled same-platform comparison against a retained report:
+
+For a controlled same-platform comparison, provide both binaries to one run so
+samples are seed-interleaved instead of comparing two independent host windows:
 
 ```bash
+REPORT_FILE=/tmp/candidate-v2.json \
+BASELINE_REPORT_FILE=/tmp/baseline-v2.json \
+BASELINE_MEM_BIN=/path/to/baseline/mem \
+BASELINE_GIT_COMMIT=<baseline-commit> \
+scripts/benchmark-scale.sh > /tmp/candidate-v2.csv
+
 python3 scripts/check-benchmark-regression.py \
-  --report /tmp/candidate.json \
+  --report /tmp/candidate-v2.json \
   --guardrails scripts/benchmark-guardrails.json \
-  --baseline /tmp/baseline.json \
+  --baseline /tmp/baseline-v2.json \
   --max-regression-percent 35
 ```
+
+The checker verifies the paired binary identities, run counts, protocol hash,
+and exact sample schedule. Historical schema-v1 reports remain readable but are
+not directly comparable to protocol v2.
 
 The portable guardrails detect catastrophic regressions; they are deliberately
 not cross-machine performance SLOs.

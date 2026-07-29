@@ -10,7 +10,8 @@ import pathlib
 import sys
 from typing import Any
 
-REPORT_SCHEMA_VERSION = 1
+GUARDRAIL_SCHEMA_VERSION = 1
+SUPPORTED_REPORT_SCHEMA_VERSIONS = {1, 2}
 
 
 def load_json(path: pathlib.Path) -> dict[str, Any]:
@@ -36,6 +37,31 @@ def finite_number(value: Any, label: str, errors: list[str]) -> float | None:
         errors.append(f"{label} must be finite and non-negative")
         return None
     return number
+
+
+def validate_report_schema(
+    report: dict[str, Any], label: str, errors: list[str]
+) -> int | None:
+    version = report.get("schema_version")
+    if version not in SUPPORTED_REPORT_SCHEMA_VERSIONS:
+        supported = ", ".join(str(value) for value in sorted(SUPPORTED_REPORT_SCHEMA_VERSIONS))
+        errors.append(f"{label} schema_version must be one of: {supported}")
+        return None
+    if version == 2:
+        if report.get("benchmark_protocol_version") != 2:
+            errors.append(f"{label}.benchmark_protocol_version must be 2")
+        protocol_hash = report.get("benchmark_protocol_sha256")
+        if not isinstance(protocol_hash, str) or not protocol_hash:
+            errors.append(f"{label}.benchmark_protocol_sha256 must be a non-empty string")
+        elif protocol_hash != report.get("benchmark_script_sha256"):
+            errors.append(
+                f"{label} protocol and compatibility script hashes must match"
+            )
+        if not isinstance(report.get("sample_schedule"), dict):
+            errors.append(f"{label}.sample_schedule must be an object")
+        if not isinstance(report.get("statistic_model"), dict):
+            errors.append(f"{label}.statistic_model must be an object")
+    return version
 
 
 def results_by_scale(
@@ -66,8 +92,8 @@ def check_guardrails(
     guardrails: dict[str, Any],
     errors: list[str],
 ) -> None:
-    if guardrails.get("schema_version") != REPORT_SCHEMA_VERSION:
-        errors.append(f"guardrail schema_version must be {REPORT_SCHEMA_VERSION}")
+    if guardrails.get("schema_version") != GUARDRAIL_SCHEMA_VERSION:
+        errors.append(f"guardrail schema_version must be {GUARDRAIL_SCHEMA_VERSION}")
         return
     configured = guardrails.get("scales")
     if not isinstance(configured, dict):
@@ -124,8 +150,39 @@ def check_baseline(
     baseline_errors: list[str] = []
     baseline_results = results_by_scale(baseline, baseline_errors)
     errors.extend(f"baseline: {error}" for error in baseline_errors)
-    if baseline.get("schema_version") != REPORT_SCHEMA_VERSION:
-        errors.append(f"baseline schema_version must be {REPORT_SCHEMA_VERSION}")
+    candidate_version = validate_report_schema(report, "report", errors)
+    baseline_version = validate_report_schema(baseline, "baseline", errors)
+    if candidate_version != baseline_version:
+        errors.append("candidate and baseline report schema versions differ")
+    if baseline.get("git_dirty") is not False:
+        errors.append("baseline benchmark report must come from a clean Git worktree")
+
+    for field in ["interactive_runs", "maintenance_runs", "warmup_runs"]:
+        if report.get(field) != baseline.get(field):
+            errors.append(f"candidate and baseline {field} differ")
+
+    if candidate_version == 2 and baseline_version == 2:
+        if report.get("comparison_mode") is not True or baseline.get(
+            "comparison_mode"
+        ) is not True:
+            errors.append(
+                "schema v2 baseline comparisons must come from one interleaved run"
+            )
+        if report.get("sample_schedule") != baseline.get("sample_schedule"):
+            errors.append("candidate and baseline sample schedules differ")
+        candidate_peer = report.get("comparison_peer")
+        baseline_peer = baseline.get("comparison_peer")
+        if not isinstance(candidate_peer, dict) or not isinstance(baseline_peer, dict):
+            errors.append("interleaved reports must identify their comparison peers")
+        else:
+            if candidate_peer.get("binary_sha256") != baseline.get("binary_sha256"):
+                errors.append("candidate comparison peer does not match baseline binary")
+            if baseline_peer.get("binary_sha256") != report.get("binary_sha256"):
+                errors.append("baseline comparison peer does not match candidate binary")
+            if candidate_peer.get("git_commit") != baseline.get("git_commit"):
+                errors.append("candidate comparison peer does not match baseline commit")
+            if baseline_peer.get("git_commit") != report.get("git_commit"):
+                errors.append("baseline comparison peer does not match candidate commit")
     if not allow_platform_mismatch and report.get("platform") != baseline.get(
         "platform"
     ):
@@ -195,8 +252,7 @@ def main() -> int:
     report = load_json(args.report)
     guardrails = load_json(args.guardrails)
     errors: list[str] = []
-    if report.get("schema_version") != REPORT_SCHEMA_VERSION:
-        errors.append(f"report schema_version must be {REPORT_SCHEMA_VERSION}")
+    validate_report_schema(report, "report", errors)
     git_dirty = report.get("git_dirty")
     if args.require_clean and (not isinstance(git_dirty, bool) or git_dirty):
         errors.append("benchmark report must come from a clean Git worktree")

@@ -16,14 +16,15 @@ operations receive one warmup by default and run in separate processes while
 retaining the operating system cache. Scale order is seed-randomized. Every
 measured operation also runs a correctness assertion.
 
-The CSV summary reports median, p95 (only when at least 20 samples exist),
+Protocol v2 reports median, median absolute deviation (MAD), a deterministic
+bootstrap 95% interval for the median, p95 (only with at least 20 samples),
 minimum, maximum, peak RSS, and input/output sizes. The JSON report additionally
 records:
 
 - platform, Rust and Python versions;
 - Git commit and dirty state;
-- binary and benchmark-script SHA-256 hashes;
-- seed, execution order, run counts, and cache model;
+- binary and combined benchmark-protocol SHA-256 hashes;
+- seed, execution order, exact sample schedule, run counts, and cache model;
 - database, Tantivy index, and bundle sizes;
 - bundle snapshot, validation, hashing, archive, and install stage timings.
 
@@ -31,19 +32,28 @@ CI retains the JSON and CSV reports and applies
 `scripts/benchmark-guardrails.json` through
 `scripts/check-benchmark-regression.py`. These generous, cross-runner limits
 catch catastrophic regressions and hangs; they are not performance claims.
-For meaningful regression percentages, compare a candidate with a retained
-report from the same platform and unchanged benchmark script:
+For meaningful regression percentages, run both binaries in one seeded,
+sample-level interleaved process, then compare the paired reports:
 
 ```bash
+REPORT_FILE=/tmp/candidate-v2.json \
+BASELINE_REPORT_FILE=/tmp/baseline-v2.json \
+BASELINE_CSV_FILE=/tmp/baseline-v2.csv \
+BASELINE_MEM_BIN=/path/to/baseline/mem \
+BASELINE_GIT_COMMIT=<baseline-commit> \
+scripts/benchmark-scale.sh > /tmp/candidate-v2.csv
+
 python3 scripts/check-benchmark-regression.py \
-  --report /tmp/candidate.json \
+  --report /tmp/candidate-v2.json \
   --guardrails scripts/benchmark-guardrails.json \
-  --baseline /tmp/baseline.json \
+  --baseline /tmp/baseline-v2.json \
   --max-regression-percent 35
 ```
 
-The checker rejects platform or benchmark-script mismatches by default. Override
-those checks only for an explicitly reviewed protocol comparison.
+The checker requires matching platform, protocol hash, run counts, peer binary
+identity, and sample schedule. Override platform or protocol checks only for an
+explicitly reviewed methodology comparison. Schema-v1 reports remain valid as
+historical evidence, but cannot be directly compared with protocol v2.
 
 ## Release baseline: v0.8.0
 
@@ -141,11 +151,12 @@ REPORT_FILE=/tmp/mnemark-benchmark.json \
 scripts/benchmark-scale.sh
 ```
 
-Run the default 20 interactive samples and 3-5 maintenance samples before
-publishing performance claims. Keep the JSON report so results remain tied to a
-binary hash, commit, cache model, and correctness checks. The benchmark rejects
-stale binaries whose version differs from `Cargo.toml`; use
-`ALLOW_VERSION_MISMATCH=1` only for an intentional controlled A/B run.
+Run the default 20 interactive and five maintenance samples before publishing
+performance claims. Keep the JSON report so results remain tied to a binary
+hash, commit, exact schedule, uncertainty summary, cache model, and correctness
+checks. The candidate binary must match `Cargo.toml`; an older paired binary is
+identified separately by `BASELINE_MEM_BIN` and `BASELINE_GIT_COMMIT`. Use
+`ALLOW_VERSION_MISMATCH=1` only when the candidate mismatch is intentional.
 
 ## 100,000-memory capacity canary
 

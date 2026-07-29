@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import pathlib
 import subprocess
@@ -35,6 +36,45 @@ def report(median: float = 50.0) -> dict[str, object]:
             }
         ],
     }
+
+
+def v2_report(*, label: str = "candidate", comparison: bool = False) -> dict[str, object]:
+    value = report()
+    value.update(
+        {
+            "schema_version": 2,
+            "benchmark_protocol_version": 2,
+            "benchmark_protocol_sha256": "b" * 64,
+            "sample_schedule": {"100": {"query": [["candidate"]]}},
+            "statistic_model": {"center": "median"},
+            "interactive_runs": 20,
+            "maintenance_runs": 5,
+            "warmup_runs": 1,
+            "run_label": label,
+            "comparison_mode": comparison,
+            "comparison_peer": None,
+        }
+    )
+    return value
+
+
+def interleaved_pair() -> tuple[dict[str, object], dict[str, object]]:
+    candidate = v2_report(comparison=True)
+    baseline = copy.deepcopy(candidate)
+    baseline["run_label"] = "baseline"
+    baseline["binary_sha256"] = "d" * 64
+    baseline["git_commit"] = "e" * 40
+    candidate["comparison_peer"] = {
+        "label": "baseline",
+        "binary_sha256": baseline["binary_sha256"],
+        "git_commit": baseline["git_commit"],
+    }
+    baseline["comparison_peer"] = {
+        "label": "candidate",
+        "binary_sha256": candidate["binary_sha256"],
+        "git_commit": candidate["git_commit"],
+    }
+    return candidate, baseline
 
 
 def guardrails(maximum: float = 100.0) -> dict[str, object]:
@@ -83,6 +123,22 @@ class BenchmarkRegressionCheckerTests(unittest.TestCase):
         completed = self.run_checker(report(), guardrails())
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("benchmark guardrails ok", completed.stdout)
+
+    def test_accepts_schema_v2_single_report(self) -> None:
+        completed = self.run_checker(v2_report(), guardrails())
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_accepts_interleaved_schema_v2_pair(self) -> None:
+        candidate, baseline = interleaved_pair()
+        completed = self.run_checker(candidate, guardrails(), baseline=baseline)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_rejects_non_interleaved_schema_v2_baseline(self) -> None:
+        candidate, baseline = interleaved_pair()
+        baseline["sample_schedule"] = {"100": {"query": [["baseline"]]}}
+        completed = self.run_checker(candidate, guardrails(), baseline=baseline)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("sample schedules differ", completed.stderr)
 
     def test_rejects_guardrail_violation_and_dirty_report(self) -> None:
         candidate = report(median=150.0)
