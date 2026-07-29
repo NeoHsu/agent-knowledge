@@ -1,15 +1,60 @@
 [tools]
 zig = "0.16.0"
+"cargo:cargo-audit" = "0.22.1"
+"cargo:cargo-deny" = "0.20.2"
+"cargo:cargo-llvm-cov" = "0.8.7"
 
 [tools.rust]
 version = "1.97.0"
 profile = "default"
-components = ["rust-analyzer", "rust-src"]
+components = ["rust-analyzer", "rust-src", "llvm-tools-preview"]
 
 [env]
 CC = "zig cc"
 CXX = "zig c++"
 AR = "zig ar"
+
+[tasks."check:fast"]
+description = "Run formatting, Clippy, and the focused mnemark contract tests"
+run = [
+  "cargo fmt --all -- --check",
+  "env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings",
+  "env -u CC -u CXX cargo test -p mnemark --locked --test contract --test discovery_contract --test doc_drift",
+]
+
+[tasks."contract:check"]
+description = "Check CLI surface, docs, schemas, operation effects, and skill lockstep"
+run = [
+  "python3 scripts/check-skill-version.py",
+  "env -u CC -u CXX cargo test -p mnemark --locked --test contract --test discovery_contract --test doc_drift",
+]
+
+[tasks."contract:update"]
+description = "Regenerate the checked-in public CLI surface snapshot"
+env = { UPDATE_CLI_SURFACE = "1" }
+run = "env -u CC -u CXX cargo test -p mnemark --locked --test doc_drift cli_surface_snapshot_matches_clap"
+
+[tasks.coverage]
+description = "Generate LCOV and enforce the measured 84 percent line-coverage floor"
+run = [
+  "env -u CC -u CXX cargo llvm-cov --workspace --lcov --output-path target/lcov.info",
+  "env -u CC -u CXX cargo llvm-cov report --summary-only --fail-under-lines 84",
+]
+
+[tasks."check:pr"]
+description = "Run deterministic checks required before opening a pull request"
+run = [
+  "git diff --check",
+  "python3 scripts/check-skill-version.py",
+  "cargo fmt --all -- --check",
+  "env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings",
+  "env -u CC -u CXX cargo test --workspace --locked",
+  "python3 -m unittest discover -s scripts/tests -p 'test_*.py'",
+  "cargo deny check",
+  "cargo audit --deny warnings",
+  "python3 scripts/check-dependency-policy.py",
+  "python3 scripts/check-source-hygiene.py",
+]
 
 [tasks.production-check]
 description = "Run the complete release-readiness gate"

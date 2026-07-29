@@ -30,7 +30,9 @@ cargo fmt --all -- --check
 env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings
 env -u CC -u CXX cargo test --workspace --locked
 cargo audit --deny warnings
+cargo deny check
 python3 scripts/check-dependency-policy.py
+python3 scripts/check-skill-version.py
 python3 scripts/check-source-hygiene.py
 ```
 
@@ -39,11 +41,12 @@ and bundle-replacement backup state from this checkout without reading database
 contents. Move required data to the intended private runtime store before
 continuing; dirty-tree development overrides do not bypass this safety gate.
 
-Install `cargo-audit` locally when it is unavailable. Use
+Install `cargo-audit` and `cargo-deny` locally when unavailable. Use
 `env -u CC -u CXX` on macOS when inherited Zig compiler variables break native
-dependency builds. The dependency policy check requires every locked
-third-party package to come from crates.io and carry license metadata; RustSec
-remains responsible for vulnerability advisories.
+dependency builds. `cargo deny check` enforces the accepted license, source,
+wildcard, and advisory policy; the repository dependency script independently
+requires every locked third-party package to come from crates.io and carry
+license metadata. RustSec remains the vulnerability authority.
 
 When changing workflows or shell scripts, also run:
 
@@ -71,7 +74,10 @@ stable Linux lane in `ci.yml` plus the Rust 1.97 Linux/macOS/Windows release
 verification matrix; direct `main` pushes run stable and MSRV lanes in `ci.yml`.
 This avoids duplicating the same Ubuntu MSRV test on every pull request. The
 stable lane also builds and smoke-tests the release binary and runs a bounded
-benchmark correctness smoke.
+benchmark correctness smoke. A separate Rust 1.97 coverage lane retains LCOV
+and enforces an 84% line floor, set below the measured 84.36% baseline from
+2026-07-29 so the gate prevents regression without claiming complete coverage.
+Run it locally with `mise run coverage`.
 
 ## Release build and smoke test
 
@@ -95,12 +101,17 @@ network access.
 Tag releases are gated by formatting, Clippy, tests, dependency audit, a
 release-binary smoke/recovery test, and bounded benchmark guardrails on Linux.
 The same test and smoke/recovery flow also runs on native macOS and Windows
-runners. Published platform archives receive GitHub build-provenance
-attestations.
+runners. Published platform and global artifacts receive GitHub build-provenance
+attestations. Releases include checksum sidecars for archives and installers,
+fail-closed archive verification in both generated installers, and a verified
+CycloneDX 1.5 binary SBOM. `scripts/verify-release-artifacts.py` validates the
+assembled distribution.
 
 Before creating a release tag:
 
-1. Match the workspace version, `Cargo.lock`, changelog, and intended tag.
+1. Match the workspace version, `Cargo.lock`, skill compatibility manifest,
+   tagged install docs, changelog, and intended tag; verify with
+   `python3 scripts/check-skill-version.py --tag v<version>`.
 2. Start from a clean working tree and run
    `RELEASE_TAG=v<version> scripts/check-release-readiness.sh`.
 3. Retain the clean benchmark JSON/CSV emitted below `target/` and the CI
@@ -111,8 +122,9 @@ Before creating a release tag:
 
 Creating or pushing a tag publishes through the release workflow and is an
 external side effect. Do it only with explicit approval. `dist generate` does
-not preserve repository hardening around SHA pins, dependency policy, or native
-verification; after regeneration, reapply those changes and run `actionlint`.
+not preserve repository hardening around SHA pins, dependency policy, installer
+checksum verification, SBOM validation, or native verification; after
+regeneration, reapply those changes and run `actionlint`.
 
 ## Scale benchmark
 

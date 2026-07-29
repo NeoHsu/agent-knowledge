@@ -31,6 +31,9 @@ jobs:
       - name: Verify release metadata and clean checkout
         if: matrix.rust == 'stable'
         run: python3 scripts/check-release-metadata.py
+      - name: Verify exact CLI and skill version lockstep
+        if: matrix.rust == 'stable'
+        run: python3 scripts/check-skill-version.py
       - name: Reject runtime artifacts in the source checkout
         if: matrix.rust == 'stable'
         run: python3 scripts/check-source-hygiene.py
@@ -44,7 +47,13 @@ jobs:
         with:
           tool: cargo-audit
       - if: matrix.rust == 'stable'
+        uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
+        with:
+          tool: cargo-deny@0.20.2
+      - if: matrix.rust == 'stable'
         run: cargo audit --deny warnings
+      - if: matrix.rust == 'stable'
+        run: cargo deny check
       - if: matrix.rust == 'stable'
         run: python3 scripts/check-dependency-policy.py
       - name: Test release helper scripts
@@ -82,3 +91,26 @@ jobs:
             ${{ runner.temp }}/benchmark.csv
           if-no-files-found: warn
           retention-days: 30
+
+  coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: 1.97.0
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
+        with:
+          tool: cargo-llvm-cov@0.8.7
+      - run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+      - run: cargo llvm-cov report --summary-only --fail-under-lines 84
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: coverage-lcov
+          path: lcov.info

@@ -41,6 +41,11 @@ if [[ -n "$RELEASE_TAG" ]]; then
 	metadata_args+=(--release-tag "$RELEASE_TAG")
 fi
 python3 scripts/check-release-metadata.py "${metadata_args[@]}"
+skill_args=()
+if [[ -n "$RELEASE_TAG" ]]; then
+	skill_args+=(--tag "$RELEASE_TAG")
+fi
+python3 scripts/check-skill-version.py "${skill_args[@]}"
 python3 scripts/check-source-hygiene.py
 
 for command in cargo python3 git; do
@@ -51,6 +56,10 @@ for command in cargo python3 git; do
 done
 if ! command -v cargo-audit >/dev/null 2>&1; then
 	echo "cargo-audit is required; install it before running the production gate" >&2
+	exit 1
+fi
+if ! command -v cargo-deny >/dev/null 2>&1; then
+	echo "cargo-deny is required; install it before running the production gate" >&2
 	exit 1
 fi
 
@@ -81,7 +90,9 @@ printf '%s\n' '== tests =='
 env -u CC -u CXX cargo test --workspace --locked
 printf '%s\n' '== dependency audit =='
 cargo audit --deny warnings
-printf '%s\n' '== dependency provenance and licenses =='
+printf '%s\n' '== dependency license, source, and ban policy =='
+cargo deny check
+printf '%s\n' '== dependency provenance and license metadata =='
 python3 scripts/check-dependency-policy.py
 printf '%s\n' '== release build =='
 scripts/build-release.sh

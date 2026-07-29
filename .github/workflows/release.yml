@@ -1,7 +1,7 @@
 # This workflow is based on cargo-dist's generated GitHub release pipeline.
-# `dist generate` does not preserve the SHA pins, dependency policy, or native
-# verification job below; after regeneration, reapply those hardening changes
-# and run actionlint.
+# `dist generate` does not preserve the SHA pins, dependency policy, native
+# verification, installer checksum hardening, or SBOM verification below;
+# after regeneration, reapply those controls and run actionlint.
 name: Release
 
 on:
@@ -28,6 +28,14 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+
+      - name: Verify exact CLI, skill, and release-tag version lockstep
+        env:
+          RELEASE_TAG: ${{ !github.event.pull_request && github.ref_name || '' }}
+        run: |
+          tag_args=()
+          [[ -z "$RELEASE_TAG" ]] || tag_args+=(--tag "$RELEASE_TAG")
+          python3 scripts/check-skill-version.py "${tag_args[@]}"
 
       - name: Install dist
         uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
@@ -87,6 +95,15 @@ jobs:
           RELEASE_TAG: ${{ !github.event.pull_request && github.ref_name || '' }}
         run: python3 scripts/check-release-metadata.py --release-tag "$RELEASE_TAG"
 
+      - name: Verify exact CLI and skill version lockstep
+        if: runner.os == 'Linux'
+        env:
+          RELEASE_TAG: ${{ !github.event.pull_request && github.ref_name || '' }}
+        run: |
+          tag_args=()
+          [[ -z "$RELEASE_TAG" ]] || tag_args+=(--tag "$RELEASE_TAG")
+          python3 scripts/check-skill-version.py "${tag_args[@]}"
+
       - name: Reject runtime artifacts in the source checkout
         if: runner.os == 'Linux'
         run: python3 scripts/check-source-hygiene.py
@@ -108,9 +125,19 @@ jobs:
         with:
           tool: cargo-audit
 
+      - name: Install cargo-deny
+        if: runner.os == 'Linux'
+        uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
+        with:
+          tool: cargo-deny@0.20.2
+
       - name: Audit dependencies
         if: runner.os == 'Linux'
         run: cargo audit --deny warnings
+
+      - name: Enforce dependency license, source, and ban policy
+        if: runner.os == 'Linux'
+        run: cargo deny check
 
       - name: Enforce dependency provenance and license metadata
         if: runner.os == 'Linux'
@@ -248,6 +275,10 @@ jobs:
       - plan
       - build-local-artifacts
     runs-on: ubuntu-22.04
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/global-dist-manifest.json
@@ -265,6 +296,16 @@ jobs:
           path: ~/.cargo/bin/
 
       - run: chmod +x ~/.cargo/bin/dist
+
+      - name: Install verified cargo-cyclonedx
+        shell: bash
+        run: |
+          installer="$RUNNER_TEMP/cargo-cyclonedx-installer.sh"
+          curl --proto '=https' --tlsv1.2 -LsSf -o "$installer" \
+            https://github.com/CycloneDX/cyclonedx-rust-cargo/releases/download/cargo-cyclonedx-0.5.9/cargo-cyclonedx-installer.sh
+          printf '%s  %s\n' '051086226aec893866f20e60b19265f7ca5f488a2e282c6be748ee663ab0a124' "$installer" \
+            | sha256sum --check --strict
+          sh "$installer"
 
       - name: Fetch local artifacts
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -288,12 +329,48 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           cp dist-manifest.json "$BUILD_MANIFEST_NAME"
 
+      - name: Make generated installers fail closed on archive checksums
+        run: python3 scripts/harden-installers.py
+
+      - id: supply-chain
+        name: Generate and verify SBOM and installer checksums
+        shell: bash
+        run: |
+          cargo cyclonedx --manifest-path crates/mem-cli/Cargo.toml --format xml \
+            --spec-version 1.5 --describe binaries -v
+          mv crates/mem-cli/mem_bin.cdx.xml target/distrib/mnemark.cdx.xml
+          test -s target/distrib/mnemark.cdx.xml
+          grep -q '<hash alg="SHA-256">' target/distrib/mnemark.cdx.xml
+          (
+            cd target/distrib
+            sha256sum mnemark.cdx.xml > mnemark.cdx.xml.sha256
+            sha256sum mnemark-installer.sh > mnemark-installer.sh.sha256
+            sha256sum mnemark-installer.ps1 > mnemark-installer.ps1.sha256
+            cat mnemark.cdx.xml.sha256 mnemark-installer.sh.sha256 \
+              mnemark-installer.ps1.sha256 >> sha256.sum
+          )
+          python3 scripts/verify-release-artifacts.py
+          {
+            echo "paths<<EOF"
+            echo "target/distrib/mnemark.cdx.xml"
+            echo "target/distrib/mnemark.cdx.xml.sha256"
+            echo "target/distrib/mnemark-installer.sh.sha256"
+            echo "target/distrib/mnemark-installer.ps1.sha256"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Attest global artifacts
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: "target/distrib/*"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: artifacts-build-global
           path: |
             ${{ steps.cargo-dist.outputs.paths }}
+            ${{ steps.supply-chain.outputs.paths }}
             ${{ env.BUILD_MANIFEST_NAME }}
 
   host:

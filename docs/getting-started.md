@@ -15,17 +15,26 @@ macOS / Linux:
 
 ```bash
 base=https://github.com/NeoHsu/mnemark/releases/latest/download
-curl --proto '=https' --tlsv1.2 -LsSf \
-  "$base/mnemark-installer.sh" |
-  sh
+curl --proto '=https' --tlsv1.2 -LsSfO "$base/mnemark-installer.sh"
+curl --proto '=https' --tlsv1.2 -LsSfO "$base/mnemark-installer.sh.sha256"
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256sum -c mnemark-installer.sh.sha256
+else
+  shasum -a 256 -c mnemark-installer.sh.sha256
+fi
+sh mnemark-installer.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
 $base = "https://github.com/NeoHsu/mnemark/releases/latest/download"
-powershell -ExecutionPolicy Bypass -c `
-  "irm $base/mnemark-installer.ps1 | iex"
+Invoke-WebRequest "$base/mnemark-installer.ps1" -OutFile mnemark-installer.ps1
+Invoke-WebRequest "$base/mnemark-installer.ps1.sha256" -OutFile mnemark-installer.ps1.sha256
+$expected = ((Get-Content -Raw mnemark-installer.ps1.sha256).Trim() -split '\s+')[0]
+$actual = (Get-FileHash -Algorithm SHA256 mnemark-installer.ps1).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw "installer checksum verification failed" }
+& .\mnemark-installer.ps1
 ```
 
 Direct release downloads are available on the [latest release page](https://github.com/NeoHsu/mnemark/releases/latest):
@@ -38,8 +47,9 @@ Direct release downloads are available on the [latest release page](https://gith
 | x64 Linux | `mnemark-x86_64-unknown-linux-gnu.tar.xz` |
 | x64 Windows | `mnemark-x86_64-pc-windows-msvc.zip` |
 
-Checksums are published next to release assets. Confirm the installed contract
-before continuing:
+Checksums are published next to release assets. Releases also include a
+CycloneDX 1.5 SBOM and GitHub build-provenance attestations. Confirm the
+installed contract before continuing:
 
 ```bash
 mem --version
@@ -134,8 +144,13 @@ directory and links platform-specific skill paths when needed. Alternatively,
 install from the repository with the open agent skills CLI:
 
 ```bash
-npx skills add https://github.com/NeoHsu/mnemark/tree/main/skills/mnemark
+npx skills add https://github.com/NeoHsu/mnemark/tree/v0.9.0 --skill mnemark
+mem --json-errors contract --skill-version 0.9.0
 ```
+
+Released skills and CLIs use exact SemVer lockstep. Proceed only when
+`skill_compatibility.compatible` is `true`; a mismatch fails before store
+configuration or memory data is read.
 
 For a local checkout during development:
 

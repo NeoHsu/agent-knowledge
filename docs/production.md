@@ -36,10 +36,12 @@ scripts/check-release-readiness.sh
 
 The gate verifies:
 
-- workspace, lockfile, changelog, documentation, and intended release-tag
-  version alignment, including refusal to reuse a tag from another commit;
+- workspace, lockfile, changelog, documentation, exact CLI/skill manifest, and
+  intended release-tag version alignment, including refusal to reuse a tag
+  from another commit;
 - a clean Git worktree;
-- formatting, Clippy, all tests, RustSec audit, and dependency provenance;
+- formatting, Clippy, all tests, RustSec audit, cargo-deny license/source/ban
+  policy, and independent dependency provenance metadata;
 - release build version, installed-binary smoke checks, and a recovery drill;
 - bounded 100/1,000-memory benchmark correctness and portable catastrophic-
   regression guardrails.
@@ -75,15 +77,18 @@ mem --version
 ```
 
 `mem contract` does not read or initialize a store. It reports the CLI output
-contract and current store, bundle, workflow, graph, and benchmark-report schema
-versions. JSON error envelopes carry `contract_version`; required fields remain
-stable within a minor release, while additive fields are allowed. Before 1.0,
-breaking machine-interface changes require a documented minor release.
+contract, published schema names, and current store, bundle, workflow, graph,
+and benchmark-report schema versions. `mem schema list|print` exposes the exact
+bundled JSON Schemas; `mem operation inspect` reports parsed command effects.
+JSON error envelopes carry `contract_version`; required fields remain stable
+within a minor release, while additive fields are allowed. Before 1.0, breaking
+machine-interface changes require a documented minor release.
 
 ## Deployment checklist
 
-1. Install a platform release asset and verify its published checksum and build
-   provenance.
+1. Install a platform release asset only after verifying its published
+   checksum; verify build provenance and inspect the CycloneDX 1.5 SBOM when
+   qualifying a deployment.
 2. Run `mem --version` and use documentation from the matching Git tag.
 3. Resolve the intended store before creating or changing it:
 

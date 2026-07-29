@@ -30,17 +30,26 @@ Installer script for macOS / Linux:
 
 ```bash
 base=https://github.com/NeoHsu/mnemark/releases/latest/download
-curl --proto '=https' --tlsv1.2 -LsSf \
-  "$base/mnemark-installer.sh" |
-  sh
+curl --proto '=https' --tlsv1.2 -LsSfO "$base/mnemark-installer.sh"
+curl --proto '=https' --tlsv1.2 -LsSfO "$base/mnemark-installer.sh.sha256"
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256sum -c mnemark-installer.sh.sha256
+else
+  shasum -a 256 -c mnemark-installer.sh.sha256
+fi
+sh mnemark-installer.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
 $base = "https://github.com/NeoHsu/mnemark/releases/latest/download"
-powershell -ExecutionPolicy Bypass -c `
-  "irm $base/mnemark-installer.ps1 | iex"
+Invoke-WebRequest "$base/mnemark-installer.ps1" -OutFile mnemark-installer.ps1
+Invoke-WebRequest "$base/mnemark-installer.ps1.sha256" -OutFile mnemark-installer.ps1.sha256
+$expected = ((Get-Content -Raw mnemark-installer.ps1.sha256).Trim() -split '\s+')[0]
+$actual = (Get-FileHash -Algorithm SHA256 mnemark-installer.ps1).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw "installer checksum verification failed" }
+& .\mnemark-installer.ps1
 ```
 
 Direct release downloads:
@@ -53,7 +62,8 @@ Direct release downloads:
 | x64 Linux | `mnemark-x86_64-unknown-linux-gnu.tar.xz` |
 | x64 Windows | `mnemark-x86_64-pc-windows-msvc.zip` |
 
-Checksums are published next to the release assets. See the
+Checksums are published next to archives and installers together with a
+CycloneDX 1.5 SBOM and GitHub build-provenance attestations. See the
 [latest release](https://github.com/NeoHsu/mnemark/releases/latest), then verify
 which contract you installed:
 
@@ -118,7 +128,7 @@ memory save/query, workflow runbook lookup, retrospective flows,
 merge/audit/bundle commands, and safety rules.
 
 ```bash
-npx skills add https://github.com/NeoHsu/mnemark/tree/main/skills/mnemark
+npx skills add https://github.com/NeoHsu/mnemark/tree/v0.9.0 --skill mnemark
 ```
 
 For a local checkout during development:
@@ -171,7 +181,9 @@ npx skills add ./skills/mnemark
 ### Portability and integrations
 
 - **Machine contract:** `mem contract` reports the versioned JSON-error and
-  persisted-format contracts without reading or initializing a store.
+  persisted-format contracts without reading or initializing a store;
+  `mem schema list|print` discovers bundled JSON Schemas, and
+  `mem operation list|inspect` exposes stable command IDs and exact effects.
 - **Bundles:** `mem bundle export <file>`, `mem bundle inspect <file>`, and
   `mem bundle import <file>`.
 - **Migration and transfer:** `mem migrate`,
@@ -209,6 +221,7 @@ cargo fmt --all -- --check
 env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings
 env -u CC -u CXX cargo test --workspace --locked
 cargo audit --deny warnings
+cargo deny check
 python3 scripts/check-dependency-policy.py
 ```
 

@@ -746,16 +746,32 @@ Install release binaries instead of building from Rust source:
 ```bash
 # macOS / Linux
 base=https://github.com/NeoHsu/mnemark/releases/latest/download
-curl --proto '=https' --tlsv1.2 -LsSf \
-  "$base/mnemark-installer.sh" |
-  sh
+curl --proto '=https' --tlsv1.2 -LsSfO "$base/mnemark-installer.sh"
+curl --proto '=https' --tlsv1.2 -LsSfO "$base/mnemark-installer.sh.sha256"
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256sum -c mnemark-installer.sh.sha256
+else
+  shasum -a 256 -c mnemark-installer.sh.sha256
+fi
+sh mnemark-installer.sh
 ```
 
 ```powershell
 # Windows PowerShell
 $base = "https://github.com/NeoHsu/mnemark/releases/latest/download"
-powershell -ExecutionPolicy Bypass -c `
-  "irm $base/mnemark-installer.ps1 | iex"
+Invoke-WebRequest "$base/mnemark-installer.ps1" -OutFile mnemark-installer.ps1
+Invoke-WebRequest "$base/mnemark-installer.ps1.sha256" -OutFile mnemark-installer.ps1.sha256
+$expected = ((Get-Content -Raw mnemark-installer.ps1.sha256).Trim() -split '\s+')[0]
+$actual = (Get-FileHash -Algorithm SHA256 mnemark-installer.ps1).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw "installer checksum verification failed" }
+& .\mnemark-installer.ps1
+```
+
+Install the released skill from the same tag and verify exact compatibility:
+
+```bash
+npx skills add https://github.com/NeoHsu/mnemark/tree/v0.9.0 --skill mnemark
+mem --json-errors contract --skill-version 0.9.0
 ```
 
 Manual archives are available on the
