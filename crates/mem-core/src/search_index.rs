@@ -21,6 +21,10 @@ use crate::search_tokenizer;
 pub(crate) const INDEX_SCHEMA_VERSION: i64 = 4;
 const INDEX_VERSION_MARKER: &str = ".mnemark-index-version";
 
+// Tantivy requires at least 15 MB. Interleaved 10k import measurements showed
+// that 20 MB preserves throughput while substantially reducing peak RSS.
+const INDEX_WRITER_MEMORY_BUDGET_BYTES: usize = 20_000_000;
+
 #[derive(Debug)]
 pub(crate) struct IndexCompatibilityError {
     marker_path: PathBuf,
@@ -105,7 +109,7 @@ pub fn rebuild(index_path: &Path, memories: &[IndexedMemory]) -> Result<()> {
     let (schema, fields) = build_schema();
     let index = Index::create_in_dir(index_path, schema)?;
     register_tokenizers(&index)?;
-    let mut writer = index.writer(50_000_000)?;
+    let mut writer = index.writer(INDEX_WRITER_MEMORY_BUDGET_BYTES)?;
     for memory in memories {
         add_memory_doc(&mut writer, &fields, memory)?;
     }
@@ -117,7 +121,7 @@ pub fn rebuild(index_path: &Path, memories: &[IndexedMemory]) -> Result<()> {
 pub fn upsert(index_path: &Path, memory: &IndexedMemory) -> Result<()> {
     let index = ensure_index(index_path)?;
     let fields = fields_from_schema(index.schema())?;
-    let mut writer = index.writer(50_000_000)?;
+    let mut writer = index.writer(INDEX_WRITER_MEMORY_BUDGET_BYTES)?;
     upsert_with_writer(&mut writer, &fields, memory)?;
     writer.commit()?;
     Ok(())
@@ -142,7 +146,7 @@ pub fn upsert_batches(
 ) -> Result<()> {
     let index = ensure_index(index_path)?;
     let fields = fields_from_schema(index.schema())?;
-    let mut writer = index.writer(50_000_000)?;
+    let mut writer = index.writer(INDEX_WRITER_MEMORY_BUDGET_BYTES)?;
     for batch in batches {
         for memory in batch? {
             upsert_with_writer(&mut writer, &fields, &memory)?;

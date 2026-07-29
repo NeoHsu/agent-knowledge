@@ -17,6 +17,12 @@ All notable changes to mnemark are documented here.
   details when a durable SQLite write commits before its Tantivy update fails,
   allowing automation to repair the index without blindly retrying the write.
 
+### Performance
+
+- Reduced the Tantivy writer memory budget from 50 MB to 20 MB after
+  interleaved 10,000-memory trials cut import peak RSS from about 210 MiB to
+  about 119 MiB with no material throughput regression.
+
 ## [0.8.0] - 2026-07-17
 
 ### Added
