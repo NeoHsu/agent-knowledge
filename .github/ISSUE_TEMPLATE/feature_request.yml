@@ -1,0 +1,55 @@
+name: Feature request
+description: Propose an improvement to mnemark
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the user or agent problem before proposing a command. Consider durable-data compatibility, read/write effects, privacy, recovery, and bounded context.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed behavior
+      description: Include a concrete CLI or JSON example when useful.
+    validations:
+      required: true
+  - type: dropdown
+    id: areas
+    attributes:
+      label: Affected public surfaces
+      multiple: true
+      options:
+        - CLI commands or flags
+        - JSON output or schemas
+        - SQLite or migration
+        - Search or graph
+        - Workflow, artifact, bundle, merge, or sync
+        - Agent skill or documentation
+        - Security, recovery, or release
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility, safety, and recovery considerations
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues and documentation.
+          required: true
+        - label: I removed secrets and private memory-store content.
+          required: true

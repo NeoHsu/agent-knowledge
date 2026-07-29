@@ -14,12 +14,15 @@ This is the canonical guidance for agents working in this repository. Read this 
 ## Repo Map
 
 - `README.md` — human and agent first entrypoint with links to user and developer docs.
+- `docs/README.md` — task-oriented documentation hub.
 - `docs/getting-started.md` — getting started with `mem` and the mnemark skill.
 - `docs/workflows.md` — workflow memories, artifacts, bundles, import/export, merge, and retrospectives.
 - `docs/runtime-model.md` — runtime store discovery, config priority, artifacts, and bundles.
 - `docs/graph-memory.md` — graph memory design, deterministic graph commands, and non-RAG stance.
 - `docs/development.md` — local setup, validation, release smoke tests, and developer notes.
 - `docs/production.md` — qualified deployment profile, release gate, recovery, rollback, and incident procedures.
+- `docs/compatibility.md` and `docs/json-schemas.md` — public stability policy and machine-readable contracts.
+- `docs/adr/` — accepted architecture decisions and consequences.
 - `SECURITY.md` — threat model, implemented controls, residual limitations, and reporting guidance.
 - `crates/mem-cli/` — `mem` CLI arguments, command dispatch, command implementations, integration tests.
 - `crates/mem-core/` — app discovery, config, SQLite DB helpers, Tantivy
@@ -55,7 +58,12 @@ Read:
    diagnostics
 6. related tests under `crates/mem-cli/tests/`
 
-Update docs and tests with behavior changes.
+Update docs and tests with behavior changes. Regenerate the complete public CLI
+surface with:
+
+```bash
+UPDATE_CLI_SURFACE=1 cargo test -p mnemark --test doc_drift cli_surface_snapshot_matches_clap
+```
 
 ### Change database or migrations
 
@@ -146,8 +154,11 @@ cargo fmt --all -- --check
 env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings
 env -u CC -u CXX cargo test --workspace --locked
 cargo audit --deny warnings
+cargo deny check
+python3 scripts/check-skill-version.py
 python3 scripts/check-dependency-policy.py
 python3 scripts/check-source-hygiene.py
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 scripts/build-release.sh
 scripts/smoke-release.sh
 ```
@@ -176,10 +187,11 @@ shellcheck scripts/*.sh
 ## Documentation Rules
 
 - `README.md` should describe current behavior, not old plans.
-- `skills/mnemark/references/cli-guide.md` is enforced by
-  `crates/mem-cli/tests/doc_drift.rs`: every clap subcommand must appear in the
-  guide and every `mem <subcommand>` example in the guide must exist in clap.
-  Update both together.
+- `skills/mnemark/references/cli-guide.md` and `docs/cli-surface.txt` are
+  enforced by `crates/mem-cli/tests/doc_drift.rs`: every Clap command must
+  appear in the guide, every repository CLI example must parse, and the
+  generated surface records public positionals, flags, defaults, and conflicts.
+  Update all affected contracts together.
 - Agent setup orchestration lives in
   `crates/mem-cli/src/commands/setup/mod.rs`; skill files are embedded by
   `crates/mem-cli/src/commands/setup/skill.rs`. Changing `skills/mnemark/`
@@ -189,5 +201,10 @@ shellcheck scripts/*.sh
   obsolete.
 - Keep command examples copy-pastable and aligned with Clap args.
 - If a flag is hidden or intentionally unsupported, do not show it as a normal example.
+- Every public `docs/schemas/*.schema.json` needs a matching representative
+  fixture under `docs/schemas/fixtures/`; discovery tests validate all pairs.
+- CLI, skill frontmatter, compatibility manifest, lockfile, tagged install docs,
+  and release tag use exact version lockstep; run
+  `python3 scripts/check-skill-version.py` after changing any of them.
 - Prefer one authoritative explanation and cross-reference it instead of
   duplicating long sections.

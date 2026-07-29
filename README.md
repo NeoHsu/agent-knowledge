@@ -3,6 +3,10 @@
 Portable agent memory and workflow runbook system, exposed through the `mem`
 CLI.
 
+[![CI](https://github.com/NeoHsu/mnemark/actions/workflows/ci.yml/badge.svg)](https://github.com/NeoHsu/mnemark/actions/workflows/ci.yml)
+[![GitHub release](https://img.shields.io/github/v/release/NeoHsu/mnemark?display_name=tag)](https://github.com/NeoHsu/mnemark/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 > [!NOTE]
 > This `main` branch documents source version `0.9.0`. The `latest` installer
 > follows the newest published GitHub release and can temporarily lag behind
@@ -15,6 +19,26 @@ For agents working in this repository, read
 canonical agent guidance.
 
 `mnemark` is a Rust single-binary CLI for durable agent memory. It stores memory in a private/local SQLite knowledge store, maintains a rebuildable Tantivy search index, validates workflow runbooks, and packages portable artifacts and bundles.
+
+## 30-second demo
+
+Use an isolated temporary store to see the complete save → recall → prime loop
+without touching an existing memory store:
+
+```bash
+demo_store="$(mktemp -d "${TMPDIR:-/tmp}/mnemark-demo.XXXXXX")"
+trap 'rm -rf -- "$demo_store"' EXIT
+mem --home "$demo_store" init
+mem --home "$demo_store" save \
+  --type preference --name concise_answers --scope global \
+  --source manual --user-confirmed --tags '["style:concise"]' \
+  --content 'Trigger: user-facing replies. Action: answer concisely. Why: explicit demo preference.'
+mem --home "$demo_store" query "concise replies" --format compact
+mem --home "$demo_store" prime --focus "prepare a concise answer"
+```
+
+For a real store, run `mem config show` first and initialize only the reported
+path you intend to use.
 
 ## Why mnemark?
 
@@ -107,6 +131,7 @@ output.
 
 | File | Description |
 | --- | --- |
+| [Documentation Hub](docs/README.md) | Task-oriented index for users, agents, automation, maintainers, and operators |
 | [Overview](docs/overview.md) | Big-picture ASCII diagrams: system map, session lifecycle, save/query flows, workflow lifecycle, sync, and all usage scenarios |
 | [Getting Started](docs/getting-started.md) | Install, initialize, first save/query, and mnemark skill install |
 | [Workflows](docs/workflows.md) | Workflow memories, artifacts, bundles, import/export, merge, and retrospectives |
@@ -117,8 +142,12 @@ output.
 | [Agent Reference](docs/agent-reference.md) | Canonical instructions for agents changing this repo: safety rules, repo map, task routing, validation |
 | [Development](docs/development.md) | Local setup, source commands, validation, release smoke tests, developer notes |
 | [Production Operations](docs/production.md) | Qualified deployment profile, release gate, recovery, upgrade, rollback, and incidents |
+| [Compatibility Policy](docs/compatibility.md) | Supported platforms and stability rules for CLI, JSON, stores, bundles, and skills |
+| [JSON Contracts](docs/json-schemas.md) | Bundled schemas, representative fixtures, discovery commands, and compatibility guarantees |
+| [Architecture Decisions](docs/adr/README.md) | Context, decisions, alternatives, and consequences for load-bearing architecture choices |
 | [Security](SECURITY.md) | Threat model, implemented controls, explicit limitations, and reporting guidance |
 | [Performance](docs/performance.md) | Published release baseline, regression protocol, and capacity-canary rules |
+| [Contributing](CONTRIBUTING.md) | Development checks, public-contract responsibilities, and PR guidance |
 | [Changelog](CHANGELOG.md) | Breaking changes, features, and fixes by release |
 
 ## Agent Skill

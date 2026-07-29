@@ -4,6 +4,28 @@ All notable changes to mnemark are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added bundled JSON Schema discovery, representative fixtures, stable
+  Clap-derived operation IDs, exact parsed command-effect inspection, and a
+  generated full CLI surface snapshot.
+- Added exact CLI/skill version lockstep with a store-independent fail-closed
+  compatibility gate and tag-pinned manual skill installation.
+- Added cargo-deny policy, an 84% measured coverage floor, installer checksum
+  sidecars, fail-closed archive verification in both generated installers, a
+  CycloneDX 1.5 binary SBOM, and
+  global artifact attestations.
+- Added a task-oriented documentation hub, compatibility policy, architecture
+  decision records, contribution guidance, and GitHub PR/issue templates.
+
+### Changed
+
+- JSON error envelopes now include the additive `retryable` field. Typed core
+  failures map consistently to usage, compatibility, safety, not-found,
+  conflict, and integrity codes while preserving committed-index recovery
+  semantics and stable exit statuses.
+- Installation documentation now verifies installer bytes before execution.
+
 ## [0.9.0] - 2026-07-29
 
 ### Added

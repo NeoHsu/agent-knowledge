@@ -60,8 +60,8 @@ mem --version
 After `mem` is on `PATH`:
 
 ```bash
-mem init
 mem config show
+mem init  # only after confirming the reported root
 ```
 
 Runtime memory data is not stored in this source repository. See the
@@ -166,7 +166,10 @@ merge, bundle, and run retrospectives through the local `mem` CLI.
 
 | Need | Read |
 | --- | --- |
+| Documentation index | [Documentation Hub](./README.md) |
 | Complete command reference | [CLI Guide](../skills/mnemark/references/cli-guide.md) |
+| Machine-readable JSON contracts | [JSON Contracts](json-schemas.md) |
+| Supported compatibility guarantees | [Compatibility Policy](compatibility.md) |
 | Runtime store and portability | [Runtime Model](runtime-model.md) |
 | Security boundaries and safe deployment | [`SECURITY.md`](../SECURITY.md) |
 | Workflow runbooks, artifacts, bundles, retrospectives | [Workflows](workflows.md) |

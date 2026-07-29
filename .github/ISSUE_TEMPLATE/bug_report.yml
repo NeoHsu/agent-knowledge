@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a reproducible problem with mnemark
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach a real memory.db, bundle, credentials, private memory text, or working exploit.
+        Report suspected vulnerabilities through the private security advisory link.
+  - type: input
+    id: version
+    attributes:
+      label: mem version
+      description: Paste `mem --version`.
+      placeholder: mem 0.9.0
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system
+      placeholder: macOS 15 arm64
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Redacted command
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Use an isolated synthetic store and provide the smallest deterministic sequence.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and exit code
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Redacted stdout/stderr
+      render: shell
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I used synthetic data and removed secrets, private memories, paths, and remote URLs.
+          required: true
+        - label: This is not a security vulnerability or working exploit.
+          required: true
