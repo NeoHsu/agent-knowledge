@@ -25,6 +25,8 @@ All notable changes to mnemark are documented here.
 - Split deterministic graph materialization into rebuild orchestration,
   memory, workflow, artifact, and shared insertion modules without changing
   graph identities or traversal behavior.
+- Split workflow command dispatch into focused listing, display, scaffold,
+  validation, and run-recording handlers without changing CLI or JSON output.
 
 ### Performance
 

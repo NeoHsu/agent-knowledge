@@ -113,7 +113,9 @@ Read:
 5. `crates/mem-core/src/workflow.rs`
 6. `crates/mem-core/src/artifact/mod.rs` and the relevant module under
    `crates/mem-core/src/artifact/`
-7. `crates/mem-cli/tests/workflow.rs` and `crates/mem-cli/tests/artifact.rs`
+7. `crates/mem-cli/src/commands/workflow/mod.rs` and the command handlers under
+   `crates/mem-cli/src/commands/workflow/`
+8. `crates/mem-cli/tests/workflow.rs` and `crates/mem-cli/tests/artifact.rs`
 
 Workflow helpers must discover, show, and validate only; they must not execute
 workflow commands.
