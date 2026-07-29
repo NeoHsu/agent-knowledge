@@ -27,6 +27,8 @@ All notable changes to mnemark are documented here.
   graph identities or traversal behavior.
 - Split workflow command dispatch into focused listing, display, scaffold,
   validation, and run-recording handlers without changing CLI or JSON output.
+- Split agent-platform setup into policy, platform, skill-link, and hook modules
+  while preserving managed-file conflict checks and upgrade behavior.
 
 ### Performance
 

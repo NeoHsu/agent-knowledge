@@ -174,9 +174,11 @@ shellcheck scripts/*.sh
   `crates/mem-cli/tests/doc_drift.rs`: every clap subcommand must appear in the
   guide and every `mem <subcommand>` example in the guide must exist in clap.
   Update both together.
-- Skill files are embedded into the binary by
-  `crates/mem-cli/src/commands/setup.rs`; changing `skills/mnemark/` changes
-  what `mem setup <platform>` installs, so rebuild before manual verification.
+- Agent setup orchestration lives in
+  `crates/mem-cli/src/commands/setup/mod.rs`; skill files are embedded by
+  `crates/mem-cli/src/commands/setup/skill.rs`. Changing `skills/mnemark/`
+  changes what `mem setup <platform>` installs, so rebuild before manual
+  verification.
 - Historical plans should be clearly marked as design history or removed when
   obsolete.
 - Keep command examples copy-pastable and aligned with Clap args.
