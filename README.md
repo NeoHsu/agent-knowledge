@@ -105,6 +105,9 @@ mem query "emoji"
 mem query "name:no_emoji" --raw-query
 mem setup claude-code
 mem setup pi
+mem workflow new release_runbook
+# Edit release_runbook.yaml, replace placeholders, then set draft: false.
+mem workflow validate --file release_runbook.yaml
 mem save \
   --type workflow \
   --name release_runbook \
@@ -112,7 +115,7 @@ mem save \
   --source manual \
   --user-confirmed \
   --tags '["workflow:release","intent:release","risk:high"]' \
-  --content-file templates/workflow.yaml
+  --content-file release_runbook.yaml
 mem workflow find release --scope auto
 mem workflow validate release_runbook
 mem artifact check

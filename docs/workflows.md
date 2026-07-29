@@ -13,6 +13,9 @@ checkpoint, and ask before risky steps such as push, publish, deploy, release,
 destructive commands, secret changes, or production access.
 
 ```bash
+mem workflow new release_runbook
+# Edit release_runbook.yaml, replace every <replace: ...> value, then set draft: false.
+mem workflow validate --file release_runbook.yaml
 mem save \
   --type workflow \
   --name release_runbook \
@@ -20,17 +23,18 @@ mem save \
   --source manual \
   --user-confirmed \
   --tags '["workflow:release","intent:release","risk:high"]' \
-  --content-file templates/workflow.yaml
+  --content-file release_runbook.yaml
+mem workflow validate release_runbook
 mem query "release" --type workflow
 mem workflow find release --scope auto
-mem workflow show release_runbook
-mem workflow validate release_runbook
+mem workflow show release_runbook --checklist
 ```
 
-Use the [workflow template](../templates/workflow.yaml) as the baseline shape
-for new workflow memories. Run `--check-artifacts` only after replacing
-placeholder knowledge-store artifact references with real files and manifest
-entries.
+The default [workflow template](../templates/workflow.yaml) is a minimal draft.
+Use `mem workflow new <name> --examples full` when repository and
+knowledge-store helper examples are useful. Drafts and `<replace: ...>`
+sentinels are rejected on normal validate/save; `--no-validate-workflow`
+remains an explicit migration or recovery escape hatch.
 
 Workflow content is validated on save/import unless `--no-validate-workflow`
 is passed. Merge also validates workflow records; invalid incoming workflows are
@@ -46,12 +50,15 @@ Required fields:
 
 Each step needs an `id` and at least one of `run`, `check`, `manual`, or `ask`.
 Workflow tags must include `workflow:*`, and project-scoped workflows must
-include the matching `project:<owner/repo>` tag.
+include the matching `project:<owner/repo>` tag. The agent-facing checklist
+renders gates before actions, explicit human approval before confirmed steps,
+completion criteria, and separate success/failure recording commands.
 
-`post_run_memory` is optional but strongly recommended: `mem workflow record`
-echoes its items back as the closing checklist so each execution ends with a
-save-learnings step, and `mem workflow validate` returns a non-blocking
-`no_post_run_memory` warning when the section is missing.
+`post_run_memory` and `outputs` remain optional for schema-v1 compatibility but
+are strongly recommended. `mem workflow record` echoes post-run items as the
+closing learning checklist, while `mem workflow validate` returns non-blocking
+`no_post_run_memory` or `no_outputs` warnings when either quality boundary is
+missing.
 
 For agent execution semantics, see the
 [Workflow Rules](../skills/mnemark/references/workflow-rules.md).
@@ -71,7 +78,7 @@ evidence-bearing context. It does not execute workflow commands.
 
 ## Artifacts
 
-Reusable executable logic belongs either in the current repository, such as `scripts/build-release.sh`, or in `artifacts/` under the active knowledge store when it is cross-project knowledge-store material. Workflow content should reference those paths and record checks, safety gates, and expected outputs instead of embedding script bodies.
+Reusable executable logic belongs either in the current repository, such as `scripts/build-release.sh`, or in `artifacts/` under the active knowledge store when it is cross-project knowledge-store material. Workflow content should reference those paths and record checks, safety gates, and expected outputs instead of embedding script bodies. Validate both ownership classes with `mem workflow validate <name> --check-artifacts --repo <project-root>`; repository paths are constrained beneath that explicit root and must be regular executable files.
 
 When a workflow run repeatedly needs generated helper code, agents should
 propose extracting it instead of rewriting it inline: use a repository script

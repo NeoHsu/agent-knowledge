@@ -190,7 +190,9 @@ it; **the agent executes the steps** and stops at the safety gates.
        |            |
        |            +--> STOP  (stop_conditions)
        v
-  mem workflow record <name> --result success|failure --note "…"
+  record exactly one outcome:
+    mem workflow record <name> --result success --note "…"
+    mem workflow record <name> --result failure --note "…"
        |
        v
   feeds  mem retro daily|weekly   (spot repeatedly failing or stale runbooks)
@@ -257,7 +259,7 @@ that explains it.
 
  Run a recurring procedure    mem workflow find "<intent>"                          #5
                               mem workflow show <name> --checklist
-                              mem workflow record <name> --result success|failure
+                              mem workflow record <name> --result <success-or-failure>
 
  Reusable helper script       repo-specific  -> scripts/*.sh                        #6
                               cross-project  -> mem artifact add … ; artifact check

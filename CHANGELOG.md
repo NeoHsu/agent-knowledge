@@ -17,6 +17,8 @@ All notable changes to mnemark are documented here.
   global artifact attestations.
 - Added a task-oriented documentation hub, compatibility policy, architecture
   decision records, contribution guidance, and GitHub PR/issue templates.
+- Added pre-save workflow file validation, optional full helper examples, and
+  explicit repository-root checks for repository-owned workflow scripts.
 
 ### Changed
 
@@ -25,6 +27,9 @@ All notable changes to mnemark are documented here.
   conflict, and integrity codes while preserving committed-index recovery
   semantics and stable exit statuses.
 - Installation documentation now verifies installer bytes before execution.
+- Workflow scaffolds now start as rejected drafts with explicit placeholders,
+  and agent checklists render fail-closed gates before actions, completion
+  criteria, and separate safe success/failure recording commands.
 
 ## [0.9.0] - 2026-07-29
 

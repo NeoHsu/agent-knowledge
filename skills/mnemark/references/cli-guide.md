@@ -239,6 +239,8 @@ mem save \
   --tags '["style:review","decision:pr-size"]' \
   --content "PR 拆小逐個 review"
 mem workflow new release_runbook
+# Edit release_runbook.yaml, replace placeholders, then set draft: false.
+mem workflow validate --file release_runbook.yaml
 mem save \
   --type workflow \
   --name release_runbook \
@@ -289,8 +291,9 @@ Workflow memories are validated on save/import unless
 workflows become pending ambiguity records instead of being imported. Required
 fields are `schema_version`, `goal`, `triggers`, `steps`, and `stop_conditions`;
 each step needs `id` plus one of `run`, `check`, `manual`, or `ask`. Scaffold
-runbooks with `mem workflow new <name>`; its baseline template is embedded in
-the binary.
+runbooks with `mem workflow new <name>`; the embedded minimal template starts
+with `draft: true` and explicit `<replace: ...>` sentinels, both rejected by
+normal validation until authoring is complete.
 
 ## Query
 
@@ -369,9 +372,11 @@ mem workflow find release --scope auto --limit 5
 mem workflow show release_runbook
 mem workflow show release_runbook --checklist
 mem workflow show release_runbook --with-graph-context
+mem workflow validate --file release_runbook.yaml
 mem workflow validate release_runbook
-mem workflow validate release_runbook --check-artifacts
+mem workflow validate release_runbook --check-artifacts --repo .
 mem workflow new triage_ci
+mem workflow new release_with_helpers --examples full
 mem workflow record release_runbook --result success --note "clean run"
 mem workflow record release_runbook \
   --result failure \
@@ -380,27 +385,38 @@ mem workflow record release_runbook \
 
 `workflow find <intent>` searches by positional intent. Run notes reject
 secret-like values unless `--redact-secrets` is explicit; manual source requires
-`--user-confirmed`. Show and validate accept a workflow name or memory id.
+`--user-confirmed`. Show and stored validation accept a workflow name or memory
+id; `workflow validate --file` validates authoring content before persistence.
 
-`workflow show --checklist` renders an ordered execution checklist, flags
-`confirm: true` steps, and appends the run-record step. Prefer it over raw JSON
-before execution. `workflow show --with-graph-context` refreshes the graph when
-needed and includes related workflow, artifact, policy, and run edges.
+`workflow show --checklist` renders a fail-closed agent checklist in
+PREFLIGHT → CHECK → APPROVAL → ACTION → VERIFY order, keeps completion criteria
+visible, and emits separate success/failure recording commands. It also marks
+the runbook and optional graph context as data rather than instruction
+authority. Prefer it over raw JSON before execution.
+`workflow show --with-graph-context` refreshes the graph when needed and
+includes related workflow, artifact, policy, and run edges.
 
-`workflow new <name>` scaffolds embedded baseline YAML (default `<name>.yaml`;
-`--output` and `--force` are available). `workflow record` writes run telemetry;
-record every run so retrospectives can identify stale or repeatedly failing
-runbooks from evidence. Its response returns `post_run_memory` items, or
-`post_run_memory_missing`; process that closing checklist before ending work.
-Validation emits a non-blocking `no_post_run_memory` warning when needed.
+`workflow new <name>` scaffolds minimal embedded YAML (default `<name>.yaml`;
+`--output` and `--force` are available). Use `--examples full` only when helper
+examples are useful. The scaffold response provides command argv arrays rather
+than interpolated shell strings. Replace all sentinels, set `draft: false`, and
+run `workflow validate --file <path>` before saving. File validation checks
+content but reports that final scope and tags remain unchecked.
+
+`workflow record` writes run telemetry; record every run so retrospectives can
+identify stale or repeatedly failing runbooks from evidence. Its response
+returns `post_run_memory` items, or `post_run_memory_missing`; process that
+closing checklist before ending work. Validation emits non-blocking `no_post_run_memory` and `no_outputs` warnings
+when the runbook lacks a learning loop or observable completion criteria.
 
 Workflow helpers never execute runbook commands. Agents execute steps, verify
 checkpoints, and ask before risky side effects. Keep project-specific executable
 logic in version-controlled repository files and cross-project helpers under
-the store's `artifacts/` tree. `workflow validate --check-artifacts` checks
-`owner: knowledge_store` entries against manifest paths, files, checksums, and
-executable bits. Replace placeholders first. Artifact paths used by
-`steps.run` must also appear in `reusable_scripts`.
+the store's `artifacts/` tree. `workflow validate --check-artifacts --repo .`
+checks knowledge-store entries against manifest paths, files, checksums, and
+executable bits, and checks `owner: repo` scripts beneath the explicit root as
+regular executable files. Artifact paths used by `steps.run` must also appear
+in `reusable_scripts`.
 
 ## Artifacts
 

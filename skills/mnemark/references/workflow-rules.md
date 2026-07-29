@@ -2,7 +2,7 @@
 
 Workflow memories are durable runbooks stored as `type=workflow`. They help agents discover recurring procedures without turning every project-specific process into a skill.
 
-Scaffold new workflow memories with `mem workflow new <name>` — the baseline template is embedded in the binary. Keep project-specific details in the workflow content and keep execution policy in this skill guidance.
+Scaffold new workflow memories with `mem workflow new <name>` — the minimal baseline template is embedded in the binary. Replace every `<replace: ...>` value, set `draft: false`, and run `mem workflow validate --file <path>` before saving. Use `--examples full` only when the runbook needs repository and knowledge-store helper examples. Keep project-specific details in workflow content and execution policy in this skill guidance.
 
 ## Lookup
 
@@ -53,7 +53,7 @@ When executing a workflow, do not repeatedly synthesize throwaway helper program
 
 Ask before changing workflow memory or moving helper ownership between repo and knowledge store. After extraction, update the workflow runbook to call the script path, validate it, and record the run result.
 
-Prefer `owner: repo` for repository-specific logic and `owner: knowledge_store` for reusable cross-project helpers (the latter also needs a `checksum:`). The embedded baseline template demonstrates both owners in one `reusable_scripts` list with their matching `steps[].run`; scaffold with `mem workflow new` rather than hand-writing these blocks.
+Prefer `owner: repo` for repository-specific logic and `owner: knowledge_store` for reusable cross-project helpers (the latter also needs a `checksum:`). The optional full scaffold demonstrates both owners with matching `steps[].run`; request it with `mem workflow new <name> --examples full` rather than copying those blocks into every runbook.
 
 Allowed knowledge-store artifact paths are:
 
@@ -79,10 +79,10 @@ mem workflow record <name> --result failure --note "failed at <step>: <why>"
 
 - The record response echoes the runbook's `post_run_memory` checklist; process every item before closing the work unit. If it reports `post_run_memory_missing`, add the section to the runbook with `mem update`.
 - Save durable failures or lessons after a run.
-- Create new runbooks from the embedded template with `mem workflow new <name>` instead of writing YAML from scratch; the template documents required fields and YAML quoting traps.
+- Create new runbooks with `mem workflow new <name>` instead of writing YAML from scratch. A scaffold is an invalid draft until placeholders are replaced and `draft` is false; run `mem workflow validate --file <path>` before saving.
 - Propose updates to manual workflow memories instead of silently editing them.
 - Do not silently move scripts into or out of `artifacts/`; ask the user before changing ownership.
-- Use `mem workflow validate <name-or-id>` before relying on a workflow.
-- Use `mem workflow validate <name-or-id> --check-artifacts` when the workflow references `owner: knowledge_store` artifacts.
+- Use `mem workflow validate <name-or-id>` before relying on a stored workflow.
+- Use `mem workflow validate <name-or-id> --check-artifacts --repo <project-root>` when the workflow has reusable scripts. Knowledge-store entries are checked against the manifest, file, checksum, and executable bit; repository entries are constrained beneath the explicit root and checked as regular executable files.
 - Use `--no-validate-workflow` only for deliberate migration or recovery.
 - Treat merge-created `workflow_validation_failed` ambiguity records as requiring human review before import or update.
