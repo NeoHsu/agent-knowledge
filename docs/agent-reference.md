@@ -43,10 +43,13 @@ Read:
 3. `skills/mnemark/references/cli-guide.md`
 4. `crates/mem-cli/src/args/mod.rs` and the relevant domain module under
    `crates/mem-cli/src/args/`
-5. the relevant file or module under `crates/mem-cli/src/commands/`; memory,
-   merge, and bundle implementations live under
-   `crates/mem-cli/src/commands/memory/`, `crates/mem-cli/src/commands/merge/`,
-   and `crates/mem-cli/src/commands/bundle/`
+5. the relevant file or module under `crates/mem-cli/src/commands/`; split
+   implementations live under `crates/mem-cli/src/commands/memory/`,
+   `crates/mem-cli/src/commands/merge/`, `crates/mem-cli/src/commands/bundle/`,
+   `crates/mem-cli/src/commands/workflow/`,
+   `crates/mem-cli/src/commands/setup/`, and
+   `crates/mem-cli/src/commands/doctor/`; specifically,
+   `crates/mem-cli/src/commands/doctor/mod.rs` orchestrates checks
 6. related tests under `crates/mem-cli/tests/`
 
 Update docs and tests with behavior changes.

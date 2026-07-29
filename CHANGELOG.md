@@ -29,6 +29,8 @@ All notable changes to mnemark are documented here.
   validation, and run-recording handlers without changing CLI or JSON output.
 - Split agent-platform setup into policy, platform, skill-link, and hook modules
   while preserving managed-file conflict checks and upgrade behavior.
+- Split doctor diagnostics into store, platform, and report modules while
+  preserving check order, status levels, and recovery guidance.
 
 ### Performance
 
