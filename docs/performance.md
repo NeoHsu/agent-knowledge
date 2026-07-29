@@ -47,7 +47,7 @@ those checks only for an explicitly reviewed protocol comparison.
 
 ## Release baseline: v0.8.0
 
-This branch identifies source version `0.8.0`. The retained v0.8.0 release
+This branch identifies source version `0.9.0`. The retained v0.8.0 release
 baseline was captured on 2026-07-28 from clean tag
 `v0.8.0`, commit `c7026b0ace895a404e327d8245565f67c3b4c265`. It used an
 optimized local build of `mem` version `0.8.0` on an Apple M2 Max (`arm64`),

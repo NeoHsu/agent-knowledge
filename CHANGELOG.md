@@ -4,6 +4,8 @@ All notable changes to mnemark are documented here.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-29
+
 ### Added
 
 - Added the `index_stale_after_write` JSON error code and structured recovery

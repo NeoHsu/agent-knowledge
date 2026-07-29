@@ -1,6 +1,6 @@
 # mem CLI Guide
 
-This guide documents source version `0.8.0`. `mem setup <platform>` installs the
+This guide documents source version `0.9.0`. `mem setup <platform>` installs the
 skill embedded in that binary, so the installed skill and CLI stay matched.
 The `latest` release installer can lag behind source `main`; run `mem --version`
 and use documentation from the matching Git tag when exact behavior matters.

@@ -4,7 +4,7 @@ Portable agent memory and workflow runbook system, exposed through the `mem`
 CLI.
 
 > [!NOTE]
-> This `main` branch documents source version `0.8.0`. The `latest` installer
+> This `main` branch documents source version `0.9.0`. The `latest` installer
 > follows the newest published GitHub release and can temporarily lag behind
 > `main`; run `mem --version` and use the documentation from the matching Git
 > tag when exact released behavior matters.
