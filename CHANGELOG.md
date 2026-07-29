@@ -13,8 +13,8 @@ All notable changes to mnemark are documented here.
   bootstrap confidence intervals.
 - Added a release-build SHA-256 gate for the exact CC-CEDICT source archive
   embedded by Lindera.
-- Added a retained 100,000-memory development canary report covering import,
-  query, Prime, graph rebuild, bundle export, sizes, and peak RSS.
+- Added retained 10,000-memory interleaved optimization reports and a
+  100,000-memory development canary covering latency, sizes, and peak RSS.
 - Added the `index_stale_after_write` JSON error code and structured recovery
   details when a durable SQLite write commits before its Tantivy update fails,
   allowing automation to repair the index without blindly retrying the write.
@@ -43,7 +43,8 @@ All notable changes to mnemark are documented here.
   interleaved 10,000-memory trials cut import peak RSS from about 210 MiB to
   about 119 MiB with no material throughput regression.
 - Overlapped bundle hashing with archive compression after validation;
-  interleaved 10,000-memory trials reduced median export latency by about 19%.
+  the retained interleaved 10,000-memory comparison reduced median export
+  latency by about 18%.
 
 ## [0.8.0] - 2026-07-17
 

@@ -1,0 +1,255 @@
+{
+  "schema_version": 2,
+  "benchmark_protocol_version": 2,
+  "generated_at": "2026-07-29T07:46:20Z",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "python": "3.14.6",
+  "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+  "binary": "/Users/neo/Documents/work/github/code/mnemark/target/release/mem",
+  "binary_sha256": "198fa025e11f428a5cd5534fe13d6af2187cca4cf1d09e74bc8cedcfbf798025",
+  "benchmark_script_sha256": "88cefa9f427e68a082f9913b0722de989239b31356cea58345321e99d5b88546",
+  "benchmark_protocol_sha256": "88cefa9f427e68a082f9913b0722de989239b31356cea58345321e99d5b88546",
+  "benchmark_protocol_files": [
+    "scripts/benchmark-scale.sh",
+    "scripts/benchmark_scale.py"
+  ],
+  "mem_version": "mem 0.9.0",
+  "git_commit": "4d156ac2b2bdbb04cb40b0432df8519341c3ab31",
+  "git_dirty": false,
+  "run_label": "candidate",
+  "comparison_mode": true,
+  "comparison_peer": {
+    "label": "baseline",
+    "binary_sha256": "5833ce0dd0846ceca88780e0dc60d8d02ecddc13544596de28b69c763cd1a31e",
+    "git_commit": "2e2be697cd92da1735984632263717044678e7e4"
+  },
+  "cache_model": {
+    "import": "fresh initialized store per measured run",
+    "interactive": "separate process per run after configured warmups; OS cache retained",
+    "maintenance": "same populated store for graph and bundle repetitions",
+    "comparison": "sample-level seeded interleaving across binaries"
+  },
+  "seed": 42,
+  "execution_order": [
+    10000
+  ],
+  "sample_schedule": {
+    "10000": {
+      "import": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ]
+      ],
+      "warmup": [],
+      "interactive": [
+        [
+          "baseline:prime",
+          "candidate:query",
+          "baseline:query",
+          "candidate:prime"
+        ],
+        [
+          "baseline:prime",
+          "candidate:prime",
+          "baseline:query",
+          "candidate:query"
+        ]
+      ],
+      "graph_rebuild": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ]
+      ],
+      "bundle_export": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ]
+      ]
+    }
+  },
+  "interactive_runs": 2,
+  "maintenance_runs": 5,
+  "warmup_runs": 0,
+  "statistic_model": {
+    "center": "median",
+    "dispersion": "median absolute deviation",
+    "confidence_interval": "deterministic nonparametric bootstrap median, 2000 resamples",
+    "p95": "nearest-rank, emitted only with at least 20 samples"
+  },
+  "results": [
+    {
+      "scale": 10000,
+      "sizes": {
+        "payload_bytes": 3848780,
+        "database_bytes": 40505344,
+        "index_bytes": 709088,
+        "bundle_bytes": 6360108
+      },
+      "operations": {
+        "import": {
+          "median": 1548.5964999825228,
+          "p95": null,
+          "min": 1526.1236660007853,
+          "max": 1605.3782909875736,
+          "mad": 22.472833981737494,
+          "median_ci95_low": 1526.1236660007853,
+          "median_ci95_high": 1605.3782909875736,
+          "runs": 5,
+          "peak_rss_mib": 119.125,
+          "input_bytes": 3848780,
+          "output_bytes": 41214432
+        },
+        "query": {
+          "median": 37.65225000097416,
+          "p95": null,
+          "min": 25.937667000107467,
+          "max": 49.36683300184086,
+          "mad": 11.714583000866696,
+          "median_ci95_low": 25.937667000107467,
+          "median_ci95_high": 49.36683300184086,
+          "runs": 2,
+          "peak_rss_mib": 42.984375,
+          "input_bytes": 41214432,
+          "output_bytes": 0
+        },
+        "prime": {
+          "median": 36.37558351329062,
+          "p95": null,
+          "min": 35.22779201739468,
+          "max": 37.523375009186566,
+          "mad": 1.1477914958959445,
+          "median_ci95_low": 35.22779201739468,
+          "median_ci95_high": 37.523375009186566,
+          "runs": 2,
+          "peak_rss_mib": 12.8125,
+          "input_bytes": 40505344,
+          "output_bytes": 4000
+        },
+        "graph_rebuild": {
+          "median": 2279.1446250048466,
+          "p95": null,
+          "min": 2016.4398749766406,
+          "max": 2444.723624998005,
+          "mad": 31.42575002857484,
+          "median_ci95_low": 2016.4398749766406,
+          "median_ci95_high": 2444.723624998005,
+          "runs": 5,
+          "peak_rss_mib": 42.53125,
+          "input_bytes": 40505344,
+          "output_bytes": 40505344
+        },
+        "bundle_export": {
+          "median": 1756.2054579902906,
+          "p95": null,
+          "min": 1734.5141250116285,
+          "max": 1897.2192079818342,
+          "mad": 15.515748993493617,
+          "median_ci95_low": 1734.5141250116285,
+          "median_ci95_high": 1897.2192079818342,
+          "runs": 5,
+          "peak_rss_mib": 31.453125,
+          "input_bytes": 40505344,
+          "output_bytes": 6360108,
+          "stages_ms": {
+            "snapshot_ms": {
+              "median": 305.69020800000004,
+              "p95": null,
+              "min": 305.34299999999996,
+              "max": 317.01041699999996,
+              "mad": 0.3472080000000801,
+              "median_ci95_low": 305.34299999999996,
+              "median_ci95_high": 317.01041699999996
+            },
+            "validation_ms": {
+              "median": 903.352541,
+              "p95": null,
+              "min": 895.150417,
+              "max": 1033.266042,
+              "mad": 8.202124000000026,
+              "median_ci95_low": 895.150417,
+              "median_ci95_high": 1033.266042
+            },
+            "hash_ms": {
+              "median": 409.305541,
+              "p95": null,
+              "min": 407.356834,
+              "max": 435.219083,
+              "mad": 1.948707000000013,
+              "median_ci95_low": 407.356834,
+              "median_ci95_high": 435.219083
+            },
+            "archive_ms": {
+              "median": 515.586542,
+              "p95": null,
+              "min": 507.22154100000006,
+              "max": 541.740334,
+              "mad": 6.9532500000000255,
+              "median_ci95_low": 507.22154100000006,
+              "median_ci95_high": 541.740334
+            },
+            "install_ms": {
+              "median": 0.5574589999999999,
+              "p95": null,
+              "min": 0.481666,
+              "max": 0.7671250000000001,
+              "mad": 0.07579299999999994,
+              "median_ci95_low": 0.481666,
+              "median_ci95_high": 0.7671250000000001
+            }
+          }
+        }
+      }
+    }
+  ]
+}

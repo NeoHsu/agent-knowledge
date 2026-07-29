@@ -60,6 +60,40 @@ identity, and sample schedule. Override platform or protocol checks only for an
 explicitly reviewed methodology comparison. Schema-v1 reports remain valid as
 historical evidence, but cannot be directly compared with protocol v2.
 
+## Retained v0.9 optimization comparison
+
+The final 0.9 development binary at clean commit
+`4d156ac2b2bdbb04cb40b0432df8519341c3ab31` was compared directly with clean
+pre-optimization commit `2e2be697cd92da1735984632263717044678e7e4` in
+one protocol-v2, sample-level interleaved 10,000-memory run. The baseline used
+the 50 MB Tantivy writer and sequential bundle hashing/archive stages; the
+candidate used the 20 MB writer and overlapped bundle stages. Both reports have
+the same protocol hash and sample schedule, passed correctness assertions and
+portable guardrails, and passed the 35% same-platform regression gate.
+
+| Measurement | Pre-optimization | Final candidate | Change |
+| --- | ---: | ---: | ---: |
+| Import median (5 fresh stores) | 1,577.44 ms | 1,548.60 ms | -1.8% |
+| Import peak RSS | 209.33 MiB | 119.12 MiB | -43.1% |
+| Bundle export median (5 runs) | 2,140.12 ms | 1,756.21 ms | -17.9% |
+| Graph rebuild median (5 runs) | 2,261.82 ms | 2,279.14 ms | +0.8% |
+
+The two-sample Query and Prime observations are correctness smoke only, not
+latency claims. This comparison verifies the combined final branch; the writer
+and bundle experiments were also profiled independently before their changes
+were committed.
+
+Retained paired evidence:
+
+- [`benchmarks/v0.9.0-dev-pre-optimization-10k-macos-arm64.json`](benchmarks/v0.9.0-dev-pre-optimization-10k-macos-arm64.json)
+  (SHA-256 `41f04d76eabd501523458fc4b0bbcb956cfd64a67b2d5aebd61de0c1fe7af32f`);
+- [`benchmarks/v0.9.0-dev-pre-optimization-10k-macos-arm64.csv`](benchmarks/v0.9.0-dev-pre-optimization-10k-macos-arm64.csv)
+  (SHA-256 `3ba006cb18940f1fdd4752239b29e9399fac58645cd267d78d25e4608e295863`);
+- [`benchmarks/v0.9.0-dev-optimized-10k-macos-arm64.json`](benchmarks/v0.9.0-dev-optimized-10k-macos-arm64.json)
+  (SHA-256 `eb7117a92fbbe8c1e4893cce5bd1d06ac722687800414b1f0be688a1d4199cfb`);
+- [`benchmarks/v0.9.0-dev-optimized-10k-macos-arm64.csv`](benchmarks/v0.9.0-dev-optimized-10k-macos-arm64.csv)
+  (SHA-256 `22ed651219882c2a5c94ab0d4d2bf3495f73763a9fddcb8ae55ed6eea09889ee`).
+
 ## Release baseline: v0.8.0
 
 This branch identifies source version `0.9.0`. The retained v0.8.0 release
