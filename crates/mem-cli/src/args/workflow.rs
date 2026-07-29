@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
 
 use super::memory::{parse_allowed, parse_memory_source};
 
@@ -48,6 +48,12 @@ pub(crate) struct WorkflowShowArgs {
     pub(crate) with_graph_context: bool,
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum WorkflowExamples {
+    Minimal,
+    Full,
+}
+
 #[derive(Args)]
 pub(crate) struct WorkflowNewArgs {
     pub(crate) name: String,
@@ -57,6 +63,13 @@ pub(crate) struct WorkflowNewArgs {
         help = "Output path; defaults to <name>.yaml"
     )]
     pub(crate) output: Option<PathBuf>,
+    #[arg(
+        long,
+        value_enum,
+        default_value = "minimal",
+        help = "Scaffold size: minimal or full reusable-script examples"
+    )]
+    pub(crate) examples: WorkflowExamples,
     #[arg(long, help = "Overwrite an existing file")]
     pub(crate) force: bool,
 }
@@ -98,13 +111,35 @@ pub(crate) struct WorkflowFindArgs {
 
 #[derive(Args)]
 pub(crate) struct WorkflowValidateArgs {
-    pub(crate) reference: String,
+    #[arg(
+        value_name = "REFERENCE",
+        required_unless_present = "file",
+        conflicts_with = "file"
+    )]
+    pub(crate) reference: Option<String>,
+    #[arg(
+        long,
+        value_name = "FILE",
+        conflicts_with = "reference",
+        help = "Validate workflow YAML/JSON before saving it"
+    )]
+    pub(crate) file: Option<PathBuf>,
     #[arg(
         long,
         default_value = "auto",
-        help = "Scope used to resolve a workflow name"
+        help = "Scope used to resolve a stored workflow name"
     )]
     pub(crate) scope: String,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Validate knowledge-store artifacts and repository-owned scripts"
+    )]
     pub(crate) check_artifacts: bool,
+    #[arg(
+        long,
+        value_name = "DIR",
+        requires = "check_artifacts",
+        help = "Repository root used to validate owner: repo scripts"
+    )]
+    pub(crate) repo: Option<PathBuf>,
 }

@@ -127,7 +127,8 @@ Tantivy files, and dirty/version metadata are rebuildable local state.
 | `migrate` | Backup plus transactional schema write | Index/graph compatibility state as required | None |
 | `setup list`, `setup <platform> --dry-run` | None | None | None |
 | `setup <platform>` | None | User-level agent policy, skill links/files, and supported hooks | None |
-| `workflow new` | None | Requested YAML scaffold file | None |
+| `workflow new` | None | Requested YAML scaffold file; no store required | None |
+| `workflow validate --file` | None | Reads the requested YAML/JSON only; `--check-artifacts` also inspects explicitly referenced store/repository files | None |
 | JSON/Markdown import, DB merge, bundle import | Destination durable state | Batched index update and graph dirty/refresh state | None |
 | Bundle export | None in the live store | Online snapshot and output archive | None |
 | `sync --dry-run` | None | Validates DB/worktree secret policy | No fetch/push |

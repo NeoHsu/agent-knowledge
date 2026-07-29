@@ -1,0 +1,45 @@
+# Full mnemark workflow runbook scaffold with reusable-script examples.
+# Replace every <replace: ...> value, delete unused examples, then set draft to false.
+# Required fields: schema_version, goal, triggers, steps, stop_conditions.
+# Each step needs `id` plus one of run / check / manual / ask.
+# YAML trap: quote values beginning with reserved characters such as ` or @.
+schema_version: 1
+draft: true
+goal: "<replace: recurring task outcome>"
+triggers:
+  - "<replace: task intent or user request>"
+preconditions:
+  - "<replace: condition that must pass before step 1>"
+reusable_scripts:
+  - path: "scripts/<replace: project script>"
+    owner: repo
+    required: true
+    purpose: "<replace: project-owned executable purpose>"
+  - path: "artifacts/scripts/<replace: portable helper>"
+    owner: knowledge_store
+    required: true
+    checksum: "sha256:<replace: artifact checksum>"
+    purpose: "<replace: cross-project helper purpose>"
+steps:
+  - id: inspect
+    check: "<replace: current state and relevant inputs to inspect>"
+    verify: "<replace: evidence that scope and safety are understood>"
+  - id: scripted-step
+    check: "<replace: repository script exists and is executable>"
+    run: "scripts/<replace: project script>"
+    verify: "<replace: evidence that the repository script succeeded>"
+  - id: artifact-assisted-step
+    check: "<replace: artifact exists, checksum matches, and it is executable>"
+    run: "artifacts/scripts/<replace: portable helper>"
+    verify: "<replace: evidence that the portable helper succeeded>"
+  - id: risky-step
+    check: "<replace: preconditions for the external side effect>"
+    run: "<replace: command with an external side effect>"
+    confirm: true
+    verify: "<replace: evidence that the external side effect succeeded>"
+stop_conditions:
+  - "<replace: condition requiring an immediate stop>"
+outputs:
+  - "<replace: observable deliverable or completion criterion>"
+post_run_memory:
+  - save durable failures, lessons, or confirmed workflow changes

@@ -48,8 +48,8 @@ mem workflow
 mem workflow list [--include-superseded{default=false}] [--limit <LIMIT>] [--scope <SCOPE>]
 mem workflow show <REFERENCE> [--checklist{default=false}] [--scope <SCOPE>{default=auto}] [--with-graph-context{default=false}]
 mem workflow find <INTENT> [--limit <LIMIT>] [--scope <SCOPE>]
-mem workflow validate <REFERENCE> [--check-artifacts{default=false}] [--scope <SCOPE>{default=auto}]
-mem workflow new <NAME> [--force{default=false}] [--output <FILE>]
+mem workflow validate [<REFERENCE>] [--check-artifacts{default=false}] [--file <FILE>{conflicts=reference}] [--repo <DIR>] [--scope <SCOPE>{default=auto}]
+mem workflow new <NAME> [--examples <EXAMPLES>{default=minimal}] [--force{default=false}] [--output <FILE>]
 mem workflow record <REFERENCE> --result <RESULT> [--note <NOTE>] [--redact-secrets{default=false}] [--scope <SCOPE>{default=auto}] [--source <SOURCE>{default=agent}] [--user-confirmed{default=false}]
 mem artifact
 mem artifact list

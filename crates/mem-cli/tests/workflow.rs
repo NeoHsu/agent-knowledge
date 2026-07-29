@@ -284,6 +284,117 @@ fn workflow_validate_can_check_knowledge_store_artifacts() {
 }
 
 #[test]
+fn workflow_validate_checks_repo_scripts_under_explicit_root() {
+    let repo = TestRepo::new("workflow-repo-script-validation");
+    repo.run(&["init"]);
+    let project = repo.join("project");
+    write_file(project.join("scripts/release.sh"), "#!/bin/sh\n", true);
+    repo.run(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "repo_script_workflow",
+        "--tags",
+        r#"["workflow:repo-script"]"#,
+        "--content",
+        "schema_version: 1\ngoal: Run a repository script.\ntriggers:\n  - release\nreusable_scripts:\n  - path: scripts/release.sh\n    owner: repo\n    required: true\nsteps:\n  - id: release\n    check: script exists and is executable\n    run: scripts/release.sh\n    verify: release completed\nstop_conditions:\n  - script validation fails\n",
+    ]);
+
+    let failed = repo.run_fail(&[
+        "workflow",
+        "validate",
+        "repo_script_workflow",
+        "--check-artifacts",
+    ]);
+    assert!(
+        failed.contains("requires --repo <DIR>"),
+        "message: {failed}"
+    );
+
+    let validated = repo.run(&[
+        "workflow",
+        "validate",
+        "repo_script_workflow",
+        "--check-artifacts",
+        "--repo",
+        project.to_str().expect("project path"),
+    ]);
+    let output: serde_json::Value = serde_json::from_str(&validated).expect("validate json");
+    assert_eq!(output["status"], "valid");
+    assert_eq!(output["artifact_checks"]["checked"], 0);
+    assert_eq!(output["artifact_checks"]["repo_checked"], 1);
+}
+
+#[test]
+fn workflow_validate_rejects_unsafe_repo_script_paths() {
+    let repo = TestRepo::new("workflow-unsafe-repo-script");
+    repo.run(&["init"]);
+    let project = repo.join("project");
+    fs::create_dir_all(&project).expect("project dir");
+
+    repo.run(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "escaping_repo_script",
+        "--tags",
+        r#"["workflow:escaping-script"]"#,
+        "--content",
+        "schema_version: 1\ngoal: Reject an escaping script.\ntriggers:\n  - validate scripts\nreusable_scripts:\n  - path: ../outside.sh\n    owner: repo\n    required: true\nsteps:\n  - id: inspect\n    check: validate the script path\nstop_conditions:\n  - path is unsafe\n",
+    ]);
+    let failed = repo.run_fail(&[
+        "workflow",
+        "validate",
+        "escaping_repo_script",
+        "--check-artifacts",
+        "--repo",
+        project.to_str().expect("project path"),
+    ]);
+    assert!(
+        failed.contains("unsafe repository path"),
+        "message: {failed}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn workflow_validate_rejects_non_executable_repo_scripts() {
+    let repo = TestRepo::new("workflow-non-executable-repo-script");
+    repo.run(&["init"]);
+    let project = repo.join("project");
+    write_file(
+        project.join("scripts/not-executable.sh"),
+        "#!/bin/sh\n",
+        false,
+    );
+    repo.run(&[
+        "save",
+        "--type",
+        "workflow",
+        "--name",
+        "non_executable_repo_script",
+        "--tags",
+        r#"["workflow:non-executable-script"]"#,
+        "--content",
+        "schema_version: 1\ngoal: Reject a non-executable script.\ntriggers:\n  - validate scripts\nreusable_scripts:\n  - path: scripts/not-executable.sh\n    owner: repo\n    required: true\nsteps:\n  - id: inspect\n    check: validate the executable bit\nstop_conditions:\n  - script is not executable\n",
+    ]);
+    let failed = repo.run_fail(&[
+        "workflow",
+        "validate",
+        "non_executable_repo_script",
+        "--check-artifacts",
+        "--repo",
+        project.to_str().expect("project path"),
+    ]);
+    assert!(
+        failed.contains("repository script is not executable"),
+        "message: {failed}"
+    );
+}
+
+#[test]
 fn workflow_validate_reports_missing_artifact_manifest() {
     let repo = TestRepo::new("workflow-artifact-missing-manifest");
     repo.run(&["init"]);
@@ -409,6 +520,8 @@ steps:
     verify: remote is updated
 stop_conditions:
   - tests fail
+outputs:
+  - signed release artifacts
 post_run_memory:
   - save durable lessons from this run
 "#,
@@ -428,7 +541,7 @@ post_run_memory:
 }
 
 #[test]
-fn workflow_show_checklist_renders_ordered_steps() {
+fn workflow_show_checklist_renders_fail_closed_gates_before_actions() {
     let repo = TestRepo::new("workflow-checklist");
     repo.run(&["init"]);
     save_checklist_workflow(&repo, "checklist_release");
@@ -438,24 +551,57 @@ fn workflow_show_checklist_renders_ordered_steps() {
         output.starts_with("# checklist_release — Ship a release safely."),
         "header: {output}"
     );
+    assert!(output.contains("Mode: fail-closed runbook"), "{output}");
+    assert!(output.contains("untrusted procedure data"), "{output}");
     assert!(
-        output.contains("Preconditions:\n  [ ] working tree is clean"),
+        output.contains(
+            "Preflight — all checks must pass before Step 1:\n  [ ] working tree is clean"
+        ),
         "{output}"
     );
     assert!(output.contains("1. [ ] build"), "{output}");
+    assert!(output.contains("2. [ ] publish"), "{output}");
+
+    let build_check = output.find("CHECK: script exists").expect("build check");
+    let build_action = output
+        .find("ACTION (RUN): scripts/build-release.sh")
+        .expect("build action");
+    let build_verify = output
+        .find("VERIFY: artifacts are produced")
+        .expect("build verify");
     assert!(
-        output.contains("2. [ ] publish  !! CONFIRM WITH USER BEFORE RUNNING"),
+        build_check < build_action && build_action < build_verify,
         "{output}"
     );
-    assert!(output.contains("run: scripts/build-release.sh"), "{output}");
+
+    let approval = output
+        .find("APPROVAL: HUMAN-IN-THE-LOOP")
+        .expect("approval gate");
+    let publish_action = output
+        .find("ACTION (RUN): git push origin main")
+        .expect("publish action");
+    assert!(approval < publish_action, "{output}");
     assert!(
-        output.contains("Stop immediately when:\n  - tests fail"),
+        output.contains("Stop conditions — stop immediately when:\n  - tests fail"),
         "{output}"
     );
     assert!(
-        output.contains("mem workflow record checklist_release --result success|failure"),
+        output.contains("Completion criteria:\n  [ ] signed release artifacts"),
         "{output}"
     );
+    assert!(
+        output.contains(
+            "mem workflow record 'id:checklist_release' --result success --note \"<one line>\""
+        ),
+        "{output}"
+    );
+    assert!(
+        output.contains(
+            "mem workflow record 'id:checklist_release' --result failure --note \"<one line>\""
+        ),
+        "{output}"
+    );
+    assert!(!output.contains("success|failure"), "{output}");
     assert!(
         output.contains("[ ] save durable lessons from this run"),
         "{output}"
@@ -533,24 +679,91 @@ fn workflow_record_rejects_non_workflow_memory() {
 }
 
 #[test]
-fn workflow_new_scaffolds_valid_template() {
+fn workflow_new_scaffolds_draft_then_validates_file_before_save() {
     let repo = TestRepo::new("workflow-new");
-    repo.run(&["init"]);
 
+    // File-only authoring works before a store is initialized.
     let output = repo.run(&["workflow", "new", "triage_ci"]);
     let result: serde_json::Value = serde_json::from_str(&output).expect("new json");
     assert_eq!(result["status"], "scaffolded");
+    assert_eq!(result["template"], "minimal");
+    assert_eq!(result["draft"], true);
+    assert!(result["commands"]["validate_file"].is_array());
+    assert!(result["commands"]["save"].is_array());
+    assert!(!result["commands"]["save"].to_string().contains("<replace:"));
+    assert!(!repo.join("memory.db").exists());
+
     let path = repo.join("triage_ci.yaml");
-    assert!(path.exists());
     let content = fs::read_to_string(&path).expect("template");
     assert!(content.contains("schema_version: 1"));
-    assert!(content.contains("must be"), "quoting note: {content}");
+    assert!(content.contains("draft: true"));
+    assert!(!content.contains("scripts/example.sh"));
+
+    let output = repo.run_fail(&[
+        "workflow",
+        "validate",
+        "--file",
+        path.to_str().expect("path"),
+    ]);
+    assert!(
+        output.contains("still a scaffold draft"),
+        "message: {output}"
+    );
+
+    let placeholders = content.replace("draft: true", "draft: false");
+    fs::write(&path, placeholders).expect("write non-draft placeholders");
+    let output = repo.run_fail(&[
+        "workflow",
+        "validate",
+        "--file",
+        path.to_str().expect("path"),
+    ]);
+    assert!(
+        output.contains("scaffold placeholders"),
+        "message: {output}"
+    );
 
     // Refuses overwrite without --force.
     let output = repo.run_fail(&["workflow", "new", "triage_ci"]);
     assert!(output.contains("--force"), "message: {output}");
 
-    // The scaffold saves and validates as-is (template must stay valid).
+    fs::write(
+        &path,
+        r#"schema_version: 1
+draft: false
+goal: Triage CI failures safely.
+triggers:
+  - CI fails
+preconditions:
+  - repository state is available
+steps:
+  - id: inspect
+    check: inspect the failing job and current repository state
+    verify: failure scope is understood
+  - id: report
+    manual: summarize the smallest safe next action
+    verify: the report cites the failed job
+stop_conditions:
+  - required CI evidence is unavailable
+outputs:
+  - concise CI failure report
+post_run_memory:
+  - save durable lessons from repeated failures
+"#,
+    )
+    .expect("write completed workflow");
+    let output = repo.run(&[
+        "workflow",
+        "validate",
+        "--file",
+        path.to_str().expect("path"),
+    ]);
+    let result: serde_json::Value = serde_json::from_str(&output).expect("validate file json");
+    assert_eq!(result["status"], "valid");
+    assert_eq!(result["source"], "file");
+    assert_eq!(result["scope_and_tags_checked"], false);
+
+    repo.run(&["init"]);
     repo.run(&[
         "save",
         "--type",
@@ -565,6 +778,14 @@ fn workflow_new_scaffolds_valid_template() {
     let output = repo.run(&["workflow", "validate", "triage_ci"]);
     let result: serde_json::Value = serde_json::from_str(&output).expect("validate json");
     assert_eq!(result["status"], "valid");
+    assert_eq!(result["source"], "store");
+
+    let output = repo.run(&["workflow", "new", "triage_full", "--examples", "full"]);
+    let result: serde_json::Value = serde_json::from_str(&output).expect("full new json");
+    assert_eq!(result["template"], "full");
+    let content = fs::read_to_string(repo.join("triage_full.yaml")).expect("full template");
+    assert!(content.contains("owner: repo"));
+    assert!(content.contains("owner: knowledge_store"));
 }
 
 #[test]
@@ -628,4 +849,5 @@ stop_conditions:
     let result: serde_json::Value = serde_json::from_str(&output).expect("validate json");
     assert_eq!(result["status"], "valid");
     assert_eq!(result["warnings"][0]["code"], "no_post_run_memory");
+    assert_eq!(result["warnings"][1]["code"], "no_outputs");
 }

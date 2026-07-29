@@ -1,49 +1,26 @@
-# mnemark workflow runbook template.
-# Required fields: schema_version, goal, triggers, steps, stop_conditions;
-# each step needs `id` plus one of run / check / manual / ask.
-# YAML trap: values starting with reserved characters such as ` or @ must be
-# quoted, e.g. verify: "`mem --version` succeeds on PATH".
+# Minimal mnemark workflow runbook scaffold.
+# Replace every <replace: ...> value, then set draft to false.
+# Required fields: schema_version, goal, triggers, steps, stop_conditions.
+# Each step needs `id` plus one of run / check / manual / ask.
+# YAML trap: quote values beginning with reserved characters such as ` or @.
 schema_version: 1
-goal: Describe the recurring task outcome.
+draft: true
+goal: "<replace: recurring task outcome>"
 triggers:
-  - user asks for this recurring task
+  - "<replace: task intent or user request>"
 preconditions:
-  - required repository or system context is available
-reusable_scripts:
-  - path: scripts/example.sh
-    owner: repo
-    required: true
-    purpose: project-owned executable logic referenced by this workflow
-  - path: artifacts/scripts/example-helper.sh
-    owner: knowledge_store
-    required: true
-    checksum: sha256:<hex>
-    purpose: cross-project helper owned by the active knowledge store
+  - "<replace: condition that must pass before step 1>"
 steps:
   - id: inspect
-    check: confirm the current state and relevant inputs
-    verify: the task scope and safety conditions are understood
-  - id: scripted-step
-    run: scripts/example.sh
-    check: scripts/example.sh exists and is executable
-    verify: the script completed as intended
-  - id: artifact-assisted-step
-    run: artifacts/scripts/example-helper.sh
-    check: artifact exists under the active knowledge store, checksum matches manifest.toml, and script is executable
-    verify: the helper produced the expected context
+    check: "<replace: current state and relevant inputs to inspect>"
+    verify: "<replace: evidence that scope and safety are understood>"
   - id: act
-    manual: perform the smallest appropriate action
-    verify: the action completed as intended
-  - id: risky-step
-    run: command that has external side effects
-    confirm: true
-    verify: external side effect completed as expected
+    check: "<replace: precondition for the action>"
+    manual: "<replace: smallest appropriate action>"
+    verify: "<replace: observable evidence that the action succeeded>"
 stop_conditions:
-  - required access is missing
-  - unrelated dirty files or unsafe state exist
-  - a verification step fails
+  - "<replace: condition requiring an immediate stop>"
 outputs:
-  - concise summary of actions taken
-  - links, commits, or artifacts produced
+  - "<replace: observable deliverable or completion criterion>"
 post_run_memory:
   - save durable failures, lessons, or confirmed workflow changes

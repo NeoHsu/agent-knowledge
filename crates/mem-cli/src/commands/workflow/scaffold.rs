@@ -2,15 +2,20 @@ use std::path::PathBuf;
 
 use super::super::*;
 
-/// Baseline runbook template, embedded so `workflow new` works without a
-/// source checkout and always matches the binary's validation rules.
-const WORKFLOW_TEMPLATE: &str = include_str!("../../../../../templates/workflow.yaml");
+/// Runbook templates are embedded so `workflow new` works without a source
+/// checkout and always matches the binary's validation rules.
+const MINIMAL_WORKFLOW_TEMPLATE: &str = include_str!("../../../../../templates/workflow.yaml");
+const FULL_WORKFLOW_TEMPLATE: &str = include_str!("../../../../../templates/workflow-full.yaml");
 
 pub(super) fn scaffold(args: WorkflowNewArgs) -> Result<()> {
-    let output = args
-        .output
-        .unwrap_or_else(|| PathBuf::from(format!("{}.yaml", args.name)));
-    if output.exists() && !args.force {
+    let WorkflowNewArgs {
+        name,
+        output,
+        examples,
+        force,
+    } = args;
+    let output = output.unwrap_or_else(|| PathBuf::from(format!("{name}.yaml")));
+    if output.exists() && !force {
         bail!(
             "{} already exists; pass --force to overwrite",
             output.display()
@@ -22,17 +27,41 @@ pub(super) fn scaffold(args: WorkflowNewArgs) -> Result<()> {
                 .with_context(|| format!("create directory {}", parent.display()))?;
         }
     }
-    fs::write(&output, WORKFLOW_TEMPLATE).with_context(|| format!("write {}", output.display()))?;
+    let (template_name, template) = match examples {
+        WorkflowExamples::Minimal => ("minimal", MINIMAL_WORKFLOW_TEMPLATE),
+        WorkflowExamples::Full => ("full", FULL_WORKFLOW_TEMPLATE),
+    };
+    fs::write(&output, template).with_context(|| format!("write {}", output.display()))?;
+
+    let path = output.display().to_string();
+    let tags = json!([format!("workflow:{name}")]).to_string();
+    let edit_instruction = match examples {
+        WorkflowExamples::Minimal => "replace every <replace: ...> value, then set draft: false",
+        WorkflowExamples::Full => {
+            "replace every <replace: ...> value, delete unused examples, then set draft: false"
+        }
+    };
     print_json_pretty(&json!({
         "status": "scaffolded",
-        "path": output.display().to_string(),
+        "path": path,
+        "template": template_name,
+        "draft": true,
         "next_steps": [
-            "edit the YAML: fill goal, triggers, steps, stop_conditions; delete unused example steps",
-            format!(
-                "mem save --type workflow --name {} --tags '[\"workflow:{}\",\"intent:<intent>\"]' --content-file {}",
-                args.name, args.name, output.display()
-            ),
-            format!("mem workflow validate {}", args.name)
-        ]
+            edit_instruction,
+            "run commands.validate_file; save only after validation succeeds",
+            "run commands.save, then commands.validate_stored; run commands.validate_references when reusable_scripts are present"
+        ],
+        "commands": {
+            "validate_file": ["mem", "workflow", "validate", "--file", path],
+            "save": [
+                "mem", "save", "--type", "workflow", "--name", name,
+                "--tags", tags, "--content-file", path
+            ],
+            "validate_stored": ["mem", "workflow", "validate", name],
+            "validate_references": [
+                "mem", "workflow", "validate", name,
+                "--check-artifacts", "--repo", "."
+            ]
+        }
     }))
 }

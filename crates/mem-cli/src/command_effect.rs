@@ -128,7 +128,10 @@ impl CommandEffect {
             Command::Workflow { command } => match command {
                 WorkflowCommand::Record(_) => exclusive().durable().rebuildable(),
                 WorkflowCommand::Show(args) if args.with_graph_context => exclusive().rebuildable(),
-                WorkflowCommand::New(_) => read_only().output_file(),
+                WorkflowCommand::New(_) => Self::new(StoreAccess::None).output_file(),
+                WorkflowCommand::Validate(args) if args.file.is_some() && !args.check_artifacts => {
+                    Self::new(StoreAccess::None)
+                }
                 WorkflowCommand::List(_)
                 | WorkflowCommand::Show(_)
                 | WorkflowCommand::Find(_)
@@ -245,8 +248,25 @@ mod tests {
             ),
             (
                 &["mem", "workflow", "new", "release"],
+                false,
+                none.output_file(),
+            ),
+            (
+                &["mem", "workflow", "validate", "--file", "release.yaml"],
+                false,
+                none,
+            ),
+            (
+                &[
+                    "mem",
+                    "workflow",
+                    "validate",
+                    "--file",
+                    "release.yaml",
+                    "--check-artifacts",
+                ],
                 true,
-                read.output_file(),
+                read,
             ),
             (&["mem", "artifact", "list"], true, read),
             (
@@ -327,6 +347,7 @@ mod tests {
             "`sync --push`",
             "`graph candidates --unlinked`",
             "`workflow show --with-graph-context`",
+            "`workflow validate --file`",
         ] {
             assert!(
                 runtime_model.contains(required),
