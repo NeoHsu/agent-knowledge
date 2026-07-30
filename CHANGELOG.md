@@ -4,6 +4,11 @@ All notable changes to mnemark are documented here.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-30
+
+> The original `v0.9.0` GitHub Release was withdrawn; this entry describes the
+> final reissued build.
+
 ### Added
 
 - Added a versioned, isolated retrieval-quality fixture and release-binary gate
@@ -15,10 +20,6 @@ All notable changes to mnemark are documented here.
   explicitly separated from live-agent evidence.
 - Enabled GitHub secret scanning, push protection, and private vulnerability
   reporting, and published repository discovery metadata and topics.
-
-## [0.9.0] - 2026-07-29
-
-### Added
 
 - Added bundled JSON Schema discovery, representative fixtures, stable
   Clap-derived operation IDs, exact parsed command-effect inspection, and a
@@ -53,8 +54,11 @@ All notable changes to mnemark are documented here.
 - Workflow scaffolds now start as rejected drafts with explicit placeholders,
   and agent checklists render fail-closed gates before actions, completion
   criteria, and separate safe success/failure recording commands.
-- Reworked the README around portable-memory outcomes, an isolated demo,
-  retained evidence, common journeys, and explicit production boundaries.
+- Reworked and refined the README around portable-memory outcomes, an isolated
+  demo, the product lifecycle, retained evidence, graph and retro boundaries,
+  common journeys, and explicit production limits.
+- Refreshed SHA-pinned GitHub Actions and Rust dependency groups, including
+  Lindera 4.0.1 and rusqlite 0.40.1, with Linux, macOS, and Windows verification.
 - Removed the duplicate Ubuntu MSRV lane from pull-request CI while retaining
   stable Linux and Rust 1.97 Linux/macOS/Windows coverage across the two
   workflows; direct `main` pushes still run both stable and MSRV lanes.
