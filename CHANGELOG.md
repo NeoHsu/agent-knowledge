@@ -4,6 +4,18 @@ All notable changes to mnemark are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added a versioned, isolated retrieval-quality fixture and release-binary gate
+  covering exact, fuzzy, multilingual, trust/scope, plain-prime, and
+  relationship-aware recall, with retained machine-readable reports.
+- Added a cross-agent behavior trace protocol and deterministic checker for
+  session priming, remember timing, target visibility, sync/workflow approvals,
+  secret rejection, and negative routing cases; synthetic reference traces are
+  explicitly separated from live-agent evidence.
+- Enabled GitHub secret scanning, push protection, and private vulnerability
+  reporting, and published repository discovery metadata and topics.
+
 ## [0.9.0] - 2026-07-29
 
 ### Added

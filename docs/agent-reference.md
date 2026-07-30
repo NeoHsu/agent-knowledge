@@ -20,6 +20,7 @@ This is the canonical guidance for agents working in this repository. Read this 
 - `docs/runtime-model.md` — runtime store discovery, config priority, artifacts, and bundles.
 - `docs/graph-memory.md` — graph memory design, deterministic graph commands, and non-RAG stance.
 - `docs/development.md` — local setup, validation, release smoke tests, and developer notes.
+- `docs/evaluation.md` plus `evals/` — retrieval-quality fixtures and captured agent-behavior trace contracts.
 - `docs/production.md` — qualified deployment profile, release gate, recovery, rollback, and incident procedures.
 - `docs/compatibility.md` and `docs/json-schemas.md` — public stability policy and machine-readable contracts.
 - `docs/adr/` — accepted architecture decisions and consequences.
@@ -33,7 +34,7 @@ This is the canonical guidance for agents working in this repository. Read this 
 - `schema/memory-schema.sql` — embedded SQLite schema source.
 - `skills/mnemark/` — installable mnemark agent skill and progressive references.
 - `templates/` — example config, manifest, and workflow files.
-- `scripts/` — release build and smoke-test scripts.
+- `scripts/` — release, smoke, benchmark, retrieval, and agent-trace evaluation tools.
 
 ## Common Tasks
 
@@ -86,7 +87,8 @@ Read:
 Bump `INDEX_SCHEMA_VERSION` when indexed fields, field options, tokenizer
 behavior, normalization, indexed document content, or required ranking/filtering
 fields change. Do not bump it for query-time boosts, fuzzy construction,
-SQLite-only filtering, or CLI output changes.
+SQLite-only filtering, or CLI output changes. Run `mise run eval:retrieval` and
+review the returned rankings after every search or tokenizer change.
 
 ### Change graph behavior
 
@@ -114,7 +116,8 @@ Read:
 Keep graph tables rebuildable, evidence-bearing, and context-only. Preserve the
 one-way dependency from materialization/semantic operations into shared
 `ids`/`store` primitives; do not reintroduce a monolithic graph module, hidden
-LLM calls, or embedding requirements into the Rust CLI.
+LLM calls, or embedding requirements into the Rust CLI. Run
+`mise run eval:retrieval` after graph-query or focused-prime changes.
 
 ### Change workflow or artifact behavior
 
@@ -143,7 +146,10 @@ Read:
 3. the relevant sections in `docs/getting-started.md`, `docs/workflows.md`, or
    `docs/runtime-model.md`
 
-Keep `SKILL.md` concise and put details in references.
+Keep `SKILL.md` concise and put details in references. Update
+`evals/agent-behavior-v1.json` when routing, target preflight, approval,
+remember timing, sync, or workflow execution policy changes. Synthetic traces
+validate the checker only; live evidence must pass with `--require-live`.
 
 ## Validation
 
@@ -160,6 +166,7 @@ python3 scripts/check-dependency-policy.py
 python3 scripts/check-source-hygiene.py
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 scripts/build-release.sh
+python3 scripts/evaluate-retrieval.py --report target/retrieval-eval.json
 scripts/smoke-release.sh
 ```
 

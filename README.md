@@ -23,7 +23,8 @@ and under your control.
 
 [Try it](#see-it-in-30-seconds) · [Install](#install) ·
 [Product highlights](#product-highlights) · [Evidence](#evidence-not-promises) ·
-[How it works](#from-memory-to-context) · [Documentation](#documentation-map)
+[Evaluation](docs/evaluation.md) · [How it works](#from-memory-to-context) ·
+[Documentation](#documentation-map)
 
 ```text
 +----------------------------------------------------------------------------+
@@ -332,13 +333,18 @@ recovery, security, and supply-chain gates before a release is qualified.
 | Supported capacity | Up to **10,000 memories** per active store |
 | Published 10,000-memory baseline | v0.8 query **44.96 ms p50** and prime **54.77 ms p50** on the documented Apple M2 Max run |
 | Recovery | Release gate exports, corrupts, rejects, restores, and verifies an isolated bundle |
+| Retrieval quality | Versioned lexical, fuzzy, multilingual, trust/scope, plain-prime, and graph-context cases gate the release binary |
+| Agent behavior | A versioned cross-agent trace protocol checks routing, target preflight, approval order, and fail-closed decisions; a retained live matrix is still pending |
 | Capacity canary | **100,000 memories** passed retained correctness checks; it is not a support claim or SLA |
 | Release targets | macOS arm64/x86_64, Linux arm64/x86_64, and Windows x86_64 |
 | Supply chain | Archive checksums, checksum-verifying installers, CycloneDX 1.5 SBOM, and GitHub build-provenance attestations |
 
 Benchmark numbers are machine- and protocol-specific, not cross-machine
-latency guarantees. Read the complete methodology, uncertainty, and retained
-reports in [Performance](docs/performance.md).
+latency guarantees. Synthetic retrieval scores prevent known behavior from
+regressing but do not prove usefulness for every real task, and synthetic agent
+traces are evaluator self-tests rather than live-agent evidence. Read
+[Evaluation](docs/evaluation.md) and the complete performance methodology in
+[Performance](docs/performance.md).
 
 ## From memory to context
 
@@ -516,6 +522,7 @@ threat model and reporting path.
 | Back up, transfer, merge, or sync | [Product highlights](#move-memory-without-losing-meaning), [Workflows](docs/workflows.md), and [Runtime Model](docs/runtime-model.md) |
 | Operate a real store | [Production Operations](docs/production.md) and [Security](SECURITY.md) |
 | Integrate automation | [Compatibility](docs/compatibility.md), [JSON Contracts](docs/json-schemas.md), and the [CLI Guide](skills/mnemark/references/cli-guide.md) |
+| Evaluate retrieval or agent policy | [Retrieval and Agent Behavior Evaluation](docs/evaluation.md) |
 | Change the repository | [Agent Reference](docs/agent-reference.md), [Development](docs/development.md), and [Architecture Decisions](docs/adr/README.md) |
 
 The complete task-oriented index lives in the

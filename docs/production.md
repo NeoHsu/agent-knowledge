@@ -42,7 +42,8 @@ The gate verifies:
 - a clean Git worktree;
 - formatting, Clippy, all tests, RustSec audit, cargo-deny license/source/ban
   policy, and independent dependency provenance metadata;
-- release build version, installed-binary smoke checks, and a recovery drill;
+- release build version, deterministic retrieval-quality cases,
+  installed-binary smoke checks, and a recovery drill;
 - bounded 100/1,000-memory benchmark correctness and portable catastrophic-
   regression guardrails.
 

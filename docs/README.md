@@ -11,6 +11,7 @@ surface during tests.
 | [Getting Started](getting-started.md) | Verified installation, store initialization, first save/query, and agent setup |
 | [Overview](overview.md) | System map, session lifecycle, save/query flow, workflows, and sync |
 | [Compatibility](compatibility.md) | Supported platforms and stability rules for every public format |
+| [Evaluation](evaluation.md) | Deterministic retrieval gate and captured cross-agent behavior traces |
 
 ## Operate memory safely
 

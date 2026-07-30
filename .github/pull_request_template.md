@@ -25,6 +25,8 @@
 - [ ] Error code, exit code, and committed-write recovery semantics remain compatible.
 - [ ] Store discovery and command effects remain explicit and correctly classified.
 - [ ] Skill/Cargo/docs/tag versions remain exact according to `scripts/check-skill-version.py`.
+- [ ] Retrieval changes pass `mise run eval:retrieval`, or retrieval is unchanged.
+- [ ] Agent-policy changes update behavior cases; synthetic traces are not presented as live evidence.
 
 ## Security and operations
 

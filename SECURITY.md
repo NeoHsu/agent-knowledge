@@ -40,6 +40,7 @@ The local operating-system account is trusted. A process with permission to modi
 - Sync isolation, disabled hooks/signing/prompts, semantic database conflict merge, pulled-state validation, and rollback.
 - Unix store permissions hardened to directory mode `0700` and file mode `0600`.
 - Release CI vulnerability audit, cargo-deny license/source policy, crates.io provenance/license-metadata checks, native tests/smoke checks, SHA-pinned Actions, a pinned SHA-256 gate for the CC-CEDICT build input, checksum-verifying installers, CycloneDX 1.5 SBOMs, and build-provenance attestations.
+- GitHub secret scanning, push protection, and private vulnerability reporting on the public source repository.
 
 ## Explicit limitations
 

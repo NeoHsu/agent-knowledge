@@ -169,6 +169,35 @@ not directly comparable to protocol v2.
 The portable guardrails detect catastrophic regressions; they are deliberately
 not cross-machine performance SLOs.
 
+## Retrieval and agent behavior evaluation
+
+Search, ranking, tokenizer, graph-query, and prime changes must run the
+versioned retrieval fixture against the optimized binary:
+
+```bash
+mise run eval:retrieval
+# equivalent after scripts/build-release.sh
+python3 scripts/evaluate-retrieval.py --report target/retrieval-eval.json
+```
+
+The report records rankings, recall, reciprocal rank, plain/focused prime
+coverage, graph evidence, fixture/binary hashes, and Git state. Stable CI and
+the native release verification matrix retain the report as an artifact.
+Synthetic scores are regression evidence, not a universal relevance claim.
+
+Agent policy is evaluated from captured argv/approval/decision traces. Validate
+the checked-in synthetic example with:
+
+```bash
+mise run eval:agent-reference
+```
+
+That command tests the evaluator only. Real platform evidence must identify the
+platform, model, adapter, CLI, and skill versions and pass
+`scripts/evaluate-agent-behavior.py --require-live`. See
+[`evaluation.md`](evaluation.md) for the trace format, current evidence status,
+and safety rules.
+
 For an explicit capacity canary beyond the published 10,000-memory baseline:
 
 ```bash

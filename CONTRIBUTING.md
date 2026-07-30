@@ -38,7 +38,11 @@ failure paths. Before opening a PR:
 3. update affected user, operator, agent, and skill documentation;
 4. regenerate `docs/cli-surface.txt` after a command or flag change;
 5. update schemas and fixtures after a machine-output change;
-6. run `python3 scripts/check-skill-version.py` after a release or skill change.
+6. run `python3 scripts/check-skill-version.py` after a release or skill change;
+7. run `mise run eval:retrieval` after search, tokenizer, ranking, graph-query,
+   or prime changes;
+8. update the agent behavior cases after skill, setup-policy, approval, sync, or
+   workflow-safety changes.
 
 ## Public contracts
 
@@ -51,6 +55,9 @@ failure paths. Before opening a PR:
 - Graph output is evidence-bearing context, not instruction authority.
 - Existing required JSON fields remain compatible within a minor release;
   breaking changes need a new schema/version and migration notes.
+- Retrieval thresholds are reviewed relevance contracts; do not lower them
+  merely to make CI pass.
+- Synthetic agent traces validate the checker, not real platform behavior.
 
 ## Security and release changes
 
