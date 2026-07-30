@@ -56,6 +56,17 @@ run = [
   "python3 scripts/check-source-hygiene.py",
 ]
 
+[tasks."eval:retrieval"]
+description = "Build the release binary and run deterministic retrieval-quality cases"
+run = [
+  "scripts/build-release.sh",
+  "python3 scripts/evaluate-retrieval.py --report target/retrieval-eval.json",
+]
+
+[tasks."eval:agent-reference"]
+description = "Validate the synthetic agent-trace example (not live-agent evidence)"
+run = "python3 scripts/evaluate-agent-behavior.py --responses evals/agent-behavior-reference-v1.json --report target/agent-behavior-reference-report.json"
+
 [tasks.production-check]
 description = "Run the complete release-readiness gate"
 run = "scripts/check-release-readiness.sh"

@@ -162,6 +162,21 @@ jobs:
         shell: bash
         run: scripts/build-release.sh
 
+      - name: Evaluate retrieval quality
+        shell: bash
+        run: >-
+          python3 scripts/evaluate-retrieval.py
+          --report "${{ runner.temp }}/retrieval-eval.json"
+
+      - name: Retain retrieval evaluation
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: retrieval-eval-${{ runner.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/retrieval-eval.json
+          if-no-files-found: warn
+          retention-days: 90
+
       - name: Smoke-test installed release binary and recovery drill
         shell: bash
         run: scripts/smoke-release.sh

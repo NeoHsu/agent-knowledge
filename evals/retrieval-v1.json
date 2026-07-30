@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "name": "mnemark-retrieval-quality-v1",
+  "description": "Synthetic, deterministic coverage for lexical, fuzzy, multilingual, trust-aware, scoped, and relationship-aware recall.",
+  "memories": [
+    {
+      "name": "release_approval_policy",
+      "type": "project",
+      "scope": "project:example/eval",
+      "source": "manual",
+      "tags": ["project:example/eval", "domain:release", "decision:approval"],
+      "content": "Trigger: publishing a production release. Action: require explicit approval after checks pass. Why: release publication is an external side effect."
+    },
+    {
+      "name": "release_checksum_procedure",
+      "type": "reference",
+      "scope": "project:example/eval",
+      "source": "agent",
+      "tags": ["project:example/eval", "domain:release", "risk:supply-chain"],
+      "content": "Trigger: preparing release artifacts. Action: verify archive and installer SHA-256 checksums before publication. Why: checksum verification catches changed release bytes."
+    },
+    {
+      "name": "release_notes_style",
+      "type": "preference",
+      "scope": "global",
+      "source": "agent",
+      "tags": ["style:release-notes"],
+      "content": "Trigger: drafting release notes. Action: use short headings and user-facing language. Why: readers scan release notes quickly."
+    },
+    {
+      "name": "cjk_deployment_gate",
+      "type": "project",
+      "scope": "project:example/eval",
+      "source": "agent",
+      "tags": ["project:example/eval", "domain:deployment"],
+      "content": "Trigger: 執行正式部署前。Action: 驗證備份、checksum 與回滾流程。Why: 部署前檢查可降低中斷風險。"
+    },
+    {
+      "name": "dependency_upgrade_runbook",
+      "type": "reference",
+      "scope": "project:example/eval",
+      "source": "agent",
+      "tags": ["project:example/eval", "domain:dependencies"],
+      "content": "Trigger: reviewing a dependency upgrade. Action: run compatibility tests and inspect breaking changes. Why: dependency updates can change runtime behavior."
+    },
+    {
+      "name": "incident_rollback_guide",
+      "type": "reference",
+      "scope": "project:example/eval",
+      "source": "agent",
+      "tags": ["project:example/eval", "domain:incident"],
+      "content": "Trigger: a deployment health check fails. Action: stop rollout and restore the verified backup. Why: rollback limits incident impact."
+    },
+    {
+      "name": "global_orion_handoff",
+      "type": "project",
+      "scope": "global",
+      "source": "agent",
+      "tags": ["domain:handoff"],
+      "content": "Trigger: the Orion handoff starts. Action: review the shared checklist. Why: the global process is a fallback."
+    },
+    {
+      "name": "project_orion_handoff",
+      "type": "project",
+      "scope": "project:example/eval",
+      "source": "manual",
+      "tags": ["project:example/eval", "domain:handoff"],
+      "content": "Trigger: the Orion handoff starts. Action: use the project approval checklist. Why: this project has a confirmed handoff policy."
+    },
+    {
+      "name": "concise_reply_preference",
+      "type": "preference",
+      "scope": "global",
+      "source": "manual",
+      "tags": ["style:concise"],
+      "content": "Trigger: writing a user-facing reply. Action: answer concisely. Why: the user explicitly requested concise responses."
+    }
+  ],
+  "semantic_edges": [
+    {
+      "source": "release_approval_policy",
+      "target": "release_checksum_procedure",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "evidence": "The release approval policy applies after release checks, including the checksum procedure."
+    }
+  ],
+  "query_cases": [
+    {
+      "id": "release-approval-exact",
+      "query": "production release explicit approval",
+      "scope": "project:example/eval",
+      "limit": 3,
+      "relevant": ["release_approval_policy"],
+      "expected_top": "release_approval_policy",
+      "forbidden": ["concise_reply_preference"],
+      "recall_at_k_min": 1.0
+    },
+    {
+      "id": "multilingual-deployment",
+      "query": "部署前驗證 checksum 回滾",
+      "scope": "project:example/eval",
+      "limit": 3,
+      "relevant": ["cjk_deployment_gate", "release_checksum_procedure"],
+      "forbidden": ["release_notes_style"],
+      "recall_at_k_min": 1.0
+    },
+    {
+      "id": "fuzzy-dependency-upgrade",
+      "query": "dependncy upgrde compatibilty",
+      "scope": "project:example/eval",
+      "limit": 3,
+      "fuzzy": true,
+      "relevant": ["dependency_upgrade_runbook"],
+      "expected_top": "dependency_upgrade_runbook",
+      "forbidden": ["concise_reply_preference"],
+      "recall_at_k_min": 1.0
+    },
+    {
+      "id": "scope-and-trust-ranking",
+      "query": "Orion handoff checklist",
+      "scope": "project:example/eval",
+      "limit": 3,
+      "relevant": ["project_orion_handoff", "global_orion_handoff"],
+      "expected_top": "project_orion_handoff",
+      "forbidden": ["incident_rollback_guide"],
+      "recall_at_k_min": 1.0
+    }
+  ],
+  "prime_cases": [
+    {
+      "id": "plain-prime-priority",
+      "scope": "project:example/eval",
+      "budget": 8000,
+      "per_section": 8,
+      "expected_section_names": ["concise_reply_preference", "release_approval_policy"],
+      "expected_graph_names": [],
+      "expected_relations_with_evidence": []
+    },
+    {
+      "id": "focused-release-relationship",
+      "focus": "production release approval",
+      "scope": "project:example/eval",
+      "budget": 8000,
+      "per_section": 8,
+      "expected_section_names": [],
+      "expected_graph_names": ["release_checksum_procedure"],
+      "expected_relations_with_evidence": ["depends_on"]
+    }
+  ],
+  "thresholds": {
+    "query_case_pass_rate_min": 1.0,
+    "mean_recall_at_k_min": 1.0,
+    "mean_reciprocal_rank_min": 1.0,
+    "prime_case_pass_rate_min": 1.0,
+    "graph_evidence_rate_min": 1.0
+  }
+}

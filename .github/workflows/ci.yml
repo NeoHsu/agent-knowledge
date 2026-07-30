@@ -61,6 +61,19 @@ jobs:
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
       - if: matrix.rust == 'stable'
         run: scripts/build-release.sh
+      - name: Evaluate retrieval quality
+        if: matrix.rust == 'stable'
+        run: >-
+          python3 scripts/evaluate-retrieval.py
+          --report "$RUNNER_TEMP/retrieval-eval.json"
+      - name: Retain retrieval evaluation
+        if: matrix.rust == 'stable' && always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: retrieval-eval-${{ github.sha }}
+          path: ${{ runner.temp }}/retrieval-eval.json
+          if-no-files-found: warn
+          retention-days: 30
       - if: matrix.rust == 'stable'
         run: ls -lh target/release/mem
       - if: matrix.rust == 'stable'

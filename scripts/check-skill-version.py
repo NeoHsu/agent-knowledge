@@ -22,6 +22,10 @@ VERSIONED_SKILL_DOCS = (
 )
 COMPATIBILITY_PATH = Path("skills/mnemark/compatibility.json")
 COMPATIBILITY_FIXTURE = Path("docs/schemas/fixtures/skill-compatibility-v1.json")
+VERSIONED_AGENT_EVALS = (
+    Path("evals/agent-behavior-v1.json"),
+    Path("evals/agent-behavior-reference-v1.json"),
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -106,6 +110,22 @@ def core_dependency_version(path: Path) -> str:
     return version
 
 
+def argv_skill_versions(value: Any) -> list[str]:
+    versions: list[str] = []
+    if isinstance(value, dict):
+        for child in value.values():
+            versions.extend(argv_skill_versions(child))
+    elif isinstance(value, list):
+        if all(isinstance(item, str) for item in value):
+            for index, item in enumerate(value[:-1]):
+                if item == "--skill-version" and isinstance(value[index + 1], str):
+                    versions.append(value[index + 1])
+        else:
+            for child in value:
+                versions.extend(argv_skill_versions(child))
+    return versions
+
+
 def verify(repo: Path, release_tag: str | None) -> tuple[str, list[str]]:
     version = workspace_version(repo_file(repo, "Cargo.toml"))
     manifest = load_json(repo_file(repo, COMPATIBILITY_PATH))
@@ -166,6 +186,15 @@ def verify(repo: Path, release_tag: str | None) -> tuple[str, list[str]]:
     for relative in VERSIONED_SKILL_DOCS:
         if source not in read_text(repo_file(repo, relative)):
             errors.append(f"{relative} is missing tag-pinned skill source {source}")
+
+    for relative in VERSIONED_AGENT_EVALS:
+        eval_document = load_json(repo_file(repo, relative))
+        eval_versions = set(argv_skill_versions(eval_document))
+        if eval_versions != {version}:
+            errors.append(
+                f"{relative} skill gate versions {sorted(eval_versions)!r} "
+                f"do not match {version!r}"
+            )
 
     schema_directory = repo_directory(repo, "docs/schemas")
     schema_paths = sorted(schema_directory.glob("*.schema.json"))

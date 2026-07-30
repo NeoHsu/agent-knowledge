@@ -11,6 +11,7 @@ BENCHMARK_SCALES="${BENCHMARK_SCALES:-100 1000}"
 REPORT_FILE="${REPORT_FILE:-$ROOT/target/production-benchmark.json}"
 CSV_FILE="${CSV_FILE:-$ROOT/target/production-benchmark.csv}"
 GUARDRAILS_FILE="${GUARDRAILS_FILE:-$ROOT/scripts/benchmark-guardrails.json}"
+RETRIEVAL_REPORT_FILE="${RETRIEVAL_REPORT_FILE:-$ROOT/target/production-retrieval-eval.json}"
 BASELINE_FILE="${BASELINE_FILE:-}"
 MAX_REGRESSION_PERCENT="${MAX_REGRESSION_PERCENT:-35}"
 RELEASE_TAG="${RELEASE_TAG:-}"
@@ -96,6 +97,8 @@ printf '%s\n' '== dependency provenance and license metadata =='
 python3 scripts/check-dependency-policy.py
 printf '%s\n' '== release build =='
 scripts/build-release.sh
+printf '%s\n' '== retrieval quality =='
+python3 scripts/evaluate-retrieval.py --report "$RETRIEVAL_REPORT_FILE"
 printf '%s\n' '== release smoke and recovery drill =='
 scripts/smoke-release.sh
 

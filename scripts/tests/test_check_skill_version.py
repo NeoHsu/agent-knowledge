@@ -17,6 +17,7 @@ class SkillVersionCheckerTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="mnemark-skill-version-")
         self.root = pathlib.Path(self.temporary.name)
         (self.root / "docs/schemas/fixtures").mkdir(parents=True)
+        (self.root / "evals").mkdir(parents=True)
         (self.root / "skills/mnemark/references").mkdir(parents=True)
         (self.root / "crates/mem-cli").mkdir(parents=True)
         (self.root / "Cargo.toml").write_text(
@@ -87,6 +88,25 @@ class SkillVersionCheckerTests(unittest.TestCase):
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(source + "\n", encoding="utf-8")
+        agent_eval = {
+            "schema_version": 1,
+            "trace": {
+                "argv": [
+                    "mem",
+                    "--json-errors",
+                    "contract",
+                    "--skill-version",
+                    VERSION,
+                ]
+            },
+        }
+        for relative in (
+            "evals/agent-behavior-v1.json",
+            "evals/agent-behavior-reference-v1.json",
+        ):
+            (self.root / relative).write_text(
+                json.dumps(agent_eval, indent=2) + "\n", encoding="utf-8"
+            )
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -135,6 +155,15 @@ class SkillVersionCheckerTests(unittest.TestCase):
         completed = self.run_checker()
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("does not exactly match", completed.stderr)
+
+    def test_rejects_stale_agent_eval_skill_version(self) -> None:
+        path = self.root / "evals/agent-behavior-v1.json"
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["trace"]["argv"][-1] = "1.2.2"
+        path.write_text(json.dumps(document) + "\n", encoding="utf-8")
+        completed = self.run_checker()
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("agent-behavior-v1.json skill gate versions", completed.stderr)
 
     def test_rejects_unpinned_install_docs_and_missing_gate(self) -> None:
         (self.root / "README.md").write_text(
