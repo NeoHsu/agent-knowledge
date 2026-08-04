@@ -124,3 +124,81 @@ fn create_symlink(source: &Path, target: &Path, destination: &Path) -> Result<()
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rollback_restores_files_directories_and_removes_new_targets() {
+        let root = tempfile::tempdir().expect("test root");
+        let file = root.path().join("policy.md");
+        let directory = root.path().join("skill");
+        let new_target = root.path().join("new-hook.json");
+        fs::write(&file, "before").expect("seed policy");
+        fs::create_dir(&directory).expect("seed skill directory");
+        fs::write(directory.join("SKILL.md"), "before skill").expect("seed skill");
+
+        let transaction = SetupTransaction::begin([
+            file.clone(),
+            directory.clone(),
+            new_target.clone(),
+            file.clone(),
+        ])
+        .expect("begin transaction");
+        fs::write(&file, "after").expect("change policy");
+        fs::remove_dir_all(&directory).expect("remove skill directory");
+        fs::write(&directory, "replacement file").expect("replace skill with file");
+        fs::write(&new_target, "new hook").expect("create hook");
+
+        transaction.rollback().expect("rollback transaction");
+
+        assert_eq!(fs::read_to_string(&file).expect("read policy"), "before");
+        assert_eq!(
+            fs::read_to_string(directory.join("SKILL.md")).expect("read skill"),
+            "before skill"
+        );
+        assert!(!new_target.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rollback_preserves_permissions_and_symlink_identity() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+
+        let root = tempfile::tempdir().expect("test root");
+        let file = root.path().join("policy.md");
+        let target = root.path().join("shared-skill");
+        let link = root.path().join("platform-skill");
+        fs::write(&file, "before").expect("seed policy");
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o640)).expect("set policy mode");
+        fs::create_dir(&target).expect("create shared skill");
+        symlink(&target, &link).expect("create skill link");
+
+        let transaction =
+            SetupTransaction::begin([file.clone(), link.clone()]).expect("begin transaction");
+        fs::write(&file, "after").expect("change policy");
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).expect("change policy mode");
+        fs::remove_file(&link).expect("remove skill link");
+        fs::write(&link, "replacement").expect("replace link with file");
+
+        transaction.rollback().expect("rollback transaction");
+
+        assert_eq!(fs::read_to_string(&file).expect("read policy"), "before");
+        assert_eq!(
+            fs::metadata(&file)
+                .expect("policy metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o640
+        );
+        assert!(
+            fs::symlink_metadata(&link)
+                .expect("link metadata")
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(fs::read_link(&link).expect("link target"), target);
+    }
+}
