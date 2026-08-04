@@ -13,9 +13,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   plan:
     runs-on: ubuntu-22.04
+    timeout-minutes: 20
     outputs:
       val: ${{ steps.plan.outputs.manifest }}
       tag: ${{ !github.event.pull_request && github.ref_name || '' }}
@@ -29,10 +34,10 @@ jobs:
           persist-credentials: false
           submodules: recursive
 
-      - name: Install Python 3.13
+      - name: Install Python 3.12
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.13"
+          python-version: "3.12.13"
 
       - name: Verify exact CLI, skill, and release-tag version lockstep
         env:
@@ -75,6 +80,7 @@ jobs:
   verify:
     name: verify release (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
     permissions:
       contents: read
     strategy:
@@ -88,11 +94,11 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Install Python 3.13
+      - name: Install Python 3.12
         if: runner.os == 'Linux'
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.13"
+          python-version: "3.12.13"
 
       - name: Install Rust 1.97
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
@@ -127,6 +133,44 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo clippy --workspace --locked --all-targets -- -D warnings
 
+      - name: Install verified gitleaks
+        if: runner.os == 'Linux'
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl --proto '=https' --tlsv1.2 -LsSf -o "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          printf '%s  %s\n' "$GITLEAKS_SHA256" "$archive" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
+          install -m 0755 "$RUNNER_TEMP/gitleaks" "$HOME/.cargo/bin/gitleaks"
+
+      - name: Scan Git history and current source tree for secrets
+        if: runner.os == 'Linux'
+        run: python3 scripts/check-secrets.py
+
+      - uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
+        if: runner.os == 'Linux'
+        with:
+          version: "0.16.1"
+          checksum: "7e1cc9b3da4911bb2c98c076302fd8997d822fac74dd8f1e30371701e70a4c56"
+          args: "check scripts"
+
+      - name: Check Python formatting
+        if: runner.os == 'Linux'
+        run: ruff format --check scripts
+
+      - name: Install cargo-machete
+        if: runner.os == 'Linux'
+        uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2
+        with:
+          tool: cargo-machete@0.9.2
+
+      - name: Check for unused Cargo dependencies
+        if: runner.os == 'Linux'
+        run: cargo machete
+
       - name: Test
         run: cargo test --workspace --locked
 
@@ -134,7 +178,7 @@ jobs:
         if: runner.os == 'Linux'
         uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2
         with:
-          tool: cargo-audit
+          tool: cargo-audit@0.22.1
 
       - name: Install cargo-deny
         if: runner.os == 'Linux'
@@ -161,6 +205,9 @@ jobs:
       - name: Build release binary
         shell: bash
         run: scripts/build-release.sh
+
+      - name: Enforce release binary size budget
+        run: python3 scripts/check-binary-size.py
 
       - name: Evaluate retrieval quality
         shell: bash
@@ -213,6 +260,7 @@ jobs:
 
   build-local-artifacts:
     name: build-local-artifacts (${{ join(matrix.targets, ', ') }})
+    timeout-minutes: 90
     needs:
       - plan
       - verify
@@ -296,11 +344,46 @@ jobs:
             ${{ steps.cargo-dist.outputs.paths }}
             ${{ env.BUILD_MANIFEST_NAME }}
 
+  verify-platform-artifacts:
+    name: verify-platform-artifacts (${{ matrix.name }})
+    needs:
+      - plan
+      - build-local-artifacts
+    if: ${{ needs.plan.result == 'success' && (needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload') && needs.build-local-artifacts.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos
+            runner: macos-14
+          - name: windows
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12.13"
+      - name: Fetch local platform artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: artifacts-build-local-*
+          path: target/distrib/
+          merge-multiple: true
+      - name: Verify and execute host-compatible archive
+        run: python scripts/verify-release-artifacts.py --platform-only --execute-native
+
   build-global-artifacts:
     needs:
       - plan
       - build-local-artifacts
     runs-on: ubuntu-22.04
+    timeout-minutes: 45
     permissions:
       attestations: write
       contents: read
@@ -314,6 +397,10 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12.13"
 
       - name: Install cached dist
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -375,7 +462,7 @@ jobs:
             cat mnemark.cdx.xml.sha256 mnemark-installer.sh.sha256 \
               mnemark-installer.ps1.sha256 >> sha256.sum
           )
-          python3 scripts/verify-release-artifacts.py
+          python3 scripts/verify-release-artifacts.py --execute-native
           {
             echo "paths<<EOF"
             echo "target/distrib/mnemark.cdx.xml"
@@ -404,8 +491,10 @@ jobs:
       - plan
       - build-local-artifacts
       - build-global-artifacts
-    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') }}
+      - verify-platform-artifacts
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') && (needs.verify-platform-artifacts.result == 'skipped' || needs.verify-platform-artifacts.result == 'success') }}
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     outputs:
       val: ${{ steps.host.outputs.manifest }}
     permissions:
@@ -478,6 +567,7 @@ jobs:
           gh release create "$RELEASE_TAG" --target "$RELEASE_COMMIT" "${release_args[@]}" --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
 
   announce:
+    timeout-minutes: 15
     needs:
       - plan
       - host

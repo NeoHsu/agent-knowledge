@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import pathlib
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 
@@ -95,6 +97,34 @@ after
                 f"{sbom_digest}  mnemark.cdx.xml\n", encoding="utf-8"
             )
             verifier.verify_sbom(sbom)
+
+    def test_verifier_reads_the_binary_from_a_verified_archive(self) -> None:
+        verifier = load_verifier()
+        with tempfile.TemporaryDirectory(prefix="mnemark-native-archive-") as temp:
+            root = pathlib.Path(temp).resolve()
+            target = verifier.native_target() or "x86_64-unknown-linux-gnu"
+            archive_path = root / f"mnemark-{target}.tar.xz"
+            with tarfile.open(archive_path, "w:xz") as archive:
+                for name, data, mode in (
+                    ("mnemark/mem", b"synthetic binary", 0o755),
+                    ("mnemark/README.md", b"readme", 0o644),
+                    ("mnemark/CHANGELOG.md", b"changes", 0o644),
+                    ("mnemark/LICENSE", b"license", 0o644),
+                ):
+                    member = tarfile.TarInfo(name)
+                    member.size = len(data)
+                    member.mode = mode
+                    archive.addfile(member, io.BytesIO(data))
+            checksum = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+            archive_path.with_name(archive_path.name + ".sha256").write_text(
+                f"{checksum}  {archive_path.name}\n", encoding="utf-8"
+            )
+
+            verifier.verify_binary_archive(root, archive_path)
+            data, mode = verifier.binary_from_archive(root, archive_path)
+
+            self.assertEqual(data, b"synthetic binary")
+            self.assertTrue(mode & 0o100)
 
     def test_verifier_rejects_archive_path_escape(self) -> None:
         verifier = load_verifier()

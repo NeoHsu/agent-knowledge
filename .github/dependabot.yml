@@ -6,11 +6,17 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
     open-pull-requests-limit: 5
     groups:
-      rust-dependencies:
-        patterns:
-          - "*"
+      rust-patch-updates:
+        patterns: ["*"]
+        update-types: ["patch"]
+      rust-minor-updates:
+        patterns: ["*"]
+        update-types: ["minor"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -18,8 +24,11 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
     open-pull-requests-limit: 5
     groups:
-      github-actions:
-        patterns:
-          - "*"
+      github-actions-non-major:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

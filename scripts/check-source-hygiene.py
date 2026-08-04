@@ -18,7 +18,9 @@ FORBIDDEN_GLOBS = (".bundle-replace-backup-*",)
 
 
 def runtime_artifacts(root: pathlib.Path) -> list[pathlib.Path]:
-    found = [root / relative for relative in FORBIDDEN_PATHS if (root / relative).exists()]
+    found = [
+        root / relative for relative in FORBIDDEN_PATHS if (root / relative).exists()
+    ]
     for pattern in FORBIDDEN_GLOBS:
         found.extend(root.glob(pattern))
     return sorted(set(found), key=lambda path: path.name)
@@ -36,7 +38,9 @@ def main() -> int:
     root = args.root.resolve()
     artifacts = runtime_artifacts(root)
     if artifacts:
-        sys.stderr.write("source hygiene check failed: runtime memory artifacts found\n")
+        sys.stderr.write(
+            "source hygiene check failed: runtime memory artifacts found\n"
+        )
         for path in artifacts:
             sys.stderr.write(f"- {path.relative_to(root)}\n")
         sys.stderr.write(

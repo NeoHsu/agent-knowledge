@@ -8,10 +8,19 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: test (${{ matrix.rust }})
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
     strategy:
       fail-fast: false
       matrix:
@@ -27,6 +36,9 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: "v0.17.0"
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - name: Verify release metadata and clean checkout
         if: matrix.rust == 'stable'
@@ -41,15 +53,54 @@ jobs:
         run: cargo fmt --all -- --check
       - if: matrix.rust == 'stable'
         run: cargo clippy --workspace --locked --all-targets -- -D warnings
-      - run: cargo test --workspace --locked
+      - name: Install verified gitleaks
+        if: matrix.rust == 'stable'
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl --proto '=https' --tlsv1.2 -LsSf -o "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          printf '%s  %s\n' "$GITLEAKS_SHA256" "$archive" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
+          install -m 0755 "$RUNNER_TEMP/gitleaks" "$HOME/.cargo/bin/gitleaks"
+      - name: Scan Git history and current source tree for secrets
+        if: matrix.rust == 'stable'
+        run: python3 scripts/check-secrets.py
+      - uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
+        if: matrix.rust == 'stable'
+        with:
+          version: "0.16.1"
+          checksum: "7e1cc9b3da4911bb2c98c076302fd8997d822fac74dd8f1e30371701e70a4c56"
+          args: "check scripts"
+      - name: Check Python formatting
+        if: matrix.rust == 'stable'
+        run: ruff format --check scripts
       - if: matrix.rust == 'stable'
         uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2
         with:
-          tool: cargo-audit
+          tool: cargo-nextest@0.9.4
+      - if: matrix.rust == 'stable'
+        uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2
+        with:
+          tool: cargo-machete@0.9.2
+      - if: matrix.rust == 'stable'
+        uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2
+        with:
+          tool: cargo-audit@0.22.1
       - if: matrix.rust == 'stable'
         uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2
         with:
           tool: cargo-deny@0.20.2
+      - if: matrix.rust == 'stable'
+        run: cargo machete
+      - if: matrix.rust == 'stable'
+        run: cargo nextest run --workspace --locked --status-level all
+      - if: matrix.rust == 'stable'
+        run: cargo test --doc --workspace --locked
+      - if: matrix.rust != 'stable'
+        run: cargo test --workspace --locked
       - if: matrix.rust == 'stable'
         run: cargo audit --deny warnings
       - if: matrix.rust == 'stable'
@@ -61,6 +112,9 @@ jobs:
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
       - if: matrix.rust == 'stable'
         run: scripts/build-release.sh
+      - name: Enforce release binary size budget
+        if: matrix.rust == 'stable'
+        run: python3 scripts/check-binary-size.py
       - name: Evaluate retrieval quality
         if: matrix.rust == 'stable'
         run: >-
@@ -105,8 +159,32 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  workflow-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Validate workflow contracts
+        run: scripts/check-workflows.sh
+      - name: Audit GitHub Actions workflows
+        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        with:
+          version: 1.29.0
+          persona: pedantic
+          min-severity: medium
+          min-confidence: medium
+          advanced-security: false
+          annotations: true
+
   coverage:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:

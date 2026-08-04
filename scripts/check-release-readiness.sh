@@ -63,6 +63,12 @@ if ! command -v cargo-deny >/dev/null 2>&1; then
 	echo "cargo-deny is required; install it before running the production gate" >&2
 	exit 1
 fi
+for command in cargo-machete cargo-nextest gitleaks ruff; do
+	if ! command -v "$command" >/dev/null 2>&1; then
+		echo "$command is required; install pinned tools with: mise install" >&2
+		exit 1
+	fi
+done
 
 if command -v shellcheck >/dev/null 2>&1; then
 	shellcheck scripts/*.sh
@@ -73,22 +79,38 @@ else
 	echo "warning: shellcheck is unavailable; shell lint was skipped" >&2
 fi
 if command -v actionlint >/dev/null 2>&1; then
-	actionlint .github/workflows/*.yml
+	scripts/check-workflows.sh
 elif [[ "$REQUIRE_AUX_TOOLS" == "1" ]]; then
 	echo "actionlint is required when REQUIRE_AUX_TOOLS=1" >&2
 	exit 1
 else
 	echo "warning: actionlint is unavailable; workflow lint was skipped" >&2
 fi
+if command -v zizmor >/dev/null 2>&1; then
+	zizmor --persona pedantic --min-severity medium --min-confidence medium .
+elif [[ "$REQUIRE_AUX_TOOLS" == "1" ]]; then
+	echo "zizmor is required when REQUIRE_AUX_TOOLS=1" >&2
+	exit 1
+else
+	echo "warning: zizmor is unavailable; workflow security audit was skipped" >&2
+fi
 
 printf '%s\n' '== release helper tests =='
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+printf '%s\n' '== Python lint and format =='
+ruff check scripts
+ruff format --check scripts
+printf '%s\n' '== secret scan =='
+python3 scripts/check-secrets.py
+printf '%s\n' '== unused Cargo dependencies =='
+cargo machete
 printf '%s\n' '== formatting =='
 cargo fmt --all -- --check
 printf '%s\n' '== clippy =='
-env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings
+cargo clippy --workspace --locked --all-targets -- -D warnings
 printf '%s\n' '== tests =='
-env -u CC -u CXX cargo test --workspace --locked
+cargo nextest run --workspace --locked --status-level all
+cargo test --doc --workspace --locked
 printf '%s\n' '== dependency audit =='
 cargo audit --deny warnings
 printf '%s\n' '== dependency license, source, and ban policy =='
@@ -97,6 +119,8 @@ printf '%s\n' '== dependency provenance and license metadata =='
 python3 scripts/check-dependency-policy.py
 printf '%s\n' '== release build =='
 scripts/build-release.sh
+printf '%s\n' '== release binary size =='
+python3 scripts/check-binary-size.py
 printf '%s\n' '== retrieval quality =='
 python3 scripts/evaluate-retrieval.py --report "$RETRIEVAL_REPORT_FILE"
 printf '%s\n' '== release smoke and recovery drill =='

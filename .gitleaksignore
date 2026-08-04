@@ -1,0 +1,12 @@
+# Historical credential-shaped test fixtures and detector-regex examples.
+# Each fingerprint was reviewed as synthetic test data before allowlisting.
+5683bf40e19fceb35420596fc7cfb6fed104bc7d:crates/mem-cli/tests/artifact.rs:generic-api-key:203
+b352328312da902d43aacf8f0e975a48c88d2f18:crates/mem-cli/tests/artifact.rs:generic-api-key:206
+1f8d42a17a232af430572737ed2d1e05363ef6c5:crates/mem-cli/tests/doctor_sync.rs:generic-api-key:307
+69bfe9da35f0e2fb45e8aa07a03adc22140ec735:crates/mem-core/src/util/secrets.rs:generic-api-key:133
+5683bf40e19fceb35420596fc7cfb6fed104bc7d:crates/mem-cli/tests/bundle.rs:generic-api-key:255
+5683bf40e19fceb35420596fc7cfb6fed104bc7d:crates/mem-cli/tests/agent_memory_contract.rs:generic-api-key:145
+5683bf40e19fceb35420596fc7cfb6fed104bc7d:crates/mem-cli/tests/agent_memory_contract.rs:generic-api-key:282
+1d609b0888edacf69bf1f8031bbe1b3dec3713b3:crates/mem-core/src/util/secrets.rs:jwt:73
+94206a5c24bc2f5654b572274b2dae88c84e6642:crates/mem-core/src/util/secrets.rs:jwt:72
+94206a5c24bc2f5654b572274b2dae88c84e6642:crates/mem-core/src/util/secrets.rs:generic-api-key:59

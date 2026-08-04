@@ -7,10 +7,9 @@ import argparse
 import json
 import re
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any
-
-import tomllib
 
 SEMVER = re.compile(
     r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
@@ -71,7 +70,7 @@ def load_json(path: Path) -> dict[str, Any]:
     except json.JSONDecodeError as error:
         raise ValueError(f"failed to parse {path}: {error}") from error
     if not isinstance(value, dict):
-        raise ValueError(f"{path} must contain a JSON object")
+        raise TypeError(f"{path} must contain a JSON object")
     return value
 
 
@@ -82,7 +81,7 @@ def workspace_version(path: Path) -> str:
     except (KeyError, TypeError, tomllib.TOMLDecodeError) as error:
         raise ValueError(f"{path} has no workspace.package.version: {error}") from error
     if not isinstance(version, str):
-        raise ValueError(f"{path} workspace.package.version must be a string")
+        raise TypeError(f"{path} workspace.package.version must be a string")
     return version
 
 
@@ -106,7 +105,7 @@ def core_dependency_version(path: Path) -> str:
             f"{path} has no mem-core dependency version: {error}"
         ) from error
     if not isinstance(version, str):
-        raise ValueError(f"{path} mem-core dependency version must be a string")
+        raise TypeError(f"{path} mem-core dependency version must be a string")
     return version
 
 
@@ -224,7 +223,7 @@ def main() -> int:
     try:
         repo = args.repo.resolve(strict=True)
         version, errors = verify(repo, args.tag)
-    except (OSError, ValueError, tomllib.TOMLDecodeError) as error:
+    except (OSError, TypeError, ValueError, tomllib.TOMLDecodeError) as error:
         sys.stderr.write(f"skill version check failed: {error}\n")
         return 1
 
