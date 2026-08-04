@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{Result as IoResult, Write, stderr, stdout};
+use std::io::{self as std_io, Result as IoResult, Seek, SeekFrom, Write, stderr, stdout};
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -8,6 +8,7 @@ use chrono::{Duration, Utc};
 use rusqlite::{Connection, params};
 use serde::Serialize;
 use serde_json::{Value, json};
+use tempfile::{SpooledTempFile, spooled_tempfile};
 
 use crate::args::*;
 use crate::cli_error::committed_index_error;
@@ -23,6 +24,46 @@ pub(crate) const CLI_OUTPUT_CONTRACT_VERSION: u64 = 1;
 pub(crate) const BENCHMARK_REPORT_CONTRACT_VERSION: u64 = 1;
 
 static MAX_OUTPUT_BYTES: OnceLock<Option<u64>> = OnceLock::new();
+const OUTPUT_SPOOL_MEMORY_BYTES: usize = 1024 * 1024;
+
+struct BoundedWriter<W> {
+    inner: W,
+    limit: Option<u64>,
+    written: u64,
+}
+
+impl<W> BoundedWriter<W> {
+    fn new(inner: W, limit: Option<u64>) -> Self {
+        Self {
+            inner,
+            limit,
+            written: 0,
+        }
+    }
+}
+
+impl<W: Write> Write for BoundedWriter<W> {
+    fn write(&mut self, buffer: &[u8]) -> IoResult<usize> {
+        let requested = u64::try_from(buffer.len()).unwrap_or(u64::MAX);
+        let attempted = self.written.saturating_add(requested);
+        if let Some(limit) = self.limit
+            && attempted > limit
+        {
+            return Err(std_io::Error::other(format!(
+                "rendered output is at least {attempted} bytes, exceeding --max-bytes {limit}"
+            )));
+        }
+        let written = self.inner.write(buffer)?;
+        self.written = self
+            .written
+            .saturating_add(u64::try_from(written).unwrap_or(u64::MAX));
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> IoResult<()> {
+        self.inner.flush()
+    }
+}
 
 pub(crate) enum Output {
     Json,
@@ -32,21 +73,32 @@ pub(crate) enum Output {
 impl Output {
     pub(crate) fn json<T: Serialize + ?Sized>(self, value: &T) -> Result<()> {
         match self {
-            Self::Json => write_stdout_line(&serde_json::to_string(value)?),
+            Self::Json => write_stdout_rendered(|writer| {
+                serde_json::to_writer(&mut *writer, value)?;
+                writer.write_all(b"\n")?;
+                Ok(())
+            }),
             Self::Text => bail!("cannot render JSON value as text"),
         }
     }
 
     pub(crate) fn json_pretty<T: Serialize + ?Sized>(self, value: &T) -> Result<()> {
         match self {
-            Self::Json => write_stdout_line(&serde_json::to_string_pretty(value)?),
+            Self::Json => write_stdout_rendered(|writer| {
+                serde_json::to_writer_pretty(&mut *writer, value)?;
+                writer.write_all(b"\n")?;
+                Ok(())
+            }),
             Self::Text => bail!("cannot render JSON value as text"),
         }
     }
 
     pub(crate) fn text(self, value: impl AsRef<str>) -> Result<()> {
         match self {
-            Self::Text => write_stdout(value.as_ref()),
+            Self::Text => write_stdout_rendered(|writer| {
+                writer.write_all(value.as_ref().as_bytes())?;
+                Ok(())
+            }),
             Self::Json => bail!("cannot render text value as JSON"),
         }
     }
@@ -58,28 +110,25 @@ pub(crate) fn configure_output_limit(max_bytes: Option<u64>) -> Result<()> {
         .map_err(|_| anyhow!("output limit was configured more than once"))
 }
 
-fn ensure_output_size(bytes: usize) -> Result<()> {
-    let rendered = u64::try_from(bytes).unwrap_or(u64::MAX);
-    if let Some(limit) = MAX_OUTPUT_BYTES.get().copied().flatten()
-        && rendered > limit
+fn render_to_spool(
+    limit: Option<u64>,
+    render: impl FnOnce(&mut dyn Write) -> Result<()>,
+) -> Result<SpooledTempFile> {
+    let mut spool = spooled_tempfile(OUTPUT_SPOOL_MEMORY_BYTES);
     {
-        bail!("rendered output is {rendered} bytes, exceeding --max-bytes {limit}");
+        let mut writer = BoundedWriter::new(&mut spool, limit);
+        render(&mut writer)?;
+        writer.flush()?;
     }
-    Ok(())
+    spool.seek(SeekFrom::Start(0))?;
+    Ok(spool)
 }
 
-fn write_stdout(value: &str) -> Result<()> {
-    ensure_output_size(value.len())?;
+fn write_stdout_rendered(render: impl FnOnce(&mut dyn Write) -> Result<()>) -> Result<()> {
+    let limit = MAX_OUTPUT_BYTES.get().copied().flatten();
+    let mut spool = render_to_spool(limit, render)?;
     let mut stdout = stdout().lock();
-    stdout.write_all(value.as_bytes())?;
-    stdout.flush()?;
-    Ok(())
-}
-
-fn write_stdout_line(value: &str) -> Result<()> {
-    ensure_output_size(value.len().saturating_add(1))?;
-    let mut stdout = stdout().lock();
-    writeln!(stdout, "{value}")?;
+    std_io::copy(&mut spool, &mut stdout)?;
     stdout.flush()?;
     Ok(())
 }
@@ -220,9 +269,12 @@ pub(crate) use workflow::cmd_workflow;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use mem_core::{app::StoreSource, config::Config};
+    use std::io::Read;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    use mem_core::{app::StoreSource, config::Config};
+
+    use super::*;
 
     fn temp_app(name: &str) -> App {
         let stamp = SystemTime::now()
@@ -243,6 +295,40 @@ mod tests {
             config: Config::default(),
             store_source: StoreSource::CliOverride,
         }
+    }
+
+    #[test]
+    fn output_spool_rejects_oversized_content_before_publish() {
+        let error = render_to_spool(Some(4), |writer| {
+            writer.write_all(b"12345")?;
+            Ok(())
+        })
+        .expect_err("oversized output must fail");
+
+        assert!(error.to_string().contains("exceeding --max-bytes 4"));
+    }
+
+    #[test]
+    fn output_spool_keeps_small_content_in_memory_and_large_content_off_heap() {
+        let mut small = render_to_spool(Some(5), |writer| {
+            writer.write_all(b"1234\n")?;
+            Ok(())
+        })
+        .expect("render small output");
+        assert!(!small.is_rolled());
+        let mut small_text = String::new();
+        small
+            .read_to_string(&mut small_text)
+            .expect("read small output");
+        assert_eq!(small_text, "1234\n");
+
+        let large_bytes = vec![b'x'; OUTPUT_SPOOL_MEMORY_BYTES + 1];
+        let large = render_to_spool(None, |writer| {
+            writer.write_all(&large_bytes)?;
+            Ok(())
+        })
+        .expect("render large output");
+        assert!(large.is_rolled());
     }
 
     #[test]
