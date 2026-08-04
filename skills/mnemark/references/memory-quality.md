@@ -34,7 +34,7 @@ Why: 使用者 2026-07-05 明確要求。
 
 - One fact per memory. Two facts means two memories; link them with shared tags instead.
 - Testable: a reviewer must be able to answer "was this memory followed?" with yes or no.
-- Include the exact command, path, or value — not a description of it. `env -u CC -u CXX cargo test --workspace --locked` beats「用正確的環境變數跑測試」.
+- Include the exact command, path, or value — not a description of it. `cargo test --workspace --locked` beats「跑完整測試」.
 - Convert relative dates ("last week", "目前") to absolute dates before saving.
 - Record provenance in `--why` (who said it, in what context) so later retros can re-judge confidence.
 - Names: short snake_case, stable across updates. Rename via `supersede`, not delete + save.
@@ -77,7 +77,7 @@ Move knowledge up one level only when the threshold is met:
 | --- | --- |
 | Durable fact or preference stated once | `mem save` as memory |
 | Same manual procedure performed a 2nd time | propose a `type=workflow` memory (scaffold with `mem workflow new`) |
-| Same helper script/template pasted or generated a 2nd time, or workflow keeps regenerating 10+ lines of helper code | propose extraction; see `workflow-rules.md` Reusable Scripts |
+| Same helper script/template pasted, generated, or run a 2nd time | propose extraction; see `workflow-rules.md` Reusable Scripts |
 | Workflow stable and used across 2+ projects | skill candidate — raise it in weekly retro |
 
 ## Mechanism over prose

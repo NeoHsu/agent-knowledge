@@ -45,7 +45,7 @@ Use this ownership split:
 - Workflow memories own the runbook context: triggers, preconditions, script path, required checks, confirmations, expected outputs, and lessons learned.
 - Skills own stable cross-project execution policy, not project-specific script bodies.
 
-When executing a workflow, do not repeatedly synthesize throwaway helper programs. If the next step would require generating more than 10 lines of Python, shell, or similar helper code, first check whether the workflow already references a script or artifact. If the same or substantially similar helper code has been pasted, generated, or run before, propose extracting it instead of rewriting it inline:
+Before synthesizing a nontrivial helper, check whether the workflow already references a repository script or store artifact. When the same or substantially similar helper has been pasted, generated, or run a second time, propose extracting it instead of rewriting it inline:
 
 - Project-specific helper logic -> create or reuse `scripts/<name>.py` or `scripts/<name>.sh` in the repository and reference it with `owner: repo`.
 - Cross-project helper logic -> create or reuse `artifacts/scripts/<name>.py` or `artifacts/scripts/<name>.sh` under the active knowledge store, add manifest metadata with `mem artifact add`, and include or update the checksum.

@@ -32,10 +32,8 @@ current.
 - Stable references to systems, repos, docs, or workflows.
 - User-approved `type=workflow` memories for repeated project procedures, with
   `workflow:*` and `intent:*` tags.
-- Artifact candidates: apply `workflow-rules.md` Reusable Scripts; one-off
-  helpers stay local, project-specific helpers belong in repo `scripts/`,
-  cross-project helpers belong in knowledge-store `artifacts/`, and ownership
-  changes need user approval.
+- Artifact candidates: apply the ownership rules in `workflow-rules.md`, report
+  the proposed owner, and wait for approval before moving anything.
 
 ## What Not to Save
 

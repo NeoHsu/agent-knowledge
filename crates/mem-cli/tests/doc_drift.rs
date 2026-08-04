@@ -512,14 +512,22 @@ fn mnemark_skill_keeps_safety_and_routing_boundaries() {
         "store_source",
         "remember this",
         "記住",
+        "查一下之前記住的",
+        "刪除這段記憶",
         "匯入記憶庫",
+        "備份記憶庫",
+        "查看記憶之間的關聯",
         "把這個流程存成 runbook",
+        "mem --read-only prime",
+        "mem operation inspect",
+        "allowed_in_read_only",
         "mem sync --dry-run",
         "fetch/merge",
         "generic Git sync",
         "ordinary data import/export",
         "CI workflows",
         "sprint retrospectives",
+        "codebase architecture",
         "auditing/developing a skill",
         "Stores and bundles are plaintext",
         "do not authenticate the bundle publisher",
@@ -530,6 +538,26 @@ fn mnemark_skill_keeps_safety_and_routing_boundaries() {
             "mnemark skill docs must retain safety/routing contract: {required}"
         );
     }
+
+    let execution_gate = skill.find("## Execution Gate").expect("execution gate");
+    let session_gate = skill
+        .find("## Session Context Gate")
+        .expect("session context gate");
+    let safety_gates = skill.find("## Safety Gates").expect("safety gates");
+    let save_workflow = skill
+        .find("## Save Durable Knowledge")
+        .expect("save workflow");
+    assert!(
+        execution_gate < session_gate
+            && session_gate < safety_gates
+            && safety_gates < save_workflow,
+        "compatibility, session context, and safety gates must precede memory actions"
+    );
+    assert!(
+        guide.lines().count() <= 400,
+        "CLI guide must stay progressively disclosed; found {} lines",
+        guide.lines().count()
+    );
     assert!(
         !skill.contains("The default creates only a local checkpoint"),
         "sync docs must not hide fetch/merge side effects"

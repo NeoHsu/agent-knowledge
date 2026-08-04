@@ -35,6 +35,9 @@ All notable changes to mnemark are documented here.
   coverage floor from 84% to 86%.
 - Removed Zig from the default Mise toolset; source builds use the platform C/C++
   toolchain while retaining a defensive guard for inherited Zig wrappers.
+- Tightened the bundled mnemark skill around compatibility-first session
+  priming, process-level read-only guards, parsed command-effect inspection,
+  codebase-graph routing, and progressively disclosed CLI guidance.
 
 ## [0.9.0] - 2026-07-30
 

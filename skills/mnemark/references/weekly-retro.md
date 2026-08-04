@@ -32,20 +32,9 @@ the store; it does not reread raw session logs.
     confirming the active target per `SKILL.md` Safety Gates.
 14. If the store changed, offer sync per `SKILL.md` Safety Gates.
 
-The promotion direction is:
-
-```text
-repeated facts/preferences -> memory
-repeated project procedures -> workflow memory
-project-specific reusable helpers -> project repo scripts/
-cross-project reusable helpers -> knowledge-store artifacts/
-stable cross-project execution policy -> skill
-```
-
-Do not silently move scripts into or out of `artifacts/` under the active
-knowledge store root. Recommend the ownership change, get user approval, then
-add or update manifest entries with `mem artifact add` or
-`mem artifact update --checksum`.
+Apply the promotion ladder in `memory-quality.md` and helper ownership rules in
+`workflow-rules.md`. Report workflow, artifact, and skill candidates for review;
+do not create them or move helper ownership without approval.
 
 A skill candidate is an output for review, not authorization to modify the
 skill collection. After approval, route a new skill to the environment's skill
