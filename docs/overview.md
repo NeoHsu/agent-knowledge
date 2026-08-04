@@ -25,9 +25,8 @@ Four layers participate: you, the coding agent (wired by `mem setup`), the
  |  CODING AGENT   Claude Code / Codex / pi / Gemini / opencode      |
  |                                                                   |
  |  `mem setup <platform>` wires up to 3 user-level layers:          |
- |    [1] policy block  -> platform-global instructions              |
- |          "use mem, not built-in memory; run `mem prime` at start" |
- |    [2] session hook  -> native hook where available               |
+ |    [1] policy block  -> contract first; process-read-only prime    |
+ |    [2] session hook  -> same gates where native hooks exist        |
  |    [3] shared skill  -> supported platforms use                   |
  |          ~/.agents/skills/mnemark directly or through links       |
  +-------------------------------------------------------------------+
@@ -62,10 +61,16 @@ What a normal coding session looks like once mnemark is wired in.
 ```text
   session start
        |
+       +-- context block already injected by guarded hook? -- yes --> use it
+       |
+       no
        v
-  [ mem prime ]  read-only, budget-capped
-       |         loads user / feedback / preference / project + workflow names
-       |         (skip if the SessionStart hook already injected the block)
+  [ mem contract --skill-version <exact> ]
+       |
+       v
+  [ mem --read-only prime ]  budget-capped
+       |                     loads user / feedback / preference / project
+       |                     plus workflow names
        v
   agent now holds durable "prior knowledge" in context
        |
@@ -236,56 +241,14 @@ Without a configured remote, `mem sync` commits locally and reports
 `local_only`. It refuses to commit into an enclosing repo — the store root must
 be its own git repository.
 
-## 8. Usage scenarios at a glance
+## Next steps
 
-Each row is an end-to-end scenario mapped to its commands and the diagram above
-that explains it.
+Use the task-oriented [documentation index](README.md) for installation,
+runtime, workflow, graph, compatibility, production, and development guides.
+The complete command surface for agents is the
+[CLI guide](../skills/mnemark/references/cli-guide.md).
 
-```text
- SCENARIO                     COMMANDS (in order)                                   SEE
- --------                     -------------------                                   ---
- First-time wiring            mem init                                              #1
-   (new machine / platform)   mem setup claude-code   (or codex/pi/gemini-cli/…)
-                              mem doctor              (verify all layers)
-
- Everyday coding session      mem prime  ->  work  ->  mem save  ->  mem sync       #2
-
- Save a preference/decision   mem save --type feedback --source manual              #3
-                              --user-confirmed …
-                              (fix any returned warnings with mem update)
-
- Recall for a task            mem query "<keywords>" --scope auto --format compact  #4
-                              mem query "<intent>" --type workflow --scope auto
-
- Run a recurring procedure    mem workflow find "<intent>"                          #5
-                              mem workflow show <name> --checklist
-                              mem workflow record <name> --result <success-or-failure>
-
- Reusable helper script       repo-specific  -> scripts/*.sh                        #6
-                              cross-project  -> mem artifact add … ; artifact check
-
- Daily / weekly retro         mem retro daily     (missed facts, stale, ambiguity)  #5,#6
-                              mem retro weekly    (dedupe, confidence, candidates)
-
- Move a store between hosts    mem bundle export store.tgz                          #7
-                              mem bundle import store.tgz --merge
-
- Sync across machines          mem sync --dry-run -> mem sync  (no push)             #7
-                              mem sync --push       (only after approval)
-                              mem ambiguity list --pending   (resolve conflicts)
-
- Health check / repair         mem doctor  ;  mem audit --fix  ;  mem reindex       #1,#3
-
- Stale-memory reconcile        mem reconcile --scope auto   (verify path/command    #1,#3
-                              claims in memories against the filesystem, read-only)
-```
-
-## Where to go next
-
-| Need | Read |
-| --- | --- |
-| Install, init, first save, wire agents | [`getting-started.md`](getting-started.md) |
-| Store discovery, config priority, layout | [`runtime-model.md`](runtime-model.md) |
-| Workflows, artifacts, bundles, retros | [`workflows.md`](workflows.md) |
-| Every command and flag | [`cli-guide.md`](../skills/mnemark/references/cli-guide.md) |
-| How agents execute runbooks safely | [`workflow-rules.md`](../skills/mnemark/references/workflow-rules.md) |
+Changes to store discovery, setup policy/hooks, save normalization, prime/query,
+workflow rendering, or sync semantics invalidate the corresponding diagram.
+Run `mise run contract:check` and the affected integration-test module before
+updating this overview.

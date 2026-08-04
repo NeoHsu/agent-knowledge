@@ -10,32 +10,34 @@
 
 ## Validation
 
-- [ ] `cargo fmt --all -- --check`
-- [ ] `env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings`
-- [ ] `env -u CC -u CXX cargo test --workspace --locked`
-- [ ] `cargo audit --deny warnings`
-- [ ] `cargo deny check`
-- [ ] `python3 scripts/check-dependency-policy.py`
-- [ ] `python3 scripts/check-source-hygiene.py`
+- [ ] `mise install`
+- [ ] `mise run check:pr`
+- [ ] Additional task-specific checks are listed below with results.
 
-## Public contract review
+<!-- Search/graph/prime: mise run eval:retrieval -->
+<!-- CLI/contracts: mise run contract:check -->
+<!-- Workflow or shell changes: scripts/check-workflows.sh && shellcheck scripts/*.sh -->
+<!-- Release candidate: RELEASE_TAG=v<version> scripts/check-release-readiness.sh -->
 
-- [ ] CLI is unchanged, or `docs/cli-surface.txt`, topic docs, and the skill guide were updated.
-- [ ] JSON is unchanged, or its schema and fixture were updated additively.
-- [ ] Error code, exit code, and committed-write recovery semantics remain compatible.
-- [ ] Store discovery and command effects remain explicit and correctly classified.
-- [ ] Skill/Cargo/docs/tag versions remain exact according to `scripts/check-skill-version.py`.
-- [ ] Retrieval changes pass `mise run eval:retrieval`, or retrieval is unchanged.
-- [ ] Agent-policy changes update behavior cases; synthetic traces are not presented as live evidence.
+## Public contracts
+
+- [ ] CLI is unchanged, or the generated surface, topic docs, and skill guide were updated.
+- [ ] Machine JSON is unchanged, or its schema and representative fixture were updated additively.
+- [ ] Error codes, exit codes, and committed-write recovery remain compatible.
+- [ ] Store discovery and invocation effects remain explicit and centrally classified.
+- [ ] CLI, Cargo, lockfile, skill, schemas, docs, changelog target, and intended tag are version-aligned.
+- [ ] Retrieval-affecting changes passed `mise run eval:retrieval`, or retrieval is unchanged.
+- [ ] Agent-policy changes updated behavior cases; synthetic traces are not presented as live evidence.
 
 ## Security and operations
 
 - [ ] No runtime store, private memory, secret, bundle, index, or release artifact is committed.
-- [ ] New writes preserve backup, lock, secret, integrity, and rollback boundaries.
-- [ ] Release changes preserve checksums, SBOM, attestations, native smoke/recovery, and benchmark gates.
+- [ ] Mutating tests use an isolated `--home` or `TempDir` store.
+- [ ] New writes preserve target verification, locking, secret checks, integrity, and rollback boundaries.
+- [ ] Release changes preserve checksums, SBOM, attestations, native archive execution, recovery, and benchmark gates.
 
 ## Documentation and release notes
 
-- [ ] `CHANGELOG.md` was updated under Unreleased.
-- [ ] User, operator, maintainer, and agent documentation was updated where applicable.
-- [ ] Not-applicable checklist items are explained above.
+- [ ] The version-targeted Unreleased changelog section was updated.
+- [ ] Affected user, operator, maintainer, agent, and skill docs were updated.
+- [ ] Not-applicable checklist items are explained in the summary.

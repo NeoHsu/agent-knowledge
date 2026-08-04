@@ -46,8 +46,9 @@ Wrap every path and command the content asserts in backticks. `mem reconcile` ex
 ## Write moments
 
 This batching rule applies to incidental memory candidates discovered while
-performing another task. Mid-task, plain `mem prime` and ordinary `mem query`
-load context while candidates are collected rather than saved: the final
+performing another task. Mid-task, `mem --read-only prime` and
+`mem --read-only query` load context while candidates are collected rather than
+saved: the final
 outcome is not yet known, so early writes tend to be fragmentary.
 
 It does not defer a task whose requested outcome is itself a store mutation,

@@ -4,6 +4,22 @@ Use this index when the project homepage is not specific enough. Runnable
 `mem` examples across repository Markdown are parsed against the real Clap
 surface during tests.
 
+## Sources and freshness
+
+| Document class | Source of truth | Invalidated by | Verification |
+| --- | --- | --- | --- |
+| CLI examples and command reference | Clap args and command-effect classifier | Command, flag, default, conflict, or effect change | `mise run contract:check` |
+| Versioned install and skill docs | Workspace version and compatibility manifest | Version or intended-tag change | `python3 scripts/check-skill-version.py` |
+| Runtime, architecture, and agent guidance | Rust modules plus repository policy | Store, domain, setup, module, or safety-boundary change | Related Rust tests plus `cargo test -p mnemark --test doc_drift` |
+| JSON contracts | `docs/schemas/*.schema.json` embedded by the CLI | Machine-output shape change | Schema discovery and fixture tests in `mise run contract:check` |
+| Development and CI guidance | `mise.toml` and `.github/workflows/` | Task or workflow change | `mise run check:pr` and `scripts/check-workflows.sh` |
+| Evaluation and performance evidence | Versioned fixtures and retained reports | Protocol, fixture, binary, or evidence-status change | Evaluator/checker command named in the document |
+| Changelog and ADRs | Git/release history and accepted decisions | Release preparation or superseding architecture decision | Release metadata gate or new superseding ADR |
+
+A clean checker proves form and selected contracts, not semantic completeness.
+Changing a source listed above requires reviewing its routed documents in the
+same change.
+
 ## Start here
 
 | Guide | What it covers |

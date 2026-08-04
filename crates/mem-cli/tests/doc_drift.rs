@@ -485,14 +485,11 @@ fn agent_entrypoints_describe_runtime_only_store_discovery() {
         );
     }
 
-    let claude = fs::read_to_string(root.join("CLAUDE.md")).expect("read CLAUDE.md");
+    let canonical = fs::read_to_string(root.join("docs/agent-reference.md"))
+        .expect("read canonical agent reference");
     assert!(
-        claude.contains("source checkouts are never selected implicitly"),
-        "CLAUDE.md must describe runtime-only store discovery"
-    );
-    assert!(
-        !claude.contains("store discovery would treat the repo itself as a runtime store"),
-        "CLAUDE.md must not retain the removed source-checkout discovery behavior"
+        canonical.contains("Runtime-only discovery never selects this checkout"),
+        "the canonical agent reference must describe runtime-only store discovery"
     );
 }
 

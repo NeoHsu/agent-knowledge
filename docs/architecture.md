@@ -77,5 +77,16 @@ trust precedence, unresolved/cross-scope review, secret handling, and resource
 bounds, while deterministic integration tests cover store, import, graph,
 workflow, setup rollback, and error contracts.
 
+## Freshness
+
+Changes to the listed façades, domain types, effect classifier, atomic-write
+primitive, output pipeline, or test targets invalidate this page. Verify the
+actual paths and contracts with:
+
+```bash
+mise run contract:check
+cargo test --workspace --locked
+```
+
 See the [runtime model](runtime-model.md) for command effects and durable state,
 and the [ADRs](adr/README.md) for the decisions behind these boundaries.

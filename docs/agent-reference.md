@@ -157,53 +157,26 @@ validate the checker only; live evidence must pass with `--require-live`.
 
 ## Validation
 
-Preferred full validation mirrors the stable CI lane:
+`mise.toml` is the single source of truth for the local PR gate:
 
 ```bash
-git diff --check
-cargo machete
-python3 scripts/check-secrets.py
-ruff check scripts
-ruff format --check scripts
-cargo fmt --all -- --check
-cargo clippy --workspace --locked --all-targets -- -D warnings
-cargo nextest run --workspace --locked --status-level all
-cargo test --doc --workspace --locked
-cargo +1.97.1 check --workspace --all-targets --locked
-cargo audit --deny warnings
-cargo deny check
-python3 scripts/check-skill-version.py
-python3 scripts/check-dependency-policy.py
-python3 scripts/check-source-hygiene.py
-python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-scripts/check-workflows.sh
-scripts/build-release.sh
-python3 scripts/evaluate-retrieval.py --report target/retrieval-eval.json
-scripts/smoke-release.sh
+mise install
+mise run check:pr
 ```
 
-Install pinned tools with `mise install`. Native dependencies use the platform
-C/C++ toolchain; Zig is not pinned or required. `.cargo/config.toml` supplies
-PATH-resolved target-specific compiler names on macOS only as a defense against
-malformed Zig variables inherited from a parent shell. CI also tests the
-declared Rust 1.97.1 MSRV, builds cargo-dist artifacts on pull requests without
-publishing, and runs a bounded benchmark correctness smoke.
+Run only the relevant additions:
 
-For release qualification, prefer the single mechanism that also checks a
-clean tree, release metadata, recovery, and benchmark guardrails:
+| Change | Additional check |
+| --- | --- |
+| CLI or machine contract | `mise run contract:check` |
+| Search, tokenizer, ranking, graph query, or prime | `mise run eval:retrieval` |
+| GitHub workflow or shell script | `scripts/check-workflows.sh` and `shellcheck scripts/*.sh` |
+| Release candidate | `RELEASE_TAG=v<version> scripts/check-release-readiness.sh` from a clean tree |
 
-```bash
-scripts/check-release-readiness.sh
-```
-
-`ALLOW_DIRTY=1` is development-only and must not qualify a release.
-
-When changing GitHub workflows or shell scripts, additionally run:
-
-```bash
-scripts/check-workflows.sh
-shellcheck scripts/*.sh
-```
+`ALLOW_DIRTY=1` is development-only and never qualifies a release. Native
+dependencies use the platform C/C++ toolchain; Zig is not pinned or required.
+See [`development.md`](development.md) for individual tasks, CI topology,
+release smoke, recovery, and benchmark protocols.
 
 ## Documentation Rules
 
@@ -219,13 +192,16 @@ shellcheck scripts/*.sh
   changes what `mem setup <platform>` installs, so rebuild before manual
   verification.
 - Historical plans should be clearly marked as design history or removed when
-  obsolete.
+  obsolete. Use the source/freshness map in `docs/README.md` to find the
+  invalidation trigger and verification mechanism for each document role.
 - Keep command examples copy-pastable and aligned with Clap args.
 - If a flag is hidden or intentionally unsupported, do not show it as a normal example.
 - Every public `docs/schemas/*.schema.json` needs a matching representative
   fixture under `docs/schemas/fixtures/`; discovery tests validate all pairs.
 - CLI, skill frontmatter, compatibility manifest, lockfile, tagged install docs,
-  and release tag use exact version lockstep; run
-  `python3 scripts/check-skill-version.py` after changing any of them.
+  and release tag use exact version lockstep. During development, the changelog
+  uses `## [Unreleased — <version>]`; release qualification requires a dated
+  version heading. Run `python3 scripts/check-skill-version.py` after changing
+  any versioned surface.
 - Prefer one authoritative explanation and cross-reference it instead of
   duplicating long sections.

@@ -69,7 +69,7 @@ not materialized.
 
 - `graph explain <node-or-memory-ref>` returns one node and its active direct
   neighbors with relation, direction, confidence, status, and evidence.
-  `--depth` currently accepts only `0` or `1`; `--scope auto|all|<scope>` keeps
+  `--depth` accepts only `0` or `1`; `--scope auto|all|<scope>` keeps
   neighborhood inspection inside the selected scope.
 - `graph path <from> <to>` finds a minimum-hop relationship path within
   `--scope auto|all|<scope>`, then globally breaks equal-hop ties by cumulative
@@ -90,8 +90,9 @@ not materialized.
   `all` active edges; pending edges still require explicit inclusion.
 - `prime --focus "terms"` uses the same local graph layer to add compact,
   budget-capped relationship context to session/task priming.
-- `graph export --format json` emits a graphify-compatible-ish shape with
-  `schema_version`, `nodes`, and `edges`.
+- `graph export --format json` emits the versioned `graph-export-v1` shape with
+  `schema_version`, `nodes`, and `edges`; inspect it with `mem schema print
+  graph-export-v1`.
 - `graph candidates` emits candidate memories and allowed relations for
   skill-mediated extraction. `--changed-since` and `--unlinked` bound curation
   work. Ordinary candidate listing is read-only; `--unlinked` may refresh graph

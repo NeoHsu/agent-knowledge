@@ -6,11 +6,11 @@ Scaffold new workflow memories with `mem workflow new <name>` — the minimal ba
 
 ## Lookup
 
-`mem prime` (or the session-start hook) already loads feedback, preference, and project context; run it first if it has not run this session. Then look up runbooks for the task intent:
+`mem --read-only prime` (or the guarded session-start hook) already loads feedback, preference, and project context; run it after the session compatibility gate if it has not run. Then look up runbooks for the task intent:
 
 ```bash
-mem query "<task intent>" --scope auto --type workflow
-mem workflow find "<task intent>" --scope auto
+mem --read-only query "<task intent>" --scope auto --type workflow
+mem --read-only workflow find "<task intent>" --scope auto
 ```
 
 If multiple workflows match, prefer project-scoped records, then high confidence, then exact `workflow:*` or `intent:*` tag matches. If the match is still ambiguous, ask the user and record the ambiguity.
