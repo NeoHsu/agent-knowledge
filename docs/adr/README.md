@@ -10,3 +10,4 @@ load-bearing boundary exists.
 | [0002](0002-runtime-only-store-discovery.md) | Accepted | Runtime stores are selected explicitly and never inferred from source checkouts |
 | [0003](0003-deterministic-non-rag-graph.md) | Accepted | Graph memory remains local, evidence-bearing, and provider-independent |
 | [0004](0004-git-byte-transport-semantic-merge.md) | Accepted | Git transports store bytes while mem performs semantic database conflict merge |
+| [0005](0005-effect-and-domain-boundaries.md) | Accepted | One effect policy and versioned core write boundary prevent CLI safety drift |

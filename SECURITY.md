@@ -33,13 +33,19 @@ The local operating-system account is trusted. A process with permission to modi
 - Explicit initialization and backup-first migration; reads never initialize or migrate.
 - SQLite integrity checks and an allowlist for application tables, views, and triggers.
 - Exclusive/shared file locking around mutating and snapshot operations.
+- Invocation-sensitive global read-only enforcement before write locks, file
+  replacement, index repair, or network access.
+- Atomic managed-file replacement plus grouped rollback for agent policy,
+  skill, symlink, and hook setup.
+- Fallible broken-pipe-safe output and terminal control/bidirectional-character
+  escaping after secret redaction.
 - Default-reject secret-pattern scanning across durable database fields, side-state, artifacts, bundles, merges, and sync worktrees.
 - Manual-source attestation and source-trust checks during overwrite and merge.
 - Resource limits for text, files, archives, graph payloads, paths, and collection sizes.
 - Bundle path allowlisting, regular-file-only extraction, per-file SHA-256, and rollback-safe replacement.
 - Sync isolation, disabled hooks/signing/prompts, semantic database conflict merge, pulled-state validation, and rollback.
 - Unix store permissions hardened to directory mode `0700` and file mode `0600`.
-- Release CI vulnerability audit, cargo-deny license/source policy, crates.io provenance/license-metadata checks, native tests/smoke checks, SHA-pinned Actions, a pinned SHA-256 gate for the CC-CEDICT build input, checksum-verifying installers, CycloneDX 1.5 SBOMs, and build-provenance attestations.
+- Release CI vulnerability audit, cargo-deny license/source policy, crates.io provenance/license-metadata checks, Git history/current-source secret scans, native tests and execution of the exact archived binaries, SHA-pinned Actions, a pinned SHA-256 gate for the CC-CEDICT build input, checksum-verifying installers, CycloneDX 1.5 SBOMs, and build-provenance attestations.
 - GitHub secret scanning, push protection, and private vulnerability reporting on the public source repository.
 
 ## Explicit limitations

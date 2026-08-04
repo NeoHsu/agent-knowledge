@@ -15,13 +15,21 @@ mise run check:pr
 The explicit checks remain authoritative:
 
 ```bash
+cargo machete
+python3 scripts/check-secrets.py
+ruff check scripts
+ruff format --check scripts
 cargo fmt --all -- --check
-env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings
-env -u CC -u CXX cargo test --workspace --locked
+cargo clippy --workspace --locked --all-targets -- -D warnings
+cargo nextest run --workspace --locked --status-level all
+cargo test --doc --workspace --locked
+cargo +1.97.0 check --workspace --all-targets --locked
 cargo audit --deny warnings
 cargo deny check
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 python3 scripts/check-dependency-policy.py
 python3 scripts/check-source-hygiene.py
+scripts/check-workflows.sh
 ```
 
 Do not use a real private store in tests. Every mutating test command must pass
@@ -47,6 +55,10 @@ failure paths. Before opening a PR:
 ## Public contracts
 
 - Reads must not initialize, migrate, or silently mutate durable state.
+- The global read-only gate must derive from the same exact command-effect
+  classification used for lock routing and operation inspection.
+- CLI/import writes must cross the versioned core request boundary before
+  trust-aware persistence; managed file replacement must remain atomic.
 - SQLite durable writes and rebuildable index updates must preserve the
   committed-write recovery distinction.
 - Store discovery must remain runtime-only and explicit.

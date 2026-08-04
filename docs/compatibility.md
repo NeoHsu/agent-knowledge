@@ -19,7 +19,8 @@ Before 1.0, breaking machine-interface changes may occur only in a documented
 minor release with changelog and migration guidance. Patch and minor releases
 may add commands, optional fields, schema documents, error details, or enum
 values. They must not silently remove required fields, make a read command
-initialize or migrate a store, make sync push by default, or reinterpret an
+initialize or migrate a store, bypass an explicit global read-only gate, make
+sync push by default, or reinterpret an
 existing persisted schema without an explicit version transition.
 
 Successful JSON shapes are versioned by the schema named by `mem schema list`.

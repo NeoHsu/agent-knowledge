@@ -83,6 +83,11 @@ or when rebuildable materialized tables are missing; `mem graph stats` is
 deliberately non-mutating. Durable semantic tables are never silently recreated
 as if their data were disposable.
 
+Managed single-file updates use same-directory staging and platform-aware atomic
+replacement. `mem setup <platform>` snapshots all managed policy, skill,
+symlink, and hook targets before the first write and restores them if a later
+setup step fails.
+
 SQLite commit and Tantivy update are deliberately separate. If a durable write
 commits but its index update fails, the CLI marks `index_dirty=true` and, with
 `--json-errors`, returns `code: "index_stale_after_write"` plus
@@ -102,8 +107,11 @@ tokenization and a local Tantivy tokenizer adapter.
 
 Command lock routing is classified centrally in
 `crates/mem-cli/src/command_effect.rs`; its tests cover every top-level command
-family and the conditional cases below. Keep this matrix aligned with that
-registry instead of adding lock decisions directly to command dispatch.
+family and the conditional cases below. The same classification enforces the
+global `--read-only` / `MNEMARK_READ_ONLY=true` safety gate: any durable,
+rebuildable, output-file, or network effect is rejected before a write lock or
+mutation. Keep this matrix aligned with that registry instead of adding lock or
+read-only decisions directly to command dispatch.
 
 “Durable” means user-authored memory, provenance, semantic assertions, workflow
 runs, ambiguity records, config, manifests, or artifacts. Graph projections,
@@ -126,7 +134,7 @@ Tantivy files, and dirty/version metadata are rebuildable local state.
 | `migrate --dry-run` | None | Compatibility report only | None |
 | `migrate` | Backup plus transactional schema write | Index/graph compatibility state as required | None |
 | `setup list`, `setup <platform> --dry-run` | None | None | None |
-| `setup <platform>` | None | User-level agent policy, skill links/files, and supported hooks | None |
+| `setup <platform>` | None | Atomically replaced user-level policy/skill/hook files and transactional rollback across setup targets | None |
 | `workflow new` | None | Requested YAML scaffold file; no store required | None |
 | `workflow validate --file` | None | Reads the requested YAML/JSON only; `--check-artifacts` also inspects explicitly referenced store/repository files | None |
 | JSON/Markdown import, DB merge, bundle import | Destination durable state | Batched index update and graph dirty/refresh state | None |

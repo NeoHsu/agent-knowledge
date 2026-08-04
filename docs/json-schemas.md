@@ -22,7 +22,7 @@ pairs automatically.
 | `contract-v1` | Store-independent `mem contract` response |
 | `schema-list-v1` | Bundled schema catalog |
 | `operation-list-v1` | Stable Clap-derived leaf operation IDs |
-| `operation-inspect-v1` | Exact store/file/network effects for one parsed invocation |
+| `operation-inspect-v1` | Exact store/file/network effects and read-only decision for one parsed invocation |
 | `memory-list-v1` | JSON memory rows returned by query/export |
 | `prime-v1` | Budgeted `prime --format json` response, including no-store status |
 | `graph-export-v1` | Deterministic graph export |

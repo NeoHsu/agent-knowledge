@@ -36,6 +36,7 @@ surface during tests.
 | --- | --- |
 | [Agent Reference](agent-reference.md) | Canonical repository instructions and task-specific reading map |
 | [Development](development.md) | Local checks, coverage, release smoke, and benchmark protocol |
+| [Architecture](architecture.md) | Crate direction, write-domain, effects, atomic files, output, and test boundaries |
 | [Production Operations](production.md) | Release qualification, recovery, upgrade, rollback, and incidents |
 | [Performance](performance.md) | Retained baselines, comparison protocol, and capacity canary |
 | [Architecture Decisions](adr/README.md) | Context and consequences for load-bearing design choices |

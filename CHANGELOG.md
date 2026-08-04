@@ -4,6 +4,32 @@ All notable changes to mnemark are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added global `--read-only` / `MNEMARK_READ_ONLY` enforcement backed by the
+  exact command-effect classifier, plus read-only decisions in operation
+  inspection.
+- Added shared atomic file replacement and transactional rollback across agent
+  policy, skill, symlink, and hook setup targets.
+- Added versioned save/import wire requests, normalized core-domain requests,
+  and typed save outcomes.
+
+### Changed
+
+- Hardened CLI output against broken pipes and terminal control-sequence
+  injection while retaining secret redaction, and added an optional
+  `--max-bytes` / `MNEMARK_MAX_BYTES` pre-write stdout bound.
+- Migrated the Rust workspace to edition 2024 and Cargo resolver 3.
+- Consolidated CLI acceptance tests into one shared integration harness using
+  `TempDir`, while retaining an isolated documentation-contract target and
+  adding property coverage for atomic writes.
+- Split core workflow artifact-reference validation and checklist rendering
+  from the schema/ranking façade without changing the public workflow API.
+- Expanded local and CI contracts with nextest, sccache, cargo-machete, Ruff,
+  gitleaks history/current-source scans, actionlint, zizmor, bounded jobs, a
+  50 MiB release size budget, and exact native execution of cargo-dist archive
+  binaries.
+
 ## [0.9.0] - 2026-07-30
 
 > The original `v0.9.0` GitHub Release was withdrawn; this entry describes the

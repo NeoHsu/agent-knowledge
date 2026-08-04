@@ -4,8 +4,8 @@ For agent-specific repo guidance, read `docs/agent-reference.md` first.
 
 ## Setup
 
-`mise.toml` pins the local Rust MSRV toolchain and Zig C toolchain used in
-restricted environments.
+`mise.toml` pins Rust, Python, repository linters/security tools, Cargo quality
+tools, and the Zig C toolchain available for restricted environments.
 
 ```bash
 mise install
@@ -26,14 +26,24 @@ cargo run -p mnemark --bin mem -- <args>
 The full local validation mirrors the stable CI lane:
 
 ```bash
+git diff --check
+cargo machete
+python3 scripts/check-secrets.py
+ruff check scripts
+ruff format --check scripts
 cargo fmt --all -- --check
-env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings
-env -u CC -u CXX cargo test --workspace --locked
+cargo clippy --workspace --locked --all-targets -- -D warnings
+cargo nextest run --workspace --locked --status-level all
+cargo test --doc --workspace --locked
+cargo +1.97.0 check --workspace --all-targets --locked
 cargo audit --deny warnings
 cargo deny check
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 python3 scripts/check-dependency-policy.py
 python3 scripts/check-skill-version.py
 python3 scripts/check-source-hygiene.py
+scripts/check-workflows.sh
+zizmor --persona pedantic --min-severity medium --min-confidence medium .
 ```
 
 The source-hygiene check rejects runtime `memory.db`, `index/`, lock/WAL/SHM,
@@ -41,19 +51,18 @@ and bundle-replacement backup state from this checkout without reading database
 contents. Move required data to the intended private runtime store before
 continuing; dirty-tree development overrides do not bypass this safety gate.
 
-Install `cargo-audit` and `cargo-deny` locally when unavailable. Use
-`env -u CC -u CXX` on macOS when inherited Zig compiler variables break native
-dependency builds. `cargo deny check` enforces the accepted license, source,
-wildcard, and advisory policy; the repository dependency script independently
+Install the pinned tools with `mise install`. The target-specific compiler
+names in `.cargo/config.toml` prevent a malformed generic `CC="zig cc"` value
+from being passed to cc-rs on macOS while still resolving `cc`, `c++`, and `ar`
+through `PATH`; explicit target-specific environment variables retain higher
+precedence. `cargo deny check` enforces the accepted license, source, wildcard,
+and advisory policy; the repository dependency script independently
 requires every locked third-party package to come from crates.io and carry
 license metadata. RustSec remains the vulnerability authority.
 
-When changing workflows or shell scripts, also run:
-
-```bash
-actionlint .github/workflows/*.yml
-shellcheck scripts/*.sh
-```
+When changing workflows or shell scripts, `scripts/check-workflows.sh` checks
+syntax, immutable Action pins, credential persistence, job bounds, and required
+gates. Also run `shellcheck scripts/*.sh`.
 
 The complete release-readiness gate combines those checks with metadata,
 clean-tree, release-binary, recovery, and bounded benchmark validation:
@@ -65,18 +74,21 @@ ALLOW_DIRTY=1 scripts/check-release-readiness.sh
 ```
 
 Leave `ALLOW_DIRTY` unset when qualifying a release. The gate requires
-`actionlint` and `shellcheck` by default; `REQUIRE_AUX_TOOLS=0` may skip a
-missing auxiliary tool for bounded development only and cannot provide complete
-release evidence.
+`actionlint`, `shellcheck`, and `zizmor` by default; `REQUIRE_AUX_TOOLS=0` may
+skip a missing auxiliary workflow/shell tool for bounded development only and
+cannot provide complete release evidence. Gitleaks, Ruff, cargo-nextest, and
+cargo-machete remain mandatory.
 
 CI tests both stable Rust and the declared Rust 1.97 MSRV. Pull requests use the
 stable Linux lane in `ci.yml` plus the Rust 1.97 Linux/macOS/Windows release
 verification matrix; direct `main` pushes run stable and MSRV lanes in `ci.yml`.
 This avoids duplicating the same Ubuntu MSRV test on every pull request. The
-stable lane also builds and smoke-tests the release binary and runs a bounded
-benchmark correctness smoke. A separate Rust 1.97 coverage lane retains LCOV
-and enforces an 84% line floor, set below the measured 84.36% baseline from
-2026-07-29 so the gate prevents regression without claiming complete coverage.
+stable lane uses sccache and nextest, builds and smoke-tests the release binary,
+and runs a bounded benchmark correctness smoke. Separate gates scan Git history
+plus current non-ignored sources, lint Python, reject unused Cargo dependencies,
+and audit workflows. A separate Rust 1.97 coverage lane retains LCOV
+and enforces an 84% line floor, set below the measured 84.77% baseline from
+2026-08-04 so the gate prevents regression without claiming complete coverage.
 Run it locally with `mise run coverage`.
 
 ## Release build and smoke test
@@ -93,7 +105,10 @@ architecture spelling; other explicitly selected toolchains are preserved.
 After Cargo completes, `build-release.sh` verifies the exact upstream
 CC-CEDICT source archive against the repository-pinned SHA-256 before accepting
 the binary. This supplements Lindera's own download check and prevents a
-release from silently embedding different dictionary input. The recovery drill
+release from silently embedding different dictionary input. The release binary
+must also remain within the explicit 50 MiB budget; use `mise run size:bloat`
+to investigate growth rather than switching to size-first optimization that can
+hurt search performance. The recovery drill
 verifies a clean bundle restore, durable memory/workflow/artifact/graph state,
 corruption rejection, migration preview, and local sync checkpoint without
 network access.
@@ -105,7 +120,8 @@ runners. Published platform and global artifacts receive GitHub build-provenance
 attestations. Releases include checksum sidecars for archives and installers,
 fail-closed archive verification in both generated installers, and a verified
 CycloneDX 1.5 binary SBOM. `scripts/verify-release-artifacts.py` validates the
-assembled distribution.
+assembled distribution, extracts the host-compatible cargo-dist archive, and
+executes that exact `mem` binary for version and read-only contract checks.
 
 Before creating a release tag:
 
@@ -245,11 +261,33 @@ change.
 Do not bump it for query-time boosts, fuzzy query construction, SQLite-only
 filtering, or CLI output changes.
 
+### Write-domain boundary
+
+CLI and JSON import adapters construct versioned wire requests in
+`crates/mem-core/src/memory_domain.rs`. Validation and normalization produce a
+`SaveRequest`; only that type reaches trust-aware persistence and a typed
+`SaveOutcome`. Keep file reading, similarity orchestration, index completion,
+and output rendering in `mem-cli`.
+
+### Test topology
+
+`mem-cli` disables automatic per-file integration targets. `tests/integration.rs`
+links the acceptance modules with one shared `TempDir` harness; `doc_drift`
+remains separate so the canonical update command stays stable. Filter focused
+runs by module, for example `cargo test -p mnemark --test integration setup::`.
+
 ### Bulk operations
 
 `mem import` JSON arrays and `mem merge` use a single Tantivy `IndexWriter`
 commit for all changes instead of N individual commits. Changed records are
 fed to that writer in bounded batches.
+
+### Workflow module boundaries
+
+`crates/mem-core/src/workflow.rs` is the public façade and retains workflow
+schema/content validation plus intent ranking. Keep knowledge-store/repository
+script checks in `workflow/artifacts.rs` and fail-closed runbook rendering in
+`workflow/checklist.rs`; do not move command execution into core.
 
 ### Graph module boundaries
 

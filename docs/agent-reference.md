@@ -19,6 +19,7 @@ This is the canonical guidance for agents working in this repository. Read this 
 - `docs/workflows.md` — workflow memories, artifacts, bundles, import/export, merge, and retrospectives.
 - `docs/runtime-model.md` — runtime store discovery, config priority, artifacts, and bundles.
 - `docs/graph-memory.md` — graph memory design, deterministic graph commands, and non-RAG stance.
+- `docs/architecture.md` — crate direction, versioned write-domain, command-effect, atomic-file, output, and test boundaries.
 - `docs/development.md` — local setup, validation, release smoke tests, and developer notes.
 - `docs/evaluation.md` plus `evals/` — retrieval-quality fixtures and captured agent-behavior trace contracts.
 - `docs/production.md` — qualified deployment profile, release gate, recovery, rollback, and incident procedures.
@@ -27,7 +28,8 @@ This is the canonical guidance for agents working in this repository. Read this 
 - `SECURITY.md` — threat model, implemented controls, residual limitations, and reporting guidance.
 - `crates/mem-cli/` — `mem` CLI arguments, command dispatch, command implementations, integration tests.
 - `crates/mem-core/` — app discovery, config, SQLite DB helpers, Tantivy
-  index, tokenizer, workflow/artifact validation, and utilities.
+  index, tokenizer, workflow/artifact validation, atomic file replacement,
+  versioned memory-write domain requests, and utilities.
 - `crates/mem-core/src/graph.rs` plus `graph/` — public graph façade and
   separated model, identifiers, store, query, materialization, health, and
   semantic-edge subsystems.
@@ -127,7 +129,9 @@ Read:
 2. `docs/runtime-model.md`
 3. `skills/mnemark/references/workflow-rules.md`
 4. `templates/workflow.yaml` and `templates/workflow-full.yaml`
-5. `crates/mem-core/src/workflow.rs`
+5. `crates/mem-core/src/workflow.rs` for validation/ranking plus
+   `crates/mem-core/src/workflow/artifacts.rs` and `checklist.rs` for artifact
+   reference validation and fail-closed rendering
 6. `crates/mem-core/src/artifact/mod.rs` and the relevant module under
    `crates/mem-core/src/artifact/`
 7. `crates/mem-cli/src/commands/workflow/mod.rs` and the command handlers under
@@ -156,23 +160,31 @@ validate the checker only; live evidence must pass with `--require-live`.
 Preferred full validation mirrors the stable CI lane:
 
 ```bash
+git diff --check
+cargo machete
+python3 scripts/check-secrets.py
+ruff check scripts
+ruff format --check scripts
 cargo fmt --all -- --check
-env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings
-env -u CC -u CXX cargo test --workspace --locked
+cargo clippy --workspace --locked --all-targets -- -D warnings
+cargo nextest run --workspace --locked --status-level all
+cargo test --doc --workspace --locked
+cargo +1.97.0 check --workspace --all-targets --locked
 cargo audit --deny warnings
 cargo deny check
 python3 scripts/check-skill-version.py
 python3 scripts/check-dependency-policy.py
 python3 scripts/check-source-hygiene.py
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+scripts/check-workflows.sh
 scripts/build-release.sh
 python3 scripts/evaluate-retrieval.py --report target/retrieval-eval.json
 scripts/smoke-release.sh
 ```
 
-Install `cargo-audit` locally when it is unavailable. Use
-`env -u CC -u CXX` on macOS when inherited `CC="zig cc"` or `CXX="zig c++"`
-settings break native dependency builds. CI also tests the declared Rust 1.97
+Install pinned tools with `mise install`. `.cargo/config.toml` supplies
+PATH-resolved target-specific compiler names on macOS so malformed generic Zig
+compiler variables do not reach cc-rs. CI also tests the declared Rust 1.97
 MSRV and runs a bounded benchmark correctness smoke.
 
 For release qualification, prefer the single mechanism that also checks a
@@ -187,7 +199,7 @@ scripts/check-release-readiness.sh
 When changing GitHub workflows or shell scripts, additionally run:
 
 ```bash
-actionlint .github/workflows/*.yml
+scripts/check-workflows.sh
 shellcheck scripts/*.sh
 ```
 

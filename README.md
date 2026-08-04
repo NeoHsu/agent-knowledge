@@ -337,7 +337,7 @@ recovery, security, and supply-chain gates before a release is qualified.
 | Agent behavior | A versioned cross-agent trace protocol checks routing, target preflight, approval order, and fail-closed decisions; a retained live matrix is still pending |
 | Capacity canary | **100,000 memories** passed retained correctness checks; it is not a support claim or SLA |
 | Release targets | macOS arm64/x86_64, Linux arm64/x86_64, and Windows x86_64 |
-| Supply chain | Archive checksums, checksum-verifying installers, CycloneDX 1.5 SBOM, and GitHub build-provenance attestations |
+| Supply chain | Archive checksums, execution of exact native archive binaries, checksum-verifying installers, CycloneDX 1.5 SBOM, and GitHub build-provenance attestations |
 
 Benchmark numbers are machine- and protocol-specific, not cross-machine
 latency guarantees. Synthetic retrieval scores prevent known behavior from
@@ -469,13 +469,20 @@ mem contract
 mem schema list
 mem operation list
 mem operation inspect -- query "release notes"
+mem --read-only query "release notes"
 ```
 
 - `mem contract` reports CLI, store, workflow, graph, bundle, and schema
   versions without reading or creating a store.
 - `mem schema list|print` exposes the bundled JSON Schemas.
-- `mem operation list|inspect` exposes stable leaf operation IDs and classified
-  store, filesystem, and network effects.
+- `mem operation list|inspect` exposes stable leaf operation IDs, classified
+  store/filesystem/network effects, and whether the exact invocation is allowed
+  under read-only enforcement.
+- `--read-only` (or `MNEMARK_READ_ONLY=true`) blocks commands with durable,
+  rebuildable, output-file, or network side effects before they acquire a write
+  lock or mutate state.
+- `--max-bytes <N>` (or `MNEMARK_MAX_BYTES`) rejects rendered stdout larger
+  than the configured bound before writing a partial response.
 - `--json-errors` emits versioned typed error envelopes while successful output
   remains unchanged.
 
@@ -523,7 +530,7 @@ threat model and reporting path.
 | Operate a real store | [Production Operations](docs/production.md) and [Security](SECURITY.md) |
 | Integrate automation | [Compatibility](docs/compatibility.md), [JSON Contracts](docs/json-schemas.md), and the [CLI Guide](skills/mnemark/references/cli-guide.md) |
 | Evaluate retrieval or agent policy | [Retrieval and Agent Behavior Evaluation](docs/evaluation.md) |
-| Change the repository | [Agent Reference](docs/agent-reference.md), [Development](docs/development.md), and [Architecture Decisions](docs/adr/README.md) |
+| Change the repository | [Agent Reference](docs/agent-reference.md), [Architecture](docs/architecture.md), [Development](docs/development.md), and [Architecture Decisions](docs/adr/README.md) |
 
 The complete task-oriented index lives in the
 [Documentation Hub](docs/README.md).
@@ -536,12 +543,7 @@ a platform entrypoint; the agent reference is canonical.
 
 ```bash
 mise install
-cargo fmt --all -- --check
-env -u CC -u CXX cargo clippy --workspace --locked --all-targets -- -D warnings
-env -u CC -u CXX cargo test --workspace --locked
-cargo audit --deny warnings
-cargo deny check
-python3 scripts/check-dependency-policy.py
+mise run check:pr
 ```
 
 For source-only CLI runs:

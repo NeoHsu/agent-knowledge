@@ -61,8 +61,17 @@ agent wiring, append `--dry-run` to the exact planned setup command;
 source checkout, use `--home <runtime-store>` unless the user explicitly
 intends that checkout to be the active store.
 
-All commands accept the global `--json-errors` flag. Successful output is
-unchanged; Clap parse failures and runtime failures become one JSON object on
+All commands accept the global `--json-errors`, `--read-only`, and
+`--max-bytes <N>` flags. `--max-bytes` can also be set with
+`MNEMARK_MAX_BYTES`; it fails before writing stdout when the rendered response
+would exceed the bound, avoiding partial machine output. `--read-only` can also
+be set with `MNEMARK_READ_ONLY=true`; it rejects exact
+invocations classified with durable, rebuildable, output-file, or network side
+effects before mutation. Dry-run and ordinary read commands remain available,
+while commands such as `query --repair-index`, focused prime, graph reads that
+may rebuild, workflow scaffolding, setup writes, and sync are blocked. Use this
+as a process-level safety belt, not as a substitute for target verification.
+Successful output is unchanged; Clap parse failures and runtime failures become one JSON object on
 stderr with stable `status`, `contract_version`, `code`, `message`, `exit_code`,
 and `retryable` fields. Classified codes distinguish compatibility, conflict,
 integrity, not-found, safety, usage, version mismatch, and committed-index
@@ -134,7 +143,8 @@ mem operation inspect --store-exists -- sync --push
 binary on `PATH`; they do not discover or initialize a store. `operation list`
 derives stable dot-separated leaf IDs from the Clap command tree.
 `operation inspect` reparses the supplied invocation and reports its exact
-store access, durable/rebuildable/output-file writes, and network effect.
+store access, durable/rebuildable/output-file writes, network effect, and
+`allowed_in_read_only` decision.
 Conditional flags such as `query --touch`, focused priming, and `sync --push`
 are therefore classified from the real invocation instead of a parallel prose
 registry. Pass `--store-exists` when the effect depends on an existing store.
