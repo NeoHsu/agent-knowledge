@@ -100,6 +100,7 @@ pub(crate) fn cmd_operation(command: OperationCommand) -> Result<()> {
                 "contract_version": CLI_OUTPUT_CONTRACT_VERSION,
                 "operation": path.join("."),
                 "store_exists": args.store_exists,
+                "allowed_in_read_only": !effect.mutates(),
                 "effect": effect
             }))
         }

@@ -61,6 +61,13 @@ impl CommandEffect {
         self
     }
 
+    pub(crate) const fn mutates(self) -> bool {
+        self.durable_write
+            || self.rebuildable_write
+            || self.output_file_write
+            || !matches!(self.network, NetworkEffect::None)
+    }
+
     pub(crate) fn classify(command: &Command, store_exists: bool) -> Self {
         let read_only = || Self::new(StoreAccess::ReadOnly);
         let exclusive = || Self::new(StoreAccess::ExclusiveLock);
@@ -293,6 +300,11 @@ mod tests {
         for (args, store_exists, expected) in cases {
             assert_eq!(effect(args, *store_exists), *expected, "{}", args.join(" "));
         }
+
+        assert!(!effect(&["mem", "query", "anything"], true).mutates());
+        assert!(effect(&["mem", "save", "--name", "x", "--content", "y"], true).mutates());
+        assert!(!effect(&["mem", "setup", "pi", "--dry-run"], false).mutates());
+        assert!(effect(&["mem", "setup", "pi"], false).mutates());
     }
 
     #[test]

@@ -8,6 +8,7 @@
     "contract_version": { "const": 1 },
     "operation": { "type": "string" },
     "store_exists": { "type": "boolean" },
+    "allowed_in_read_only": { "type": "boolean" },
     "effect": {
       "type": "object",
       "required": ["store_access", "durable_write", "rebuildable_write", "output_file_write", "network"],

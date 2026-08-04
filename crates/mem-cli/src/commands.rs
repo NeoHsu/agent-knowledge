@@ -1,5 +1,7 @@
 use std::fs;
+use std::io::{Result as IoResult, Write, stderr, stdout};
 use std::path::Path;
+use std::sync::OnceLock;
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{Duration, Utc};
@@ -20,6 +22,8 @@ use mem_core::workflow as workflow_core;
 pub(crate) const CLI_OUTPUT_CONTRACT_VERSION: u64 = 1;
 pub(crate) const BENCHMARK_REPORT_CONTRACT_VERSION: u64 = 1;
 
+static MAX_OUTPUT_BYTES: OnceLock<Option<u64>> = OnceLock::new();
+
 pub(crate) enum Output {
     Json,
     Text,
@@ -28,33 +32,62 @@ pub(crate) enum Output {
 impl Output {
     pub(crate) fn json<T: Serialize + ?Sized>(self, value: &T) -> Result<()> {
         match self {
-            Self::Json => {
-                println!("{}", serde_json::to_string(value)?);
-                Ok(())
-            }
+            Self::Json => write_stdout_line(&serde_json::to_string(value)?),
             Self::Text => bail!("cannot render JSON value as text"),
         }
     }
 
     pub(crate) fn json_pretty<T: Serialize + ?Sized>(self, value: &T) -> Result<()> {
         match self {
-            Self::Json => {
-                println!("{}", serde_json::to_string_pretty(value)?);
-                Ok(())
-            }
+            Self::Json => write_stdout_line(&serde_json::to_string_pretty(value)?),
             Self::Text => bail!("cannot render JSON value as text"),
         }
     }
 
     pub(crate) fn text(self, value: impl AsRef<str>) -> Result<()> {
         match self {
-            Self::Text => {
-                print!("{}", value.as_ref());
-                Ok(())
-            }
+            Self::Text => write_stdout(value.as_ref()),
             Self::Json => bail!("cannot render text value as JSON"),
         }
     }
+}
+
+pub(crate) fn configure_output_limit(max_bytes: Option<u64>) -> Result<()> {
+    MAX_OUTPUT_BYTES
+        .set(max_bytes)
+        .map_err(|_| anyhow!("output limit was configured more than once"))
+}
+
+fn ensure_output_size(bytes: usize) -> Result<()> {
+    let rendered = u64::try_from(bytes).unwrap_or(u64::MAX);
+    if let Some(limit) = MAX_OUTPUT_BYTES.get().copied().flatten()
+        && rendered > limit
+    {
+        bail!("rendered output is {rendered} bytes, exceeding --max-bytes {limit}");
+    }
+    Ok(())
+}
+
+fn write_stdout(value: &str) -> Result<()> {
+    ensure_output_size(value.len())?;
+    let mut stdout = stdout().lock();
+    stdout.write_all(value.as_bytes())?;
+    stdout.flush()?;
+    Ok(())
+}
+
+fn write_stdout_line(value: &str) -> Result<()> {
+    ensure_output_size(value.len().saturating_add(1))?;
+    let mut stdout = stdout().lock();
+    writeln!(stdout, "{value}")?;
+    stdout.flush()?;
+    Ok(())
+}
+
+pub(crate) fn write_stderr_line(value: &str) -> IoResult<()> {
+    let mut stderr = stderr().lock();
+    writeln!(stderr, "{value}")?;
+    stderr.flush()
 }
 
 pub(crate) fn print_json<T: Serialize + ?Sized>(value: &T) -> Result<()> {

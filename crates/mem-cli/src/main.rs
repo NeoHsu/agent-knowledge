@@ -34,19 +34,17 @@ fn main() -> ExitCode {
         Err(error) => {
             let exit_code = u8::try_from(error.exit_code()).unwrap_or(2);
             if wants_json_errors {
-                eprintln!(
-                    "{}",
-                    json!({
-                        "status": "error",
-                        "contract_version": CLI_OUTPUT_CONTRACT_VERSION,
-                        "code": "cli_parse_error",
-                        "message": safe_error_message(error.to_string()),
-                        "exit_code": exit_code,
-                        "retryable": false
-                    })
-                );
+                let response = json!({
+                    "status": "error",
+                    "contract_version": CLI_OUTPUT_CONTRACT_VERSION,
+                    "code": "cli_parse_error",
+                    "message": safe_error_message(error.to_string()),
+                    "exit_code": exit_code,
+                    "retryable": false
+                });
+                let _ = write_stderr_line(&response.to_string());
             } else {
-                let _ = error.print();
+                let _ = write_stderr_line(&safe_error_message(error.to_string()));
             }
             return ExitCode::from(exit_code);
         }
@@ -54,6 +52,7 @@ fn main() -> ExitCode {
     let json_errors = cli.json_errors;
     match run(cli) {
         Ok(()) => ExitCode::SUCCESS,
+        Err(error) if is_broken_pipe(&error) => ExitCode::SUCCESS,
         Err(error) => {
             let structured = error.downcast_ref::<StructuredCommandError>();
             let core = error.downcast_ref::<MnemarkError>();
@@ -65,33 +64,67 @@ fn main() -> ExitCode {
                 || core.map_or("command_failed", |error| error.code().as_str()),
                 StructuredCommandError::code,
             );
-            let message = format!("{error:#}");
+            let message = safe_error_message(format!("{error:#}"));
             if json_errors {
                 let mut response = json!({
                     "status": "error",
                     "contract_version": CLI_OUTPUT_CONTRACT_VERSION,
                     "code": code,
-                    "message": safe_error_message(message),
+                    "message": message,
                     "exit_code": exit_code,
                     "retryable": structured.is_some_and(StructuredCommandError::retryable)
                 });
                 if let Some(structured) = structured {
                     response["details"] = structured.details().clone();
                 }
-                eprintln!("{response}");
+                let _ = write_stderr_line(&response.to_string());
             } else {
-                eprintln!("Error: {message}");
+                let _ = write_stderr_line(&format!("Error: {message}"));
             }
             ExitCode::from(exit_code)
         }
     }
 }
 
+fn is_broken_pipe(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|error| error.kind() == std::io::ErrorKind::BrokenPipe)
+    })
+}
+
 fn safe_error_message(message: String) -> String {
-    strip_secrets(&message).unwrap_or_else(|_| "error details could not be rendered safely".into())
+    let redacted = strip_secrets(&message)
+        .unwrap_or_else(|_| "error details could not be rendered safely".into());
+    terminal_safe(&redacted)
+}
+
+fn terminal_safe(value: &str) -> String {
+    let mut output = String::with_capacity(value.len());
+    for character in value.chars() {
+        if character.is_control()
+            || matches!(
+                character,
+                '\u{061c}'
+                    | '\u{200e}'
+                    | '\u{200f}'
+                    | '\u{202a}'..='\u{202e}'
+                    | '\u{2066}'..='\u{2069}'
+            )
+        {
+            output.extend(character.escape_default());
+        } else {
+            output.push(character);
+        }
+    }
+    output
 }
 
 fn run(cli: Cli) -> Result<()> {
+    configure_output_limit(cli.max_bytes)?;
+    let read_only = cli.read_only;
+
     // Contract, schema, and operation introspection remain available even when
     // user/store configuration is missing or malformed.
     let command = match cli.command {
@@ -106,6 +139,12 @@ fn run(cli: Cli) -> Result<()> {
     // --home or MNEMARK_HOME.
     let app = App::discover_runtime_with_home(cli.home.as_deref())?;
     let effect = CommandEffect::classify(&command, app.db_path.exists());
+    if read_only && effect.mutates() {
+        return Err(mem_core::error::safety_violation(format!(
+            "command is blocked by --read-only; classified effects: {}",
+            serde_json::to_string(&effect)?
+        )));
+    }
 
     match effect.store_access {
         StoreAccess::ExclusiveLock => with_lock(&app, || dispatch(&app, command)),
@@ -157,4 +196,17 @@ fn dispatch(app: &App, command: Command) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn terminal_error_text_escapes_controls_and_bidi_overrides() {
+        assert_eq!(
+            terminal_safe("safe\n\u{1b}[31m\u{202e}txt"),
+            r"safe\n\u{1b}[31m\u{202e}txt"
+        );
+    }
 }

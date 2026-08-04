@@ -28,6 +28,22 @@ pub(crate) struct Cli {
         help = "Emit machine-readable JSON errors on stderr"
     )]
     pub(crate) json_errors: bool,
+    #[arg(
+        long,
+        global = true,
+        env = "MNEMARK_READ_ONLY",
+        help = "Block commands with store, filesystem, or network side effects"
+    )]
+    pub(crate) read_only: bool,
+    #[arg(
+        long,
+        global = true,
+        env = "MNEMARK_MAX_BYTES",
+        value_name = "BYTES",
+        value_parser = clap::value_parser!(u64).range(1..=268_435_456),
+        help = "Fail before writing stdout when rendered output exceeds this byte limit"
+    )]
+    pub(crate) max_bytes: Option<u64>,
     #[command(subcommand)]
     pub(crate) command: Command,
 }
