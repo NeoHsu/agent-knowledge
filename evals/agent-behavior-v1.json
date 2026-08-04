@@ -10,13 +10,13 @@
         {
           "id": "contract-is-first-command",
           "type": "first_command",
-          "matcher": {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.9.0"]}
+          "matcher": {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]}
         },
         {
           "id": "contract-precedes-prime",
           "type": "ordered",
           "matchers": [
-            {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.9.0"]},
+            {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]},
             {"kind": "command", "argv_prefix": ["mem", "--read-only", "prime"]}
           ]
         },
@@ -56,7 +56,7 @@
         {
           "id": "contract-is-first-command",
           "type": "first_command",
-          "matcher": {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.9.0"]}
+          "matcher": {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]}
         },
         {
           "id": "target-and-dedupe-before-save",
@@ -101,7 +101,7 @@
         {
           "id": "contract-is-first-command",
           "type": "first_command",
-          "matcher": {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.9.0"]}
+          "matcher": {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]}
         },
         {
           "id": "uses-read-only-memory-query",
@@ -127,7 +127,7 @@
           "id": "target-visible-before-focused-prime",
           "type": "ordered",
           "matchers": [
-            {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.9.0"]},
+            {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]},
             {"kind": "command", "argv_prefix": ["mem", "operation", "inspect"], "argv_contains": ["--store-exists", "--", "prime", "--focus"]},
             {"kind": "command", "argv_prefix": ["mem", "config", "show"]},
             {"kind": "command", "argv_prefix": ["mem", "prime"], "argv_contains": ["--focus"]}
@@ -249,7 +249,7 @@
           "id": "inspects-conditional-effect-first",
           "type": "ordered",
           "matchers": [
-            {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.9.0"]},
+            {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]},
             {"kind": "command", "argv_prefix": ["mem", "operation", "inspect"], "argv_contains": ["--store-exists", "--", "query", "--repair-index"]}
           ]
         },

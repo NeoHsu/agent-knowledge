@@ -1,165 +1,134 @@
 # Production Operations
 
-This guide defines the production boundary for mnemark's local-first CLI model
-and the evidence required before publishing or deploying a release. It does not
-turn mnemark into a hosted or multi-tenant service.
+This runbook applies to mnemark's local-first production profile. It does not
+qualify mnemark as a hosted or multi-tenant service. Security controls and
+limitations are authoritative in [`SECURITY.md`](../SECURITY.md); runtime store
+discovery and command effects are authoritative in
+[`runtime-model.md`](runtime-model.md).
 
 ## Supported production profile
 
-The qualified profile is one operating-system user per active store, with the
-store outside the source checkout and on a private, access-controlled volume.
-SQLite is the durable source of truth; Tantivy and materialized graph tables are
-rebuildable. Git remotes and bundle transfer channels must be private and
-trusted.
+- one operating-system user per active store;
+- store outside source checkouts on a private, access-controlled volume;
+- SQLite as durable truth, with rebuildable Tantivy and graph projections;
+- private, trusted Git remotes and bundle channels;
+- up to 10,000 memories per supported store;
+- full-disk or private-volume encryption when confidentiality matters.
 
-macOS and Linux enforce store directory mode `0700` and database/lock mode
-`0600`. Windows builds are tested, but automatic current-user-only ACL
-verification is not yet available; `mem doctor` reports that limitation. Apply
-and verify a user-only ACL with platform tooling before using sensitive data on
-Windows.
+Unix installs enforce store mode `0700` and database/lock mode `0600`. Windows
+builds cannot automatically prove an equivalent current-user-only ACL; apply
+and verify one with platform tooling before storing sensitive material.
 
-The retained release baseline covers up to 10,000 memories. Larger stores are a
-capacity canary until a clean benchmark report is reviewed and the documented
-support boundary is raised.
-
-Stores and bundles are plaintext. Use full-disk or private-volume encryption
-when confidentiality matters. Bundle SHA-256 values detect corruption but do
-not authenticate the publisher; accept bundles only through a trusted channel.
+Stores and bundles are plaintext. Bundle hashes detect corruption, not
+publisher identity.
 
 ## Release qualification
 
-Run the complete gate from a clean worktree:
+A source revision is not qualified merely because local checks pass. The exact
+commit must have a unique version, a dated changelog release heading, complete
+local gate evidence, and successful remote artifact jobs.
+
+From a clean worktree, with `<version>` replaced by the workspace version:
 
 ```bash
-scripts/check-release-readiness.sh
+python3 scripts/check-release-metadata.py --release-tag v<version>
+RELEASE_TAG=v<version> scripts/check-release-readiness.sh
 ```
 
-The gate verifies:
+The gate rejects reuse of a tag that points to another commit. It verifies:
 
-- workspace, lockfile, changelog, documentation, exact CLI/skill manifest, and
-  intended release-tag version alignment, including refusal to reuse a tag
-  from another commit;
-- a clean Git worktree;
-- formatting, Clippy, all tests, RustSec audit, cargo-deny license/source/ban
-  policy, and independent dependency provenance metadata;
-- release build version, deterministic retrieval-quality cases,
-  installed-binary smoke checks, and a recovery drill;
-- bounded 100/1,000-memory benchmark correctness and portable catastrophic-
-  regression guardrails.
+- workspace, lockfile, skill, schema, documentation, changelog, and tag
+  alignment;
+- clean Git state;
+- formatting, Clippy, tests, RustSec, cargo-deny, dependency provenance, secret
+  scans, and workflow checks;
+- release build, binary size, retrieval fixtures, smoke tests, and recovery;
+- bounded 100/1,000-memory correctness and catastrophic-regression guardrails.
 
-It writes retained local benchmark evidence below `target/`. A dirty development
-checkout can exercise the same pipeline without qualifying a release:
+A bounded development exercise may use:
 
 ```bash
 ALLOW_DIRTY=1 scripts/check-release-readiness.sh
 ```
 
-Use that override only while developing. For a clean qualification the gate
-derives `v<workspace-version>`; set `RELEASE_TAG` explicitly when the intended
-tag uses the accepted unprefixed form or needs to be made visible in logs:
+That override cannot qualify a release. Neither can `REQUIRE_AUX_TOOLS=0` or
+`RUN_BENCHMARK=0`.
 
-```bash
-RELEASE_TAG=v0.9.0 scripts/check-release-readiness.sh
-```
-
-The gate requires local `shellcheck` and `actionlint` by default.
-`REQUIRE_AUX_TOOLS=0` or `RUN_BENCHMARK=0` is available for a bounded debugging
-iteration, but a run that skips either check does not provide complete release
-evidence.
-
-## Machine-readable compatibility
-
-Automation should pin a compatible `mem` version and inspect the supported
-contracts before operating a store:
-
-```bash
-mem contract
-mem --version
-```
-
-`mem contract` does not read or initialize a store. It reports the CLI output
-contract, published schema names, and current store, bundle, workflow, graph,
-and benchmark-report schema versions. `mem schema list|print` exposes the exact
-bundled JSON Schemas; `mem operation inspect` reports parsed command effects.
-JSON error envelopes carry `contract_version`; required fields remain stable
-within a minor release, while additive fields are allowed. Before 1.0, breaking
-machine-interface changes require a documented minor release.
+Before publication, retain remote macOS, Linux, and Windows archive execution,
+checksums, installers, SBOM, and provenance evidence for the exact commit.
+Publishing, pushing, tagging, deploying, and replacing a production store remain
+explicit operator actions.
 
 ## Deployment checklist
 
-1. Install a platform release asset only after verifying its published
-   checksum; verify build provenance and inspect the CycloneDX 1.5 SBOM when
-   qualifying a deployment.
-2. Run `mem --version` and use documentation from the matching Git tag.
-3. Resolve the intended store before creating or changing it:
+1. Install a platform artifact only after checksum and provenance verification.
+2. Run `mem --version` and use documentation from the matching tag.
+3. Inspect the store target:
 
    ```bash
    mem config show
    ```
 
-4. Create a new store only when intended, then verify it:
+4. Initialize only a new intended path, then verify it:
 
    ```bash
    mem init
    mem doctor
    ```
 
-5. Keep the store private, configure a private Git remote only if sync is
-   required, and use `mem sync --dry-run` before every sync.
-6. Create and inspect a recovery bundle before migration or significant
-   operational changes.
-7. Run `mem audit`, `mem artifact check`, and a query/prime smoke appropriate to
-   the deployment.
+5. Keep the store private; configure a private Git remote only if required.
+6. Run `mem sync --dry-run` before every sync and never push without approval.
+7. Create and inspect a recovery bundle before migration or material operational
+   changes.
+8. Run `mem audit`, `mem artifact check`, and representative query/prime checks.
 
-## Backup and recovery
+## Backup and restore
 
-Do not copy a live `memory.db` directly. Create an online snapshot bundle:
+Never copy a live `memory.db` directly. Create an online SQLite snapshot bundle:
 
 ```bash
 mem bundle export mnemark-store.tgz
 mem bundle inspect mnemark-store.tgz
 ```
 
-Restore into an isolated empty target first:
+Restore into a fresh isolated directory first:
 
 ```bash
-mem --home /tmp/mnemark-restore bundle import mnemark-store.tgz
-mem --home /tmp/mnemark-restore doctor
-mem --home /tmp/mnemark-restore query --format compact
-mem --home /tmp/mnemark-restore artifact check
+restore_home="$(mktemp -d "${TMPDIR:-/tmp}/mnemark-restore.XXXXXX")"
+trap 'rm -rf -- "$restore_home"' EXIT
+mem --home "$restore_home" bundle import mnemark-store.tgz
+mem --home "$restore_home" doctor
+mem --home "$restore_home" --read-only query "restore verification" --format compact
+mem --home "$restore_home" --read-only artifact check
 ```
 
-The repository recovery drill performs this flow with memory, workflow-run,
-artifact, graph, checksum-corruption, migration-dry-run, and local-sync
-assertions:
+The repository recovery drill exercises memory, workflow-run, artifact, graph,
+checksum-corruption, migration-preview, and local-sync assertions without
+network access:
 
 ```bash
 scripts/build-release.sh
 scripts/recovery-drill.sh
 ```
 
-The drill uses temporary stores, performs no network access, and deletes its
-fixtures on exit.
-
 ## Upgrade and rollback
 
 1. Stop concurrent agent writes and run `mem config show`.
 2. Export and inspect a bundle.
-3. Preview schema work:
+3. Preview migration:
 
    ```bash
    mem migrate --dry-run
    ```
 
-4. If migration is required, retain the reported backup and run `mem migrate`.
+4. If required, retain the reported backup and run `mem migrate` after approval.
 5. Run `mem doctor`, `mem audit`, a representative query, focused prime when
    graph context is used, and `mem artifact check`.
-6. On failure, stop using the store. Restore the pre-upgrade bundle or the
-   migration backup into an isolated path, verify it, then switch the configured
-   store root back deliberately.
+6. On failure, stop writes. Restore the pre-upgrade bundle or migration backup
+   into an isolated path, verify it, then deliberately switch the configured
+   root.
 
-There is no automatic downgrade path. Use export/import or restore a backup
-created by the older compatible release.
+There is no automatic downgrade path.
 
 ## Incident checklist
 
@@ -167,13 +136,10 @@ created by the older compatible release.
 - **Graph dirty:** inspect `mem graph stats`, then run `mem graph rebuild`.
 - **Unexpected schema object or integrity failure:** stop writes and restore a
   trusted backup; do not bypass validation.
-- **Rejected sync pull:** retain the reported error and pre-pull checkout; do
-  not force Git state over the semantic rollback.
-- **Bundle checksum failure:** reject the archive and reacquire it through the
-  trusted channel.
-- **Suspected secret exposure:** remove access to the store/bundle, rotate the
-  external credential at its issuer, then remove or explicitly redact affected
-  durable records and Git history.
-
-Do not publish, push, deploy, or replace a production store solely because a
-local gate succeeded. Those remain explicit operator actions.
+- **Rejected sync pull:** retain the error and pre-pull checkout; do not force
+  Git state over semantic rollback.
+- **Bundle checksum failure:** reject and reacquire the archive through a trusted
+  channel.
+- **Suspected secret exposure:** remove access, rotate the external credential at
+  its issuer, then remove or explicitly redact affected durable records and Git
+  history.

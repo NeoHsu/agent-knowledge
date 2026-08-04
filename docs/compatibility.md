@@ -1,62 +1,82 @@
-# Compatibility policy
+# Compatibility Policy
 
-| Surface | Source version 0.9 target |
+This policy describes source version `0.10.0`. It is an unreleased source
+contract until a `v0.10.0` tag and its artifacts exist; published-release
+evidence applies only to the exact tagged commit.
+
+| Surface | Version 0.10 contract |
 | --- | --- |
 | Deployment model | One operating-system user per active local/private store |
 | Rust MSRV | 1.97.1 |
 | Source-build C toolchain | Platform-native Clang/GCC/MSVC; Zig is not required |
-| Release platforms | macOS arm64/x86_64, Linux arm64/x86_64, Windows x86_64 |
+| Release targets | macOS arm64/x86_64, Linux arm64/x86_64, Windows x86_64 |
 | Store | SQLite schema v5; explicit backup-first migration |
 | JSON errors | `contract_version: 1`; required fields stable within a minor release |
-| Bundle | format v2 with per-file SHA-256 integrity manifest |
+| Bundle | Format v2 with per-file SHA-256 integrity manifest |
 | Workflow | `schema_version: 1` |
 | Graph export/ingest | `schema_version: 1` |
 | Agent skill | Exact release lockstep with the `mem` CLI |
-| Capacity baseline | Up to 10,000 memories; 100,000 is a reviewed canary only |
+| Capacity | Up to 10,000 memories; 100,000 remains a development canary |
 
 ## Stability rules
 
-Before 1.0, breaking machine-interface changes may occur only in a documented
-minor release with changelog and migration guidance. Patch and minor releases
-may add commands, optional fields, schema documents, error details, or enum
-values. They must not silently remove required fields, make a read command
-initialize or migrate a store, bypass an explicit global read-only gate, make
-sync push by default, or reinterpret an
-existing persisted schema without an explicit version transition.
+Before 1.0, a breaking machine-interface change requires a documented minor
+release with migration guidance. Patch and minor releases may add commands,
+optional fields, schema documents, error details, or enum values. They must not:
 
-Successful JSON shapes are versioned by the schema named by `mem schema list`.
-Consumers should ignore additive object fields. `mem contract` remains
-store-independent and reports the versions supported by the running binary.
+- remove required fields silently;
+- make a read initialize or migrate a store;
+- bypass global read-only enforcement;
+- make sync push by default;
+- reinterpret persisted data without an explicit version transition.
+
+Consumers must ignore additive object fields and use machine control fields
+instead of parsing human messages. `mem contract` is store-independent and
+reports the versions supported by the running binary.
 
 ## CLI and documentation
 
-`docs/cli-surface.txt` snapshots every public command, positional, flag,
-default, and conflict. Repository tests parse runnable `mem` examples against
-Clap. A CLI change therefore requires regenerating the snapshot and updating
-the skill/topic documentation in the same change.
+`docs/cli-surface.txt` is generated from Clap and records every public command,
+positional, flag, default, and conflict. Repository tests parse runnable `mem`
+examples against the same Clap surface. A CLI change therefore updates the
+snapshot, topic docs, and bundled skill together.
+
+Regenerate the surface with:
+
+```bash
+mise run contract:update
+```
+
+Verify all documentation contracts with:
+
+```bash
+mise run contract:check
+```
 
 ## Agent skill lockstep
 
-The released `skills/mnemark` package and CLI share exact SemVer. The
-machine-readable `skills/mnemark/compatibility.json`, Cargo packages, lockfile,
-SKILL.md gate, tag, and tag-pinned install docs must agree. CI verifies them.
+The CLI, Cargo packages, lockfile, bundled skill, compatibility manifest,
+schema fixture, behavior traces, tagged install docs, and release tag share
+exact SemVer.
 
-Before store discovery or a memory operation, an installed skill runs once per
-session:
+Unless a session hook already injected context after running the same checks, an
+installed skill starts with:
 
 ```bash
-mem --json-errors contract --skill-version 0.9.0
+mem --json-errors contract --skill-version 0.10.0
+mem --read-only prime
 ```
 
-A mismatch exits 2 with `code: version_mismatch`, emits remediation without
-reading configuration or store data, and never updates agent files without
-approval. `mem setup <platform>` remains the preferred installation path
-because the binary embeds and verifies its exact skill files.
+A mismatch exits 2 with `code: version_mismatch` before configuration or store
+data is read. `mem setup <platform>` is preferred because the binary embeds the
+matching skill and installs policy version 6 plus guarded session wiring.
 
 ## Persisted-data compatibility
 
-Reads never migrate. Older stores require `mem migrate --dry-run` followed by
-an explicitly approved `mem migrate`; newer stores are rejected. Bundle import
+Reads never migrate. Older stores require `mem migrate --dry-run` followed by an
+explicitly approved `mem migrate`; newer stores are rejected. Bundle import
 validates format, SQLite schema, integrity, hashes, secrets, and durable side
-state before destination mutation. There is no automatic downgrade path: use a
-verified pre-upgrade bundle or migration backup.
+state before destination mutation.
+
+There is no automatic downgrade. Restore a verified pre-upgrade bundle or
+migration backup created by the older compatible release.

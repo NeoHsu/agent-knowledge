@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.9.0/docs/schemas/prime-v1.schema.json",
+  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.10.0/docs/schemas/prime-v1.schema.json",
   "title": "mnemark prime JSON v1",
   "type": "object",
   "required": ["status", "root"],

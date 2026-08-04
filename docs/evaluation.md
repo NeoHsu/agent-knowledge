@@ -42,7 +42,7 @@ platform, Git state, every returned ranking, and these bounded metrics:
 | Prime case pass rate | Plain/focused prime cases containing the required sections or graph nodes |
 | Graph evidence rate | Required relations returned with non-empty evidence |
 
-The fixture currently requires every metric to equal `1.0`. These synthetic
+The checked-in fixture requires every metric to equal `1.0`. These synthetic
 scores prevent known behavior from regressing; they are not a claim that every
 real query is useful. A ranking change should update implementation or fixture
 expectations with a written relevance rationale, never merely lower a threshold
@@ -83,8 +83,8 @@ coverage. A shortened response example has this shape:
     "platform": "pi",
     "model": "provider/model-version",
     "adapter": "harness-version-or-commit",
-    "skill_version": "0.9.0",
-    "cli_version": "0.9.0"
+    "skill_version": "0.10.0",
+    "cli_version": "0.10.0"
   },
   "traces": [
     {
@@ -133,11 +133,13 @@ Claude Code, Codex, Pi, Gemini CLI, or OpenCode evidence.
 
 ## Evidence status
 
-| Evidence | Current status |
+Status observed from this source tree on 2026-08-04:
+
+| Evidence | Status |
 | --- | --- |
-| Retrieval fixture | Required in stable CI and native release verification |
+| Retrieval fixture | Configured in stable CI and native release verification |
 | Synthetic agent trace | Checked by Python tests as evaluator self-test |
-| Retained live agent matrix | Not yet published; each entry must pass with `--require-live` |
+| Retained live agent matrix | Not published; each entry must pass with `--require-live` |
 
 Until a live matrix is retained, documentation may claim that mnemark ships an
 agent behavior **evaluation protocol**, not that every supported agent has

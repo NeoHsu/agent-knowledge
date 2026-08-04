@@ -1,31 +1,31 @@
 # Getting Started
 
-This guide covers installing `mem`, initializing the active knowledge store,
-saving the first memory, and installing the bundled mnemark skill. It describes
-source version `0.9.0`; the `latest` installer can lag behind `main`, so verify
-the installed version and use documentation from the matching Git tag when
-necessary. For workflow runbooks, artifacts, bundles, and retrospectives, see
-[Workflows](workflows.md).
+This guide covers installing `mem`, initializing one private store, saving and
+querying the first memory, and wiring one coding agent. It documents source version `0.10.0`,
+which is not the published `v0.9.0` source. Verify
+`mem --version` and use the matching Git tag when exact released behavior
+matters.
 
-## Install
+## Install a verified release
 
-Install `mem` from release assets instead of building from Rust source.
+Prefer release assets over building from source.
 
-macOS / Linux:
+### macOS and Linux
 
 ```bash
 base=https://github.com/NeoHsu/mnemark/releases/latest/download
 curl --proto '=https' --tlsv1.2 -LsSfO "$base/mnemark-installer.sh"
 curl --proto '=https' --tlsv1.2 -LsSfO "$base/mnemark-installer.sh.sha256"
-if command -v sha256sum >/dev/null 2>&1; then
+if command -v sha256sum >/dev/null; then
   sha256sum -c mnemark-installer.sh.sha256
 else
   shasum -a 256 -c mnemark-installer.sh.sha256
 fi
 sh mnemark-installer.sh
+mem --version
 ```
 
-Windows PowerShell:
+### Windows PowerShell
 
 ```powershell
 $base = "https://github.com/NeoHsu/mnemark/releases/latest/download"
@@ -35,9 +35,10 @@ $expected = ((Get-Content -Raw mnemark-installer.ps1.sha256).Trim() -split '\s+'
 $actual = (Get-FileHash -Algorithm SHA256 mnemark-installer.ps1).Hash.ToLowerInvariant()
 if ($actual -ne $expected) { throw "installer checksum verification failed" }
 & .\mnemark-installer.ps1
+mem --version
 ```
 
-Direct release downloads are available on the [latest release page](https://github.com/NeoHsu/mnemark/releases/latest):
+Direct archives are published for:
 
 | Platform | Asset |
 | --- | --- |
@@ -47,26 +48,30 @@ Direct release downloads are available on the [latest release page](https://gith
 | x64 Linux | `mnemark-x86_64-unknown-linux-gnu.tar.xz` |
 | x64 Windows | `mnemark-x86_64-pc-windows-msvc.zip` |
 
-Checksums are published next to release assets. Releases also include a
-CycloneDX 1.5 SBOM and GitHub build-provenance attestations. Confirm the
-installed contract before continuing:
+Release assets include checksum sidecars, a CycloneDX SBOM, and GitHub
+build-provenance attestations. Verify the archive attestation when GitHub CLI is
+available:
 
 ```bash
-mem --version
+archive=mnemark-aarch64-apple-darwin.tar.xz
+gh attestation verify "$archive" --repo NeoHsu/mnemark
 ```
 
-## Initialize the store
+## Initialize the intended store
 
-After `mem` is on `PATH`:
+Store discovery is `--home → MNEMARK_HOME → user config → ~/.mnemark`. A source
+checkout is never selected implicitly. Inspect the resolved target before the
+first write:
 
 ```bash
 mem config show
-mem init  # only after confirming the reported root
+mem init
+mem doctor
 ```
 
-Runtime memory data is not stored in this source repository. See the
-[Runtime Model](runtime-model.md) for active store discovery, config priority,
-and runtime files.
+Do not initialize a path until the reported root is the private location you
+intend to use. Stores and bundles are plaintext; read
+[Security](../SECURITY.md) before storing sensitive private material.
 
 ## Save and query the first memory
 
@@ -77,101 +82,93 @@ mem save \
   --scope global \
   --source manual \
   --user-confirmed \
-  --tags '["style"]' \
-  --content "不要使用 emoji"
-mem query "emoji"
-mem query "name:no_emoji" --raw-query
+  --tags '["style:no-emoji"]' \
+  --content 'Trigger: user-facing replies. Action: do not use emoji. Why: explicit preference.'
+mem --read-only query "emoji" --format compact
+mem --read-only query "name:no_emoji" --raw-query
 ```
 
-Supported memory types are:
+Supported memory types are `user`, `feedback`, `project`, `reference`,
+`preference`, and `workflow`. Manual provenance requires `--user-confirmed`.
+Secret-like values reject writes unless explicit destructive redaction is
+approved.
 
-- `user`
-- `feedback`
-- `project`
-- `reference`
-- `preference`
-- `workflow`
+## Wire one coding agent
 
-Query is read-only and no-touch by default. Use `--touch` only when access
-telemetry is intentional. Secret-like values reject writes unless
-`--redact-secrets` is explicit; manual provenance requires `--user-confirmed`.
-The store and bundle formats are plaintext, so review the
-[Security Policy](../SECURITY.md) before storing private data.
-
-## Wire mnemark into your coding agents
-
-One command per agent platform installs the user-level integration: a policy
-block, the shared bundled skill where supported, and a session-start hook
-running `mem prime` where the platform provides one:
+Setup writes user-level policy and skill files; Claude Code setup may also edit
+its session hook. Preview one platform before applying it:
 
 ```bash
 mem setup list
-mem setup claude-code
-mem setup codex
+mem setup pi --dry-run
 mem setup pi
-mem setup gemini-cli
-mem setup opencode
-mem doctor
+mem doctor --platform pi
 ```
 
-Setup is user-level and never selects the current repository implicitly. The
-bundled skill is installed once at `~/.agents/skills/mnemark`; Pi reads it
-directly, while Claude Code and Codex use per-skill symlinks. `mem doctor`
-verifies the policy, shared files, links, and session-start wiring. Platform
-setup commands are idempotent and support `--dry-run`; `setup list` is already
-read-only. Project knowledge is selected logically through memory scopes such
-as `project:<owner>/<repo>`. See the capability matrix and explicit path
-overrides in the
-[CLI Guide](../skills/mnemark/references/cli-guide.md).
+Replace `pi` with one platform you actually use:
 
-For multi-machine durability, make the store its own git repository and use
-`mem sync`. Change to the `root` reported by `mem config show`; the default is
-shown below:
+- `claude-code`
+- `codex`
+- `gemini-cli`
+- `opencode`
+
+Setup is idempotent. The shared skill is installed under
+`~/.agents/skills/mnemark`; supported platform skill directories use that copy
+directly or through a managed symlink. Gemini CLI and OpenCode receive policy
+prose but do not expose a supported skill directory.
+
+The installed policy and Claude Code hook enforce this session sequence unless
+a delimited context block was already injected:
+
+```bash
+mem --json-errors contract --skill-version 0.10.0
+mem --read-only prime
+```
+
+A compatibility or prime failure is reported once; agents continue with memory
+unavailable and must not initialize, migrate, read, or write the store.
+
+## Configure private Git sync
+
+The store must be its own Git repository, never an enclosing source repository.
+Change to the `root` reported by `mem config show`, then configure a private
+remote:
 
 ```bash
 cd ~/.mnemark
 git init -b main
 git remote add origin <private-repo-url>
 mem sync --dry-run
-mem sync          # local checkpoint + fetch/merge, no push
-mem sync --push   # only after explicit approval
+mem sync
 ```
 
-## Install the mnemark skill manually
+A normal sync creates a local checkpoint and fetches only when a remote exists.
+Pass `--push` only after explicit approval.
 
-`mem setup <platform>` installs the bundled skill into the shared Agent Skills
-directory and links platform-specific skill paths when needed. Alternatively,
-install from the repository with the open agent skills CLI:
+## Manual skill installation
+
+`mem setup <platform>` is preferred because it installs the exact embedded
+skill. After `v0.10.0` is published, an equivalent manual install is:
 
 ```bash
-npx skills add https://github.com/NeoHsu/mnemark/tree/v0.9.0 --skill mnemark
-mem --json-errors contract --skill-version 0.9.0
+npx skills add https://github.com/NeoHsu/mnemark/tree/v0.10.0 --skill mnemark
+mem --json-errors contract --skill-version 0.10.0
 ```
 
-Released skills and CLIs use exact SemVer lockstep. Proceed only when
-`skill_compatibility.compatible` is `true`; a mismatch fails before store
-configuration or memory data is read.
-
-For a local checkout during development:
+For source development before that tag exists:
 
 ```bash
 npx skills add ./skills/mnemark
 ```
 
-Use `--global` to install for all projects, or `--agent <name>` when targeting
-a specific supported agent. After installation, agents can save, query, audit,
-merge, bundle, and run retrospectives through the local `mem` CLI.
-
 ## Next steps
 
 | Need | Read |
 | --- | --- |
-| Documentation index | [Documentation Hub](./README.md) |
-| Complete command reference | [CLI Guide](../skills/mnemark/references/cli-guide.md) |
-| Machine-readable JSON contracts | [JSON Contracts](json-schemas.md) |
-| Supported compatibility guarantees | [Compatibility Policy](compatibility.md) |
-| Runtime store and portability | [Runtime Model](runtime-model.md) |
-| Security boundaries and safe deployment | [`SECURITY.md`](../SECURITY.md) |
-| Workflow runbooks, artifacts, bundles, retrospectives | [Workflows](workflows.md) |
+| System overview | [Overview](overview.md) |
+| Store discovery and effects | [Runtime Model](runtime-model.md) |
+| Workflow, artifacts, bundles, and retrospectives | [Workflows](workflows.md) |
+| Graph retrieval | [Graph Memory](graph-memory.md) |
+| Machine contracts | [Compatibility](compatibility.md) and [JSON Contracts](json-schemas.md) |
+| Backup, recovery, and incidents | [Production Operations](production.md) |
 | Repository development | [Development](development.md) |
-| Production deployment, recovery, and rollback | [Production Operations](production.md) |

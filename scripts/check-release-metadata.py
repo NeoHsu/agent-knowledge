@@ -8,6 +8,11 @@ import pathlib
 import re
 import subprocess
 import sys
+import tomllib
+
+RELEASE_DATE_RE = re.compile(
+    r"(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])"
+)
 
 VERSIONED_DOCS = (
     "README.md",
@@ -63,24 +68,52 @@ def main() -> int:
         version = version_match.group(1)
 
     lock = read_text(root / "Cargo.lock", errors)
+    try:
+        lock_packages = tomllib.loads(lock).get("package", [])
+    except tomllib.TOMLDecodeError as error:
+        errors.append(f"Cargo.lock is not valid TOML: {error}")
+        lock_packages = []
     for package in WORKSPACE_PACKAGES:
-        pattern = rf'(?ms)^\[\[package\]\]\nname = "{re.escape(package)}"\nversion = "([^"]+)"'
-        match = re.search(pattern, lock)
-        if match is None:
+        versions = {
+            entry.get("version")
+            for entry in lock_packages
+            if entry.get("name") == package and isinstance(entry.get("version"), str)
+        }
+        if not versions:
             errors.append(f"Cargo.lock is missing workspace package {package}")
-        elif match.group(1) != version:
-            errors.append(f"Cargo.lock {package} version {match.group(1)} != {version}")
+        elif versions != {version}:
+            errors.append(
+                f"Cargo.lock {package} versions {sorted(versions)!r} != {version}"
+            )
 
+    tag = args.release_tag.strip()
     changelog = read_text(root / "CHANGELOG.md", errors)
-    if version and f"## [{version}]" not in changelog:
-        errors.append(f"CHANGELOG.md has no release heading for {version}")
+    release_prefix = f"## [{version}] - "
+    release_heading = bool(
+        version
+        and any(
+            line.startswith(release_prefix)
+            and RELEASE_DATE_RE.fullmatch(line.removeprefix(release_prefix))
+            for line in changelog.splitlines()
+        )
+    )
+    unreleased_heading = f"## [Unreleased — {version}]"
+    if tag and not release_heading:
+        errors.append(
+            f"CHANGELOG.md has no dated release heading for {version}; "
+            f"replace {unreleased_heading!r} before qualification"
+        )
+    elif version and not release_heading and unreleased_heading not in changelog:
+        errors.append(
+            f"CHANGELOG.md has neither a dated {version} release heading nor "
+            f"{unreleased_heading!r}"
+        )
 
     expected = f"source version `{version}`"
     for relative in VERSIONED_DOCS:
         if expected not in read_text(root / relative, errors):
             errors.append(f"{relative} does not identify {expected}")
 
-    tag = args.release_tag.strip()
     if tag and tag not in (version, f"v{version}"):
         errors.append(f"release tag {tag!r} does not match {version} or v{version}")
 

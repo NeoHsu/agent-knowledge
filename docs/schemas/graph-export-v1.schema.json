@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.9.0/docs/schemas/graph-export-v1.schema.json",
+  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.10.0/docs/schemas/graph-export-v1.schema.json",
   "title": "mnemark graph export v1",
   "type": "object",
   "required": ["schema_version", "nodes", "edges"],

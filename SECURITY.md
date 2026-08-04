@@ -47,13 +47,16 @@ The local operating-system account is trusted. A process with permission to modi
 - Sync isolation, disabled hooks/signing/prompts, semantic database conflict merge, pulled-state validation, and rollback.
 - Unix store permissions hardened to directory mode `0700` and file mode `0600`.
 - Release CI vulnerability audit, cargo-deny license/source policy, crates.io provenance/license-metadata checks, Git history/current-source secret scans, native tests and execution of the exact archived binaries, SHA-pinned Actions, a pinned SHA-256 gate for the CC-CEDICT build input, checksum-verifying installers, CycloneDX 1.5 SBOMs, and build-provenance attestations.
-- GitHub secret scanning, push protection, and private vulnerability reporting on the public source repository.
+GitHub-hosted controls such as secret scanning, push protection, and private
+vulnerability reporting are repository settings rather than binary guarantees.
+Verify them in GitHub Settings before relying on them; the source-controlled
+history/current-tree gitleaks gate remains independently reproducible.
 
 ## Explicit limitations
 
 ### No at-rest encryption
 
-Version 0.9 does not use SQLCipher and does not encrypt bundle archives. Protect runtime stores and bundles with full-disk encryption, an encrypted private volume, or an encrypted transport appropriate to the host. Do not place a store in a public repository or shared directory.
+Source version 0.10 does not use SQLCipher and does not encrypt bundle archives. Protect runtime stores and bundles with full-disk encryption, an encrypted private volume, or an encrypted transport appropriate to the host. Do not place a store in a public repository or shared directory.
 
 Adding database encryption requires a separately reviewed key-management design covering non-interactive agents, recovery, rotation, migration, bundle export, and multi-machine sync. It must not silently derive a key from weak local metadata.
 
@@ -67,23 +70,32 @@ Pattern scanning catches common credentials and rejects or explicitly redacts th
 
 ### Platform permissions differ
 
-Unix modes are enforced and checked. On Windows, the current implementation cannot prove an equivalent user-only ACL and `mem doctor` reports that limitation. Restrict the store and bundle locations to the current user with Windows ACL tooling.
+Unix modes are enforced and checked. Source version 0.10 cannot prove an equivalent user-only ACL on Windows, and `mem doctor` reports that limitation. Restrict store and bundle locations to the current user with Windows ACL tooling.
 
 ### No workflow sandbox
 
 `mem workflow` discovers, renders, validates, and records runbooks; it never executes commands. The calling agent remains responsible for repository instructions, user confirmation, and operating-system sandboxing.
 
-## Safe deployment checklist
+## Safe operation
 
-1. Keep the runtime store outside the source checkout and verify it with `mem config show`.
-2. Use a private, access-controlled store directory and private Git remote.
-3. Run `mem doctor` after installation, migration, or machine changes.
-4. Run `mem sync --dry-run` before sync and use `--push` only after explicit approval.
-5. Inspect bundle provenance before import; avoid `--allow-unverified` unless a legacy bundle is independently trusted.
-6. Use full-disk or volume encryption when memory confidentiality matters.
-7. Back up the store before migration and retain a verified bundle or SQLite snapshot.
-8. Before deploying a release, run the clean-tree gate and recovery procedure in
-   [`docs/production.md`](docs/production.md); retain its benchmark and restore evidence.
+Follow the canonical deployment, backup, restore, upgrade, rollback, and
+incident checklist in [`docs/production.md`](docs/production.md). This document
+owns the threat model and limitations; the production guide owns operational
+procedures.
+
+## Control verification
+
+A security-boundary or release-workflow change invalidates the implemented-control
+list. Re-verify source-controlled controls with:
+
+```bash
+mise run security
+python3 scripts/check-dependency-policy.py
+scripts/check-workflows.sh
+```
+
+GitHub-hosted settings require a maintainer review in repository Settings; do
+not infer them from source files alone.
 
 ## Reporting a vulnerability
 

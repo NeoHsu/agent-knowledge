@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.9.0/docs/schemas/operation-inspect-v1.schema.json",
+  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.10.0/docs/schemas/operation-inspect-v1.schema.json",
   "title": "mnemark parsed operation effects v1",
   "type": "object",
   "required": ["contract_version", "operation", "store_exists", "effect"],

@@ -18,7 +18,7 @@ but it is not tracked in this project. Schema-v5 stores reject unexpected
 application tables, views, or trigger definitions; do not extend the runtime
 database with ad hoc DDL. Keep real memory databases in a private data repo, a
 local `MNEMARK_HOME`, or a `knowledge_home` configured in
-`~/.config/mnemark/config.toml`. Version 0.9 does not provide SQLCipher
+`~/.config/mnemark/config.toml`. Source version 0.10 does not provide SQLCipher
 encryption: it relies on 0700/0600 Unix permissions, default-reject secret
 scanning, trusted bundle transport, and a private Git remote. Use full-disk
 encryption when at-rest encryption is required. See
@@ -46,9 +46,12 @@ in the binary. Source checkouts and executable parents are never selected
 implicitly, for any command. Use `mem config show` as the pre-write target
 verification gate.
 
-Plain `mem prime` and ordinary `mem query` are read-only. Query only records
-access when `--touch` is explicit and never repairs a stale index unless
-`--repair-index` is explicit. `mem prime --focus ...`, graph explain/path/query/
+Plain `mem prime` and ordinary `mem query` are logically read-only. Installed
+agent policy and the managed session hook additionally run the exact CLI/skill
+compatibility gate and invoke plain priming as `mem --read-only prime`, making
+the effect boundary process-enforced. Query only records access when `--touch`
+is explicit and never repairs a stale index unless `--repair-index` is explicit.
+`mem prime --focus ...`, graph explain/path/query/
 export, `graph candidates --unlinked`, and workflow graph-context reads take the
 store lock because they may rebuild dirty or missing graph materialization.
 `prime --focus` and `graph query` can also repair a stale Tantivy index before

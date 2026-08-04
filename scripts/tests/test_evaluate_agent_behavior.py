@@ -164,7 +164,7 @@ class AgentBehaviorEvaluationTests(unittest.TestCase):
                     "--json-errors",
                     "contract",
                     "--skill-version",
-                    "0.9.0",
+                    "0.10.0",
                 ],
             }
         )

@@ -84,6 +84,27 @@ class ReleaseMetadataCheckerTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn(f"release metadata ok: {VERSION}", completed.stdout)
 
+    def test_accepts_unreleased_target_without_release_tag(self) -> None:
+        (self.root / "CHANGELOG.md").write_text(
+            f"## [Unreleased — {VERSION}]\n", encoding="utf-8"
+        )
+        self.git("add", "CHANGELOG.md")
+        self.git("commit", "-m", "prepare next version")
+
+        completed = self.run_checker()
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_rejects_unreleased_target_for_release_qualification(self) -> None:
+        (self.root / "CHANGELOG.md").write_text(
+            f"## [Unreleased — {VERSION}]\n", encoding="utf-8"
+        )
+        self.git("add", "CHANGELOG.md")
+        self.git("commit", "-m", "prepare next version")
+
+        completed = self.run_checker("--release-tag", f"v{VERSION}")
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("no dated release heading", completed.stderr)
+
     def test_rejects_dirty_tree_and_mismatched_tag(self) -> None:
         (self.root / "untracked.txt").write_text("dirty", encoding="utf-8")
         completed = self.run_checker("--release-tag", "v9.9.9")

@@ -2,10 +2,13 @@
 
 All notable changes to mnemark are documented here.
 
-## [Unreleased]
+## [Unreleased — 0.10.0]
 
-### Added
+### 0.10.0 target — Added
 
+- Added compatibility-first, process-read-only session priming to installed
+  policy version 6 and the managed Claude Code hook, including upgrades from
+  prior managed policy and hook versions.
 - Added global `--read-only` / `MNEMARK_READ_ONLY` enforcement backed by the
   exact command-effect classifier, plus read-only decisions in operation
   inspection.
@@ -16,8 +19,11 @@ All notable changes to mnemark are documented here.
 - Added bounded-memory stdout spooling plus injected atomic replacement,
   rollback, semantic ingest, and semantic merge regression coverage.
 
-### Changed
+### 0.10.0 target — Changed
 
+- Bumped the unreleased source contract to 0.10.0 so it no longer reuses the
+  published `v0.9.0` identity, and consolidated documentation around canonical
+  validation, freshness, evidence, and operational ownership.
 - Hardened CLI output against broken pipes and terminal control-sequence
   injection while retaining secret redaction, and added an optional
   `--max-bytes` / `MNEMARK_MAX_BYTES` pre-write stdout bound.
@@ -44,7 +50,7 @@ All notable changes to mnemark are documented here.
 > The original `v0.9.0` GitHub Release was withdrawn; this entry describes the
 > final reissued build.
 
-### Added
+### 0.9.0 — Added
 
 - Added a versioned, isolated retrieval-quality fixture and release-binary gate
   covering exact, fuzzy, multilingual, trust/scope, plain-prime, and
@@ -79,7 +85,7 @@ All notable changes to mnemark are documented here.
   details when a durable SQLite write commits before its Tantivy update fails,
   allowing automation to repair the index without blindly retrying the write.
 
-### Changed
+### 0.9.0 — Changed
 
 - JSON error envelopes now include the additive `retryable` field. Typed core
   failures map consistently to usage, compatibility, safety, not-found,
@@ -110,13 +116,13 @@ All notable changes to mnemark are documented here.
   stats, audit, garbage-collection, and rendering modules without changing SQL
   or output formats.
 
-### Fixed
+### 0.9.0 — Fixed
 
 - Release verification now installs Python 3.13 before running the
   `tomllib`-based version checker, and CLI-surface drift tests normalize CRLF
   checkouts on Windows.
 
-### Performance
+### 0.9.0 — Performance
 
 - Reduced the Tantivy writer memory budget from 50 MB to 20 MB after
   interleaved 10,000-memory trials cut import peak RSS from about 210 MiB to
@@ -127,7 +133,7 @@ All notable changes to mnemark are documented here.
 
 ## [0.8.0] - 2026-07-17
 
-### Added
+### 0.8.0 — Added
 
 - Added `mem contract` for store-independent machine-interface and persisted-
   format version discovery, plus versioned JSON error envelopes and contract
@@ -136,7 +142,7 @@ All notable changes to mnemark are documented here.
   portable benchmark guardrails, retained CI benchmark artifacts, and a
   production deployment/recovery/rollback guide.
 
-### Changed
+### 0.8.0 — Changed
 
 - Release smoke verification now restores and validates memory, workflow-run,
   artifact, graph, and local-sync state; release CI also gates bounded benchmark
@@ -144,7 +150,7 @@ All notable changes to mnemark are documented here.
 - Workflow validation now rejects unsupported schema versions instead of only
   checking that `schema_version` is present.
 
-### Fixed
+### 0.8.0 — Fixed
 
 - Native macOS release builds ignore the known inherited Mise Zig `CC`/`CXX`
   override that passes an incompatible architecture spelling to cc-rs.
@@ -154,13 +160,13 @@ All notable changes to mnemark are documented here.
 
 ## [0.7.0] - 2026-07-14
 
-### Breaking changes
+### 0.7.0 — Breaking changes
 
 - Removed the former `setup agent-policy` subcommand. Agent setup is now
   exclusively user-level through `mem setup <platform>`; project knowledge
   remains logically scoped inside the active runtime store.
 
-### Added
+### 0.7.0 — Added
 
 - Added the global `--json-errors` automation contract for machine-readable
   Clap and runtime failures, with secret-like values redacted from the JSON
@@ -172,7 +178,7 @@ All notable changes to mnemark are documented here.
 - Added `mem import --summary-only` for bounded-memory large-import reporting
   without changing the default per-item result contract.
 
-### Changed
+### 0.7.0 — Changed
 
 - Unified ordinary saves and bulk imports behind one
   trust/provenance/version/changelog persistence pipeline.
@@ -185,7 +191,7 @@ All notable changes to mnemark are documented here.
 - Removed the dormant hidden `query --semantic` branch; lexical/fuzzy search
   and evidence-bearing graph retrieval remain the explicit non-RAG interfaces.
 
-### Fixed
+### 0.7.0 — Fixed
 
 - Fuzzy queries now use the same multilingual analyzer as indexing instead of
   splitting only on whitespace, so Chinese and mixed-language typo searches
@@ -194,7 +200,7 @@ All notable changes to mnemark are documented here.
   unavailable on non-Unix platforms instead of silently omitting the permission
   boundary.
 
-### Performance
+### 0.7.0 — Performance
 
 - Graph materialization reuses cached SQLite node/edge upsert statements,
   reducing repeated SQL preparation during full rebuilds.
@@ -206,7 +212,7 @@ All notable changes to mnemark are documented here.
 
 ## [0.6.0] - 2026-07-13
 
-### Breaking changes
+### 0.6.0 — Breaking changes
 
 - Store discovery is runtime-only: `--home`, `MNEMARK_HOME`, user config,
   then `~/.mnemark`. Source checkouts are never selected implicitly.
@@ -223,7 +229,7 @@ All notable changes to mnemark are documented here.
 - Memory names are unique within scope (`UNIQUE(scope, name)`); use
   `id:<memory-id>` for explicit ID resolution.
 
-### Added
+### 0.6.0 — Added
 
 - Schema v5 store UUIDs, durable event UIDs, origin metadata,
   manual-confirmation provenance, strict RFC3339 lifecycle fields, Unix
@@ -246,7 +252,7 @@ All notable changes to mnemark are documented here.
 - Configurable bounded query candidate retrieval through
   `[query].candidate_limit` (default 10,000; range 200-100,000).
 
-### Fixed
+### 0.6.0 — Fixed
 
 - Expired, deleted, and superseded memories no longer leak into ordinary query,
   prime, workflow, retro, or graph recall.

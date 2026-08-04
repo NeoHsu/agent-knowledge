@@ -1,6 +1,6 @@
 # mem CLI Guide
 
-This guide documents source version `0.9.0`. `mem setup <platform>` installs the
+This guide documents source version `0.10.0`. `mem setup <platform>` installs the
 skill embedded in that binary, so skill and CLI remain exactly matched. Run the
 compatibility gate in `SKILL.md` before using this guide; the `latest` installer
 may lag behind source `main`.
@@ -94,7 +94,7 @@ mem graph reject --help
 store. They expose the contract implemented by the exact binary on `PATH`:
 
 ```bash
-mem --json-errors contract --skill-version 0.9.0
+mem --json-errors contract --skill-version 0.10.0
 mem schema print error-v1
 mem operation inspect -- query "release safety"
 mem operation inspect --store-exists -- sync --push
@@ -342,8 +342,8 @@ do not pipe unverified network content into a shell. Install the skill from the
 same exact tag and rerun the compatibility gate:
 
 ```bash
-npx skills add https://github.com/NeoHsu/mnemark/tree/v0.9.0 --skill mnemark
-mem --json-errors contract --skill-version 0.9.0
+npx skills add https://github.com/NeoHsu/mnemark/tree/v0.10.0 --skill mnemark
+mem --json-errors contract --skill-version 0.10.0
 mem --version
 ```
 

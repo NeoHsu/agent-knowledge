@@ -1,7 +1,7 @@
 {
   "status": "ok",
   "contract_version": 1,
-  "cli_version": "0.9.0",
+  "cli_version": "0.10.0",
   "compatibility": {
     "successful_json": "required fields remain compatible within a minor release; additive fields are allowed",
     "json_errors": "versioned by contract_version and emitted only with --json-errors",

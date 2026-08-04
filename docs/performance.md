@@ -1,44 +1,43 @@
-# Performance Baseline
+# Performance and Capacity Evidence
 
-`mnemark` includes an isolated, deterministic scale benchmark for regression and
-production-canary work:
+This page documents the benchmark protocol, the published release baseline, and
+the retained capacity canary for source version `0.10.0`. Benchmark evidence is
+bound to the exact binary, commit, protocol hash, platform, and report; it is not
+a cross-machine service-level objective.
+
+## Benchmark protocol
+
+Build an optimized binary and run an isolated deterministic benchmark:
 
 ```bash
 scripts/build-release.sh
 REPORT_FILE=/tmp/mnemark-benchmark.json scripts/benchmark-scale.sh
 ```
 
-The benchmark generates mixed Prime-visible and reference memories, creates a
-fresh store for every import sample, and measures the optimized release binary.
-Import uses `--summary-only` so the measurement covers validation, persistence,
-and indexing rather than retaining a per-item response report. Interactive
-operations receive one warmup by default and run in separate processes while
-retaining the operating system cache. Scale order is seed-randomized. Every
-measured operation also runs a correctness assertion.
+The benchmark creates temporary stores, imports mixed Prime-visible and
+reference memories, and measures the optimized binary. Every operation includes
+a correctness assertion. Stores are removed on exit and no network access is
+required.
 
-Protocol v2 reports median, median absolute deviation (MAD), a deterministic
-bootstrap 95% interval for the median, p95 (only with at least 20 samples),
-minimum, maximum, peak RSS, and input/output sizes. The JSON report additionally
-records:
+Protocol v2 records:
 
 - platform, Rust and Python versions;
 - Git commit and dirty state;
-- binary and combined benchmark-protocol SHA-256 hashes;
+- binary and combined protocol SHA-256 hashes;
 - seed, execution order, exact sample schedule, run counts, and cache model;
-- database, Tantivy index, and bundle sizes;
-- bundle snapshot, validation, hashing, archive, and install stage timings.
+- median, median absolute deviation, deterministic bootstrap interval, and p95
+  when at least 20 samples exist;
+- peak RSS and database, index, bundle, input, and output sizes;
+- bundle snapshot, validation, hashing, archive, and install-stage timings.
 
-Bundle export overlaps hashing with gzip archive creation after all snapshot and
-secret/schema validation succeeds. Consequently, protocol-v2 `hash_ms` and
-`archive_ms` are concurrent wall-clock observations and must not be summed to
+Bundle hashing overlaps gzip archive creation after validation. `hash_ms` and
+`archive_ms` are concurrent wall-clock observations and must not be added to
 infer total latency.
 
-CI retains the JSON and CSV reports and applies
-`scripts/benchmark-guardrails.json` through
-`scripts/check-benchmark-regression.py`. These generous, cross-runner limits
-catch catastrophic regressions and hangs; they are not performance claims.
-For meaningful regression percentages, run both binaries in one seeded,
-sample-level interleaved process, then compare the paired reports:
+Portable guardrails in `scripts/benchmark-guardrails.json` catch hangs and
+catastrophic regressions; they are intentionally too broad for speedup claims.
+For a meaningful percentage comparison, execute both binaries in one seeded,
+interleaved run:
 
 ```bash
 REPORT_FILE=/tmp/candidate-v2.json \
@@ -56,67 +55,30 @@ python3 scripts/check-benchmark-regression.py \
 ```
 
 The checker requires matching platform, protocol hash, run counts, peer binary
-identity, and sample schedule. Override platform or protocol checks only for an
-explicitly reviewed methodology comparison. Schema-v1 reports remain valid as
-historical evidence, but cannot be directly compared with protocol v2.
+identity, and sample schedule. Schema-v1 reports remain historical data but are
+not directly comparable with protocol v2.
 
-## Retained v0.9 optimization comparison
+## Published release baseline: v0.8.0
 
-The final 0.9 development binary at clean commit
-`4d156ac2b2bdbb04cb40b0432df8519341c3ab31` was compared directly with clean
-pre-optimization commit `2e2be697cd92da1735984632263717044678e7e4` in
-one protocol-v2, sample-level interleaved 10,000-memory run. The baseline used
-the 50 MB Tantivy writer and sequential bundle hashing/archive stages; the
-candidate used the 20 MB writer and overlapped bundle stages. Both reports have
-the same protocol hash and sample schedule, passed correctness assertions and
-portable guardrails, and passed the 35% same-platform regression gate.
-
-| Measurement | Pre-optimization | Final candidate | Change |
-| --- | ---: | ---: | ---: |
-| Import median (5 fresh stores) | 1,577.44 ms | 1,548.60 ms | -1.8% |
-| Import peak RSS | 209.33 MiB | 119.12 MiB | -43.1% |
-| Bundle export median (5 runs) | 2,140.12 ms | 1,756.21 ms | -17.9% |
-| Graph rebuild median (5 runs) | 2,261.82 ms | 2,279.14 ms | +0.8% |
-
-The two-sample Query and Prime observations are correctness smoke only, not
-latency claims. This comparison verifies the combined final branch; the writer
-and bundle experiments were also profiled independently before their changes
-were committed.
-
-Retained paired evidence:
-
-- [`benchmarks/v0.9.0-dev-pre-optimization-10k-macos-arm64.json`](benchmarks/v0.9.0-dev-pre-optimization-10k-macos-arm64.json)
-  (SHA-256 `41f04d76eabd501523458fc4b0bbcb956cfd64a67b2d5aebd61de0c1fe7af32f`);
-- [`benchmarks/v0.9.0-dev-pre-optimization-10k-macos-arm64.csv`](benchmarks/v0.9.0-dev-pre-optimization-10k-macos-arm64.csv)
-  (SHA-256 `3ba006cb18940f1fdd4752239b29e9399fac58645cd267d78d25e4608e295863`);
-- [`benchmarks/v0.9.0-dev-optimized-10k-macos-arm64.json`](benchmarks/v0.9.0-dev-optimized-10k-macos-arm64.json)
-  (SHA-256 `eb7117a92fbbe8c1e4893cce5bd1d06ac722687800414b1f0be688a1d4199cfb`);
-- [`benchmarks/v0.9.0-dev-optimized-10k-macos-arm64.csv`](benchmarks/v0.9.0-dev-optimized-10k-macos-arm64.csv)
-  (SHA-256 `22ed651219882c2a5c94ab0d4d2bf3495f73763a9fddcb8ae55ed6eea09889ee`).
-
-## Release baseline: v0.8.0
-
-This branch identifies source version `0.9.0`. The retained v0.8.0 release
-baseline was captured on 2026-07-28 from clean tag
-`v0.8.0`, commit `c7026b0ace895a404e327d8245565f67c3b4c265`. It used an
-optimized local build of `mem` version `0.8.0` on an Apple M2 Max (`arm64`),
-macOS 26.5.2, Rust 1.97.0, Python 3.14.6, and bundled SQLite.
+The retained published baseline was captured on 2026-07-28 from clean tag
+`v0.8.0`, commit `c7026b0ace895a404e327d8245565f67c3b4c265`, on an Apple
+M2 Max (`arm64`) with macOS 26.5.2, Rust 1.97.0, Python 3.14.6, and bundled
+SQLite.
 
 Reproducibility identifiers:
 
-- binary SHA-256: `390f2dd191378c49c7b1e4eafdeffec66b4f29763d4d4849f986a80a6685e70a`;
-- benchmark script SHA-256: `dc951fc976d114dd365d0f9624bb00adec88eed336e0b954e2077b7402e904c9`;
-- JSON report: [`benchmarks/v0.8.0-macos-arm64.json`](benchmarks/v0.8.0-macos-arm64.json)
-  (SHA-256 `c441c67b56377f6215bd03487b00ef954c8d172a82edd0ae4b981a7ed2e50bf2`);
-- CSV summary: [`benchmarks/v0.8.0-macos-arm64.csv`](benchmarks/v0.8.0-macos-arm64.csv)
-  (SHA-256 `37dcb23277bcdc5fc961fa8ad61f4368a6dc1658c3e105627d913e1722d1bc86`).
+- binary SHA-256:
+  `390f2dd191378c49c7b1e4eafdeffec66b4f29763d4d4849f986a80a6685e70a`;
+- benchmark script SHA-256:
+  `dc951fc976d114dd365d0f9624bb00adec88eed336e0b954e2077b7402e904c9`;
+- [JSON report](benchmarks/v0.8.0-macos-arm64.json), SHA-256
+  `c441c67b56377f6215bd03487b00ef954c8d172a82edd0ae4b981a7ed2e50bf2`;
+- [CSV summary](benchmarks/v0.8.0-macos-arm64.csv), SHA-256
+  `37dcb23277bcdc5fc961fa8ad61f4368a6dc1658c3e105627d913e1722d1bc86`.
 
-The seed was 42 and the randomized execution order was 1,000, 100, then 10,000.
-Interactive operations used one warmup and 20 measured processes, retaining the
-operating-system cache. Import used three fresh initialized stores per scale.
-Graph rebuild and bundle export used three repetitions against the same
-populated store. Consequently, p95 is reported only for Query and Prime; the
-three-sample maintenance figures are medians, not tail-latency claims.
+The seed was 42 and execution order was 1,000, 100, then 10,000. Query and Prime
+used one warmup and 20 measured processes. Import used three fresh stores per
+scale; graph rebuild and bundle export used three repetitions.
 
 | N | Import p50 | Query p50/p95 | Prime p50/p95 | Graph p50 | Bundle p50 |
 | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -124,62 +86,25 @@ three-sample maintenance figures are medians, not tail-latency claims.
 | 1,000 | 477 ms | 30.66 / 34.91 ms | 33.00 / 35.43 ms | 308.07 ms | 323.84 ms |
 | 10,000 | 2.124 s | 44.96 / 54.04 ms | 54.77 / 68.23 ms | 3.203 s | 2.910 s |
 
-The retained JSON is the source of truth for unrounded values, minimum/maximum,
-peak RSS, database/index/bundle sizes, and bundle stage timings. These numbers
-are a same-platform regression baseline, not a cross-machine service-level
-objective or a claim about every workload.
+The JSON report is authoritative for unrounded values, uncertainty, peak RSS,
+and artifact sizes. The 10,000-memory row supports the documented capacity
+boundary; it does not guarantee latency on another machine or workload.
 
-### Post-refactor regression verification
+## Excluded development comparison
 
-After the behavior-preserving refactors, clean development commit
-`0b5a6e4813cc41c4143d116ca876d07b11b39384` was benchmarked twice with the
-same platform, script hash, seed, cache model, and run counts. Both reports
-passed the portable guardrails and the 35% same-baseline catastrophic gate.
-Differences above 10% were reviewed rather than treated as speedups: the same
-candidate binary varied by 52.8% between its two three-sample 1,000-row import
-medians, while all candidate medians still passed the gate. This confirms that
-small-sample host variance is material and that the clean tagged report above,
-not an untagged development run, remains the published baseline.
+The repository retains v0.9 development reports under `docs/benchmarks/`, but
+the pre-optimization report names source commit
+`2e2be697cd92da1735984632263717044678e7e4`, which is not reachable from the
+repository or public GitHub commit API as observed on 2026-08-04. Those reports
+remain historical artifacts but are excluded from published speedup and source
+reproducibility claims.
 
-## Historical baseline: v0.6.0
+This exclusion does not affect the published v0.8.0 baseline or the independent
+100,000-memory capacity canary below.
 
-Measured on 2026-07-13 with an Apple M2 Max (`arm64`), macOS 26.5.1, Rust
-1.97.0, bundled SQLite, and the optimized release profile. Interactive values
-are p50 / p95 across 20 samples; maintenance values are p50 across 5 fresh or
-repeated samples as appropriate. The retained report uses the published v0.6.0
-macOS arm64 artifact from clean release commit
-`b84506e41544a68f27b2984d5e1f6ded70b756db`; its binary SHA-256 is
-`a7abfb929d9e1e60c1069c7e65aaf711af9de69cf99580ad2ed982171404ba13`.
+## Bounded CI and development runs
 
-| N | Import | Query p50/p95 | Prime p50/p95 | Graph | Bundle |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | 284 ms | 30 / 33 ms | 44 / 52 ms | 64 ms | 63 ms |
-| 1,000 | 476 ms | 30 / 35 ms | 45 / 54 ms | 528 ms | 324 ms |
-| 10,000 | 2.29 s | 50 / 58 ms | 76 / 81 ms | 5.29 s | 2.96 s |
-
-These figures are a regression baseline, not a cross-machine service-level
-objective. Query uses bounded adaptive over-fetch and deterministic reranking;
-`[query].candidate_limit` defaults to 10,000 and may be set from 200 to 100,000
-when a larger lexical candidate set is required. Prime applies ranking and
-`LIMIT` in SQLite. Import uses 500-row chunk transactions with per-item
-savepoints. Bundle export includes an online SQLite snapshot, full durable-field
-secret scan, artifact validation, SHA-256, and gzip archive creation.
-
-The earlier benchmark populated only `reference` memories, so its Prime numbers
-did not exercise Prime retrieval and are invalid as a Prime scale baseline.
-
-The old and corrected tables are not a controlled A/B comparison: the dataset,
-sample count, warmup/cache protocol, correctness checks, and benchmark script
-changed in addition to the binary. Their differences provide historical
-context, not an exact percentage attributable to code changes. A controlled
-speedup claim would require both binaries to run the same corrected dataset and
-protocol in interleaved repetitions. The transaction and bundle-stage profiles
-still independently identify the optimized bottlenecks without relying on the
-cross-table ratio.
-
-## CI smoke and bounded development runs
-
-For bounded development or CI runs:
+Use fewer samples only for correctness-oriented iteration:
 
 ```bash
 SCALES="100 1000" \
@@ -190,16 +115,14 @@ REPORT_FILE=/tmp/mnemark-benchmark.json \
 scripts/benchmark-scale.sh
 ```
 
-Run the default 20 interactive and five maintenance samples before publishing
-performance claims. Keep the JSON report so results remain tied to a binary
-hash, commit, exact schedule, uncertainty summary, cache model, and correctness
-checks. The candidate binary must match `Cargo.toml`; an older paired binary is
-identified separately by `BASELINE_MEM_BIN` and `BASELINE_GIT_COMMIT`. Use
-`ALLOW_VERSION_MISMATCH=1` only when the candidate mismatch is intentional.
+Before publishing a performance claim, run the default 20 interactive and five
+maintenance samples and retain the JSON report. `ALLOW_VERSION_MISMATCH=1` is
+reserved for an intentional candidate-version experiment and must not qualify a
+release.
 
 ## 100,000-memory capacity canary
 
-A 100,000-memory capacity canary is available but is not a release baseline:
+The development canary is not a supported release baseline:
 
 ```bash
 SCALES="100000" \
@@ -213,21 +136,10 @@ python3 scripts/check-benchmark-regression.py \
   --guardrails scripts/benchmark-guardrails.json
 ```
 
-The 100,000-memory entries are deliberately broad catastrophic guardrails for
-manual canaries, not CI performance targets. Do not infer a service-level
-objective from that canary. Review correctness,
-peak RSS, database/index size, graph rebuild latency, and bundle stages before
-raising the documented support envelope beyond 10,000 memories.
-
-### Retained 100,000-memory development canary
-
 A clean development build from commit
-`d67823742da2a650b31cce81fdcf498dce615f86` was exercised on 2026-07-29 on
-the same Apple M2 Max platform with Rust 1.97.0 and Python 3.14.6. The binary
-SHA-256 was
-`198fa025e11f428a5cd5534fe13d6af2187cca4cf1d09e74bc8cedcfbf798025`.
-All operation-level correctness assertions and the portable 100,000-memory
-catastrophic guardrails passed.
+`d67823742da2a650b31cce81fdcf498dce615f86` ran on 2026-07-29 on the same
+Apple M2 Max class of machine with Rust 1.97.0 and Python 3.14.6. All operation
+correctness assertions and broad capacity guardrails passed.
 
 | Operation | Samples | Median | Median 95% interval | Peak RSS |
 | --- | ---: | ---: | ---: | ---: |
@@ -237,17 +149,16 @@ catastrophic guardrails passed.
 | Graph rebuild | 1 | 23.29 s | — | 235.39 MiB |
 | Bundle export | 1 | 16.81 s | — | 120.28 MiB |
 
-The populated database was 388.61 MiB, the Tantivy index was 6.77 MiB, and the
-bundle was 55.68 MiB. Bundle export spent 3.11 s on the SQLite snapshot and
-8.76 s on validation; its 4.07 s hash and 4.89 s archive observations overlap.
-The single maintenance samples establish capacity and correctness evidence,
-not a latency distribution. They did not show a correctness failure or an
-obvious nonlinear graph-growth alarm, so no graph insertion or parsing change
-was made.
+Database size was 388.61 MiB, Tantivy index size 6.77 MiB, and bundle size
+55.68 MiB. Single-sample maintenance observations establish only capacity and
+correctness, not a latency distribution.
 
 Retained evidence:
 
-- [`benchmarks/v0.9.0-dev-100k-macos-arm64.json`](benchmarks/v0.9.0-dev-100k-macos-arm64.json)
-  (SHA-256 `e19c56afe9d7916a9d0c42f0d71ffeaf0df32dbc1ae0b6986689d4c040413fa7`);
-- [`benchmarks/v0.9.0-dev-100k-macos-arm64.csv`](benchmarks/v0.9.0-dev-100k-macos-arm64.csv)
-  (SHA-256 `dc1d93eeaaa8aa08c0af84c7528ef9a89ca29588c5b389bd6cdf916ac6b073b1`).
+- [JSON report](benchmarks/v0.9.0-dev-100k-macos-arm64.json), SHA-256
+  `e19c56afe9d7916a9d0c42f0d71ffeaf0df32dbc1ae0b6986689d4c040413fa7`;
+- [CSV summary](benchmarks/v0.9.0-dev-100k-macos-arm64.csv), SHA-256
+  `dc1d93eeaaa8aa08c0af84c7528ef9a89ca29588c5b389bd6cdf916ac6b073b1`.
+
+Do not raise the 10,000-memory support boundary without a reviewed clean report
+covering correctness, RSS, database/index size, graph rebuild, and bundle stages.
