@@ -11,13 +11,12 @@ else
 	CARGO_BIN=cargo
 fi
 
-# mise.toml provides Zig as a portable fallback, but cc-rs receives an
-# incompatible `arm64-apple-macosx` target from some native macOS dependencies.
-# Prefer the host compiler only for this known inherited override; preserve any
-# other explicitly selected toolchain.
-if [[ "$(uname -s)" == "Darwin" && ("${CC:-}" == "zig cc" || "${CXX:-}" == "zig c++") ]]; then
-	echo "build-release: ignoring inherited Zig CC/CXX for native macOS build" >&2
-	unset CC CXX
+# Some parent shells inject Zig wrappers whose target spelling is incompatible
+# with native macOS dependencies. Ignore only that known inherited override;
+# preserve every other explicitly selected toolchain.
+if [[ "$(uname -s)" == "Darwin" && ("${CC:-}" == "zig cc" || "${CXX:-}" == "zig c++" || "${AR:-}" == "zig ar") ]]; then
+	echo "build-release: ignoring inherited Zig CC/CXX/AR for native macOS build" >&2
+	unset CC CXX AR
 fi
 
 TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"

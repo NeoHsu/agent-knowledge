@@ -4,6 +4,7 @@
 | --- | --- |
 | Deployment model | One operating-system user per active local/private store |
 | Rust MSRV | 1.97.1 |
+| Source-build C toolchain | Platform-native Clang/GCC/MSVC; Zig is not required |
 | Release platforms | macOS arm64/x86_64, Linux arm64/x86_64, Windows x86_64 |
 | Store | SQLite schema v5; explicit backup-first migration |
 | JSON errors | `contract_version: 1`; required fields stable within a minor release |

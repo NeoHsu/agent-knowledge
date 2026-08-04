@@ -1,6 +1,6 @@
-# Avoid malformed generic compiler variables such as CC="zig cc" on macOS.
-# Cargo/cc-rs gives these target-specific names precedence while still resolving
-# the tools through PATH, where a host without clang may provide a Zig shim.
+# Keep native macOS builds on the platform toolchain when a parent shell leaks
+# malformed generic compiler variables such as CC="zig cc". These names resolve
+# through PATH; explicit target-specific environment variables still win.
 [env]
 CC_aarch64_apple_darwin = "cc"
 CXX_aarch64_apple_darwin = "c++"

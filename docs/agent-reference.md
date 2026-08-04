@@ -182,11 +182,12 @@ python3 scripts/evaluate-retrieval.py --report target/retrieval-eval.json
 scripts/smoke-release.sh
 ```
 
-Install pinned tools with `mise install`. `.cargo/config.toml` supplies
-PATH-resolved target-specific compiler names on macOS so malformed generic Zig
-compiler variables do not reach cc-rs. CI also tests the declared Rust 1.97.1
-MSRV, builds cargo-dist artifacts on pull requests without publishing, and runs
-a bounded benchmark correctness smoke.
+Install pinned tools with `mise install`. Native dependencies use the platform
+C/C++ toolchain; Zig is not pinned or required. `.cargo/config.toml` supplies
+PATH-resolved target-specific compiler names on macOS only as a defense against
+malformed Zig variables inherited from a parent shell. CI also tests the
+declared Rust 1.97.1 MSRV, builds cargo-dist artifacts on pull requests without
+publishing, and runs a bounded benchmark correctness smoke.
 
 For release qualification, prefer the single mechanism that also checks a
 clean tree, release metadata, recovery, and benchmark guardrails:

@@ -4,16 +4,15 @@ For agent-specific repo guidance, read `docs/agent-reference.md` first.
 
 ## Setup
 
-`mise.toml` pins Rust, Python, repository linters/security tools, Cargo quality
-tools, and the Zig C toolchain available for restricted environments.
+`mise.toml` pins Rust, Python, repository linters/security tools, and Cargo
+quality tools. Native SQLite, compression, and TLS dependencies require the
+platform C/C++ toolchain: Xcode Command Line Tools on macOS, Clang or GCC on
+Linux, and MSVC Build Tools on Windows. Zig is neither installed nor required
+by this repository.
 
 ```bash
 mise install
 ```
-
-If the host has no `cc`, expose a `cc` shim on `PATH` that delegates to
-`zig cc` before running Cargo. Do not hard-code a harness-specific shim path in
-repository scripts.
 
 ## Run from source
 
@@ -51,14 +50,15 @@ and bundle-replacement backup state from this checkout without reading database
 contents. Move required data to the intended private runtime store before
 continuing; dirty-tree development overrides do not bypass this safety gate.
 
-Install the pinned tools with `mise install`. The target-specific compiler
-names in `.cargo/config.toml` prevent a malformed generic `CC="zig cc"` value
-from being passed to cc-rs on macOS while still resolving `cc`, `c++`, and `ar`
-through `PATH`; explicit target-specific environment variables retain higher
+Install the pinned tools with `mise install`. Native dependencies use the host
+platform compiler. The target-specific names in `.cargo/config.toml`
+defensively prevent a malformed generic `CC="zig cc"` inherited from a parent
+shell from reaching cc-rs on macOS; this is a compatibility guard, not a Zig
+dependency. Explicit target-specific environment variables retain higher
 precedence. `cargo deny check` enforces the accepted license, source, wildcard,
-and advisory policy; the repository dependency script independently
-requires every locked third-party package to come from crates.io and carry
-license metadata. RustSec remains the vulnerability authority.
+and advisory policy; the repository dependency script independently requires
+every locked third-party package to come from crates.io and carry license
+metadata. RustSec remains the vulnerability authority.
 
 When changing workflows or shell scripts, `scripts/check-workflows.sh` checks
 syntax, immutable Action pins, credential persistence, job bounds, and required
@@ -104,10 +104,11 @@ scripts/smoke-release.sh       # includes the isolated recovery drill
 scripts/recovery-drill.sh      # may also be run independently
 ```
 
-`build-release.sh` ignores only the known inherited `CC="zig cc"` /
-`CXX="zig c++"` override on native macOS, where cc-rs receives an incompatible
-architecture spelling; other explicitly selected toolchains are preserved.
-After Cargo completes, `build-release.sh` verifies the exact upstream
+`build-release.sh` ignores only inherited `CC="zig cc"`, `CXX="zig c++"`, or
+`AR="zig ar"` overrides on native macOS, where cc-rs receives an incompatible
+architecture spelling. The guard handles parent-shell state without installing
+or requiring Zig; other explicitly selected toolchains are preserved. After
+Cargo completes, `build-release.sh` verifies the exact upstream
 CC-CEDICT source archive against the repository-pinned SHA-256 before accepting
 the binary. This supplements Lindera's own download check and prevents a
 release from silently embedding different dictionary input. The release binary

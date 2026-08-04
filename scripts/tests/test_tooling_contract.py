@@ -63,6 +63,7 @@ class ToolingContractTests(unittest.TestCase):
 
     def test_ci_versions_match_mise_contract(self) -> None:
         tools = self.config["tools"]
+        self.assertNotIn("zig", tools)
         for fragment in (
             f'GITLEAKS_VERSION: "{tools["gitleaks"]}"',
             f"cargo-audit@{tools['cargo:cargo-audit']}",

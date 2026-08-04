@@ -33,6 +33,8 @@ All notable changes to mnemark are documented here.
   binaries on pull requests as well as release tags.
 - Raised the declared Rust MSRV from 1.97.0 to 1.97.1 and the measured line
   coverage floor from 84% to 86%.
+- Removed Zig from the default Mise toolset; source builds use the platform C/C++
+  toolchain while retaining a defensive guard for inherited Zig wrappers.
 
 ## [0.9.0] - 2026-07-30
 
