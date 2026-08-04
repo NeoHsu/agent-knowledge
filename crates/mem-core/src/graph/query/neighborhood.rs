@@ -41,11 +41,11 @@ pub fn query_neighborhood(
     let mut start_nodes = Vec::new();
     let mut start_scores = HashMap::new();
     for start in starts {
-        if let Some(node) = node_by_id(conn, &start.node_id)? {
-            if scope_allowed(node.scope.as_deref(), options.scope_filter.as_deref()) {
-                start_scores.insert(node.id.clone(), start.score);
-                start_nodes.push(node);
-            }
+        if let Some(node) = node_by_id(conn, &start.node_id)?
+            && scope_allowed(node.scope.as_deref(), options.scope_filter.as_deref())
+        {
+            start_scores.insert(node.id.clone(), start.score);
+            start_nodes.push(node);
         }
     }
     if start_nodes.is_empty() {

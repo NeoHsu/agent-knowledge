@@ -309,13 +309,13 @@ where
     fs::create_dir_all(&app.root)?;
     harden_directory_permissions(&app.root)?;
     let lock_path = app.root.join(".mem.lock");
-    if let Ok(metadata) = fs::symlink_metadata(&lock_path) {
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err(error::safety_violation(format!(
-                "refusing unsafe lock path: {}",
-                lock_path.display()
-            )));
-        }
+    if let Ok(metadata) = fs::symlink_metadata(&lock_path)
+        && (metadata.file_type().is_symlink() || !metadata.is_file())
+    {
+        return Err(error::safety_violation(format!(
+            "refusing unsafe lock path: {}",
+            lock_path.display()
+        )));
     }
     let lock = OpenOptions::new()
         .create(true)
@@ -337,13 +337,13 @@ where
     fs::create_dir_all(&app.root)?;
     harden_directory_permissions(&app.root)?;
     let lock_path = app.root.join(".mem.lock");
-    if let Ok(metadata) = fs::symlink_metadata(&lock_path) {
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err(error::safety_violation(format!(
-                "refusing unsafe lock path: {}",
-                lock_path.display()
-            )));
-        }
+    if let Ok(metadata) = fs::symlink_metadata(&lock_path)
+        && (metadata.file_type().is_symlink() || !metadata.is_file())
+    {
+        return Err(error::safety_violation(format!(
+            "refusing unsafe lock path: {}",
+            lock_path.display()
+        )));
     }
     let lock = OpenOptions::new()
         .create(true)

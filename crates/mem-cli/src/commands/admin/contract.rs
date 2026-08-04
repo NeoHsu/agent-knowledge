@@ -67,11 +67,11 @@ pub(crate) fn cmd_contract(args: ContractArgs) -> Result<()> {
         "skill_compatibility": skill_compatibility
     }))?;
 
-    if let Some(skill_version) = args.skill_version.as_deref() {
-        if skill_version != env!("CARGO_PKG_VERSION") {
-            let update_command = skill_update_command();
-            return Err(version_mismatch_error(skill_version, &update_command));
-        }
+    if let Some(skill_version) = args.skill_version.as_deref()
+        && skill_version != env!("CARGO_PKG_VERSION")
+    {
+        let update_command = skill_update_command();
+        return Err(version_mismatch_error(skill_version, &update_command));
     }
     Ok(())
 }

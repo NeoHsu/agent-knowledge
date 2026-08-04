@@ -143,17 +143,16 @@ pub(super) fn merge_changelog(
 }
 
 pub(super) fn incoming_store_key(conn: &Connection) -> Result<String> {
-    if mem_core::db::table_exists(conn, "metadata")? {
-        if let Some(id) = conn
+    if mem_core::db::table_exists(conn, "metadata")?
+        && let Some(id) = conn
             .query_row(
                 "SELECT value FROM metadata WHERE key = 'store_id'",
                 [],
                 |row| row.get::<_, String>(0),
             )
             .optional()?
-        {
-            return Ok(id);
-        }
+    {
+        return Ok(id);
     }
     let identity: String = conn.query_row(
         "SELECT COALESCE(group_concat(id || ':' || name, '|'), '')

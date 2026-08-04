@@ -5,11 +5,11 @@ pub(crate) fn cmd_supersede(app: &App, args: SupersedeArgs) -> Result<()> {
     app.require_schema()?;
     let conn = app.conn()?;
     let old = resolve_mutation_memory(&conn, &args.old_name, &args.scope)?;
-    if let Some(expected) = args.expected_version {
-        if let Some(conflict) = version_conflict(&old, expected) {
-            print_json(&conflict)?;
-            return Ok(());
-        }
+    if let Some(expected) = args.expected_version
+        && let Some(conflict) = version_conflict(&old, expected)
+    {
+        print_json(&conflict)?;
+        return Ok(());
     }
     if args.source == "manual" && !args.user_confirmed {
         bail!("source=manual requires --user-confirmed");
@@ -146,11 +146,11 @@ pub(crate) fn cmd_delete(app: &App, args: DeleteArgs) -> Result<()> {
         }))?;
         return Ok(());
     }
-    if let Some(expected) = args.expected_version {
-        if let Some(conflict) = version_conflict(&old, expected) {
-            print_json(&conflict)?;
-            return Ok(());
-        }
+    if let Some(expected) = args.expected_version
+        && let Some(conflict) = version_conflict(&old, expected)
+    {
+        print_json(&conflict)?;
+        return Ok(());
     }
     if old.protected && !args.force {
         print_json(

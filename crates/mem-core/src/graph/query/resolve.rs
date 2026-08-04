@@ -85,20 +85,20 @@ pub(super) fn resolve_node_id(
             return Ok(node_id);
         }
     }
-    if let Some(id) = reference.strip_prefix("id:") {
-        if let Some(memory) = memory_by_id(conn, id)? {
-            let node_id = memory_node_id(&memory.id);
-            if node_by_id(conn, &node_id)?.is_some() {
-                return Ok(node_id);
-            }
+    if let Some(id) = reference.strip_prefix("id:")
+        && let Some(memory) = memory_by_id(conn, id)?
+    {
+        let node_id = memory_node_id(&memory.id);
+        if node_by_id(conn, &node_id)?.is_some() {
+            return Ok(node_id);
         }
     }
-    if scope_filter.is_none() {
-        if let Some(memory) = memory_by_id(conn, reference)? {
-            let node_id = memory_node_id(&memory.id);
-            if node_by_id(conn, &node_id)?.is_some() {
-                return Ok(node_id);
-            }
+    if scope_filter.is_none()
+        && let Some(memory) = memory_by_id(conn, reference)?
+    {
+        let node_id = memory_node_id(&memory.id);
+        if node_by_id(conn, &node_id)?.is_some() {
+            return Ok(node_id);
         }
     }
     let named_memory = match scope_filter {

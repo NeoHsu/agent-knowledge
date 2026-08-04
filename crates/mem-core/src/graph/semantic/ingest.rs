@@ -213,24 +213,24 @@ fn ingest_one_semantic_edge(
     } else {
         None
     };
-    if let Some(existing) = existing_by_id.as_ref() {
-        if source_priority(&options.source) < source_priority(&existing.source) {
-            return Ok(GraphIngestResult {
-                index,
-                status: "rejected".to_string(),
-                id: Some(id),
-                reason: Some("lower_trust_source_cannot_overwrite".to_string()),
-                source: Some(source_ref),
-                target: Some(target_ref),
-                relation: Some(input.relation.clone()),
-                confidence: Some(input.confidence.clone()),
-                edge_status: Some(edge_status.to_string()),
-            });
-        }
+    if let Some(existing) = existing_by_id.as_ref()
+        && source_priority(&options.source) < source_priority(&existing.source)
+    {
+        return Ok(GraphIngestResult {
+            index,
+            status: "rejected".to_string(),
+            id: Some(id),
+            reason: Some("lower_trust_source_cannot_overwrite".to_string()),
+            source: Some(source_ref),
+            target: Some(target_ref),
+            relation: Some(input.relation.clone()),
+            confidence: Some(input.confidence.clone()),
+            edge_status: Some(edge_status.to_string()),
+        });
     }
 
-    if existing_by_id.is_none() {
-        if let Some(existing_id) = identical_semantic_edge_id(
+    if existing_by_id.is_none()
+        && let Some(existing_id) = identical_semantic_edge_id(
             conn,
             &source_ref,
             &target_ref,
@@ -239,19 +239,19 @@ fn ingest_one_semantic_edge(
             edge_status,
             &evidence,
             valid_until.as_deref(),
-        )? {
-            return Ok(GraphIngestResult {
-                index,
-                status: "unchanged".to_string(),
-                id: Some(existing_id),
-                reason: None,
-                source: Some(source_ref),
-                target: Some(target_ref),
-                relation: Some(input.relation.clone()),
-                confidence: Some(input.confidence.clone()),
-                edge_status: Some(edge_status.to_string()),
-            });
-        }
+        )?
+    {
+        return Ok(GraphIngestResult {
+            index,
+            status: "unchanged".to_string(),
+            id: Some(existing_id),
+            reason: None,
+            source: Some(source_ref),
+            target: Some(target_ref),
+            relation: Some(input.relation.clone()),
+            confidence: Some(input.confidence.clone()),
+            edge_status: Some(edge_status.to_string()),
+        });
     }
 
     let logical_conflict = if existing_by_id.is_none() {

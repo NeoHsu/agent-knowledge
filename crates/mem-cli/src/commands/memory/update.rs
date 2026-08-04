@@ -44,11 +44,11 @@ pub(crate) fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
     app.require_schema()?;
     let conn = app.conn()?;
     let old = resolve_mutation_memory(&conn, &args.name, &args.scope)?;
-    if let Some(expected) = args.expected_version {
-        if let Some(conflict) = version_conflict(&old, expected) {
-            print_json(&conflict)?;
-            return Ok(());
-        }
+    if let Some(expected) = args.expected_version
+        && let Some(conflict) = version_conflict(&old, expected)
+    {
+        print_json(&conflict)?;
+        return Ok(());
     }
 
     let update_source = args.source.as_deref().unwrap_or(&old.source).to_string();
@@ -71,14 +71,14 @@ pub(crate) fn cmd_update(app: &App, args: UpdateArgs) -> Result<()> {
         Some(scope) => scope::resolve_write_scope(scope)?,
         None => old.scope.clone(),
     };
-    if let Some(collision) = memory_by_name_in_scope(&conn, &old.name, &new_scope)? {
-        if collision.id != old.id {
-            bail!(
-                "memory name already exists in destination scope {}: {}",
-                new_scope,
-                old.name
-            );
-        }
+    if let Some(collision) = memory_by_name_in_scope(&conn, &old.name, &new_scope)?
+        && collision.id != old.id
+    {
+        bail!(
+            "memory name already exists in destination scope {}: {}",
+            new_scope,
+            old.name
+        );
     }
     let new_content = match optional_content(args.content, args.content_file.as_deref())? {
         Some(content) => Some(sanitize_secret_field(

@@ -99,18 +99,18 @@ pub(super) fn render_stats_compact(report: &Value) -> String {
         count_map_text(report.get("by_confidence")).unwrap_or_else(|| "-".to_string())
     ));
     output.push('\n');
-    if let Some(rows) = report.get("top_accessed").and_then(Value::as_array) {
-        if !rows.is_empty() {
-            output.push_str("top_accessed:\n");
-            for row in rows {
-                output.push_str(&format!(
-                    "  {} access={} last={}",
-                    value_text(row, "name"),
-                    value_text(row, "access_count"),
-                    value_text(row, "last_accessed_at")
-                ));
-                output.push('\n');
-            }
+    if let Some(rows) = report.get("top_accessed").and_then(Value::as_array)
+        && !rows.is_empty()
+    {
+        output.push_str("top_accessed:\n");
+        for row in rows {
+            output.push_str(&format!(
+                "  {} access={} last={}",
+                value_text(row, "name"),
+                value_text(row, "access_count"),
+                value_text(row, "last_accessed_at")
+            ));
+            output.push('\n');
         }
     }
     output

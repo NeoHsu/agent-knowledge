@@ -26,12 +26,11 @@ pub(super) fn traversal_edges(
         if !options.include_metadata && is_metadata_relation(&edge.relation) {
             continue;
         }
-        if let Some(scoped_nodes) = scoped_nodes.as_ref() {
-            if !scoped_nodes.contains(&edge.source_node_id)
-                || !scoped_nodes.contains(&edge.target_node_id)
-            {
-                continue;
-            }
+        if let Some(scoped_nodes) = scoped_nodes.as_ref()
+            && (!scoped_nodes.contains(&edge.source_node_id)
+                || !scoped_nodes.contains(&edge.target_node_id))
+        {
+            continue;
         }
         if edge.relation != "superseded_by"
             && (inactive_memories.contains(&edge.source_node_id)

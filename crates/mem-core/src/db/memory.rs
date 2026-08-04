@@ -257,17 +257,17 @@ pub fn list_memories_filtered(
         ));
         params_vec.push(t);
     }
-    if let Some(sc) = scopes {
-        if !sc.is_empty() {
-            let placeholders: Vec<String> = sc
-                .iter()
-                .enumerate()
-                .map(|(i, _)| format!("?{}", params_vec.len() + i + 1))
-                .collect();
-            conditions.push(format!("scope IN ({})", placeholders.join(", ")));
-            for s in sc {
-                params_vec.push(*s);
-            }
+    if let Some(sc) = scopes
+        && !sc.is_empty()
+    {
+        let placeholders: Vec<String> = sc
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", params_vec.len() + i + 1))
+            .collect();
+        conditions.push(format!("scope IN ({})", placeholders.join(", ")));
+        for s in sc {
+            params_vec.push(*s);
         }
     }
 

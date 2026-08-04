@@ -345,20 +345,20 @@ fn passes_filters(
             return false;
         }
     }
-    if let Some(want_type) = &args.r#type {
-        if &memory.r#type != want_type {
-            return false;
-        }
+    if let Some(want_type) = &args.r#type
+        && &memory.r#type != want_type
+    {
+        return false;
     }
-    if let Some(tag) = &args.tags {
-        if !memory_has_tag(&memory.tags, tag) {
-            return false;
-        }
+    if let Some(tag) = &args.tags
+        && !memory_has_tag(&memory.tags, tag)
+    {
+        return false;
     }
-    if let Some(scopes) = scope_filter {
-        if !scopes.contains(&memory.scope.as_str()) {
-            return false;
-        }
+    if let Some(scopes) = scope_filter
+        && !scopes.contains(&memory.scope.as_str())
+    {
+        return false;
     }
     true
 }
@@ -419,15 +419,15 @@ fn render_memory_compact(memories: &[mem_core::db::Memory]) -> String {
             memory.name, memory.r#type, memory.scope, memory.confidence, suffix
         ));
         output.push('\n');
-        if let Some(description) = memory.description.as_deref() {
-            if !description.trim().is_empty() {
-                output.push_str(&format!("  {}\n", truncate_text(description, 120)));
-            }
+        if let Some(description) = memory.description.as_deref()
+            && !description.trim().is_empty()
+        {
+            output.push_str(&format!("  {}\n", truncate_text(description, 120)));
         }
-        if let Some(content) = memory.content.as_deref() {
-            if !content.trim().is_empty() {
-                output.push_str(&format!("  {}\n", truncate_text(content, 160)));
-            }
+        if let Some(content) = memory.content.as_deref()
+            && !content.trim().is_empty()
+        {
+            output.push_str(&format!("  {}\n", truncate_text(content, 160)));
         }
     }
     output

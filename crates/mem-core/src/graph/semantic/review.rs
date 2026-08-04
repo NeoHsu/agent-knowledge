@@ -86,19 +86,19 @@ pub fn set_semantic_edge_status(
             params![status, note.as_deref(), id],
         )?;
         log_semantic_edge_revision(conn, id, "status")?;
-        if status != "pending" {
-            if let Some(ambiguity_id) = existing.ambiguity_id {
-                resolve_ambiguity_record(
-                    conn,
-                    ambiguity_id,
-                    &json!({
-                        "status": "resolved",
-                        "graph_edge_id": id,
-                        "edge_status": status,
-                        "note": note.as_deref(),
-                    }),
-                )?;
-            }
+        if status != "pending"
+            && let Some(ambiguity_id) = existing.ambiguity_id
+        {
+            resolve_ambiguity_record(
+                conn,
+                ambiguity_id,
+                &json!({
+                    "status": "resolved",
+                    "graph_edge_id": id,
+                    "edge_status": status,
+                    "note": note.as_deref(),
+                }),
+            )?;
         }
         set_graph_dirty(conn, true)
     })?;
