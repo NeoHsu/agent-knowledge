@@ -6,6 +6,7 @@ pub mod db;
 pub mod error;
 pub mod graph;
 pub mod index;
+pub mod memory_domain;
 pub mod scope;
 pub mod util;
 pub mod workflow;

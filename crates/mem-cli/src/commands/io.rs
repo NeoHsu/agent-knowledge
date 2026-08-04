@@ -61,13 +61,13 @@ where
                 }
             }
         }
-        if !chunk.is_empty() {
-            if let Err(error) = (self.process_chunk)(chunk) {
-                *self.processing_error = Some(error);
-                return Err(<A::Error as serde::de::Error>::custom(
-                    "import chunk processing failed",
-                ));
-            }
+        if !chunk.is_empty()
+            && let Err(error) = (self.process_chunk)(chunk)
+        {
+            *self.processing_error = Some(error);
+            return Err(<A::Error as serde::de::Error>::custom(
+                "import chunk processing failed",
+            ));
         }
         Ok(())
     }
@@ -161,55 +161,21 @@ fn render_export_markdown(memories: &[mem_core::db::Memory]) -> Result<String> {
     Ok(output)
 }
 
-fn save_args_from_import_value(
+fn save_request_from_import_value(
     value: Value,
     source: &str,
     user_confirmed: bool,
     redact_secrets: bool,
     origin_ref: &str,
     no_validate_workflow: bool,
-) -> Result<SaveArgs> {
-    let name = value
-        .get("name")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("import item missing name"))?;
-    let content = value
-        .get("content")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    Ok(SaveArgs {
-        r#type: value
-            .get("type")
-            .and_then(Value::as_str)
-            .unwrap_or("reference")
-            .to_string(),
-        name: name.to_string(),
-        description: value
-            .get("description")
-            .and_then(Value::as_str)
-            .map(str::to_string),
-        content: Some(content.to_string()),
-        content_file: None,
-        tags: import_tags(&value)?,
-        scope: value
-            .get("scope")
-            .and_then(Value::as_str)
-            .unwrap_or("global")
-            .to_string(),
-        source: source.to_string(),
-        confidence: None,
-        expires_at: value
-            .get("expires_at")
-            .and_then(Value::as_str)
-            .map(str::to_string),
-        why: None,
-        force: false,
+) -> Result<mem_core::memory_domain::SaveRequestV1> {
+    mem_core::memory_domain::ImportWireV1::from_value(value)?.into_save_request(
+        source.to_string(),
         user_confirmed,
         redact_secrets,
+        origin_ref.to_string(),
         no_validate_workflow,
-        origin: Some("import".to_string()),
-        origin_ref: Some(origin_ref.to_string()),
-    })
+    )
 }
 
 fn result_status(result: &Value) -> String {
@@ -218,21 +184,6 @@ fn result_status(result: &Value) -> String {
         .and_then(Value::as_str)
         .unwrap_or("unknown")
         .to_string()
-}
-
-fn import_tags(value: &Value) -> Result<String> {
-    match value.get("tags") {
-        Some(Value::String(tags)) => {
-            validate_tags(tags)?;
-            Ok(tags.clone())
-        }
-        Some(tags) => {
-            let tags = tags.to_string();
-            validate_tags(&tags)?;
-            Ok(tags)
-        }
-        None => Ok("[]".to_string()),
-    }
 }
 
 fn increment_count(counts: &mut serde_json::Map<String, Value>, status: &str) {
@@ -273,7 +224,7 @@ pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
                 let mut changed = false;
                 for (offset, value) in chunk.into_iter().enumerate() {
                     conn.execute_batch("SAVEPOINT import_item")?;
-                    let import_result = save_args_from_import_value(
+                    let import_result = save_request_from_import_value(
                         value,
                         &args.source,
                         args.user_confirmed,
@@ -281,7 +232,7 @@ pub(crate) fn cmd_import(app: &App, args: ImportArgs) -> Result<()> {
                         &origin_ref,
                         args.no_validate_workflow,
                     )
-                    .and_then(|save_args| save_memory_no_index_in_connection(conn, save_args));
+                    .and_then(|request| save_request_no_index_in_connection(conn, request));
                     match import_result {
                         Ok((result, maybe_id)) => {
                             conn.execute_batch("RELEASE import_item")?;
