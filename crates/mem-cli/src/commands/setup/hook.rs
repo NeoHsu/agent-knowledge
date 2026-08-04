@@ -1,7 +1,22 @@
 use super::super::*;
 
-pub(crate) const LEGACY_HOOK_COMMAND: &str = "mem prime 2>/dev/null || true";
-pub(crate) const HOOK_COMMAND: &str = "mem prime 2>&1 || { status=$?; printf '\\n[mnemark unavailable: mem prime failed with exit %s; continue without memory reads or writes]\\n' \"$status\"; }";
+pub(crate) const LEGACY_SILENT_HOOK_COMMAND: &str = "mem prime 2>/dev/null || true";
+pub(crate) const LEGACY_HOOK_COMMAND: &str = "mem prime 2>&1 || { status=$?; printf '\\n[mnemark unavailable: mem prime failed with exit %s; continue without memory reads or writes]\\n' \"$status\"; }";
+pub(crate) const HOOK_COMMAND: &str = concat!(
+    "mem --json-errors contract --skill-version ",
+    env!("CARGO_PKG_VERSION"),
+    " >/dev/null && mem --read-only prime 2>&1 || { status=$?; printf '\\n[mnemark unavailable: compatibility or read-only prime failed with exit %s; continue without memory reads or writes]\\n' \"$status\"; }",
+);
+
+pub(crate) fn is_legacy_hook_command(command: &str) -> bool {
+    matches!(command, LEGACY_SILENT_HOOK_COMMAND | LEGACY_HOOK_COMMAND)
+}
+
+pub(crate) fn is_custom_prime_hook(command: &str) -> bool {
+    command.contains("mem prime")
+        || command.contains("mem --read-only prime")
+        || command.contains("session-prime")
+}
 
 pub(super) fn wire_claude_hook(settings_path: &Path, dry_run: bool) -> Result<Value> {
     let mut root: Value = if settings_path.exists() {
@@ -46,7 +61,7 @@ pub(super) fn wire_claude_hook(settings_path: &Path, dry_run: bool) -> Result<Va
             if command == HOOK_COMMAND {
                 return Ok(json!({"status": "already_present", "target": target_text}));
             }
-            if command == LEGACY_HOOK_COMMAND {
+            if is_legacy_hook_command(&command) {
                 if dry_run {
                     return Ok(json!({
                         "status": "dry_run",
@@ -59,7 +74,7 @@ pub(super) fn wire_claude_hook(settings_path: &Path, dry_run: bool) -> Result<Va
                 upgraded = true;
                 break;
             }
-            if command.contains("mem prime") || command.contains("session-prime") {
+            if is_custom_prime_hook(&command) {
                 return Ok(json!({"status": "already_present", "target": target_text}));
             }
         }
@@ -99,4 +114,16 @@ pub(super) fn wire_claude_hook(settings_path: &Path, dry_run: bool) -> Result<Va
         "target": target_text,
         "command": HOOK_COMMAND
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recognizes_both_managed_legacy_hooks() {
+        assert!(is_legacy_hook_command(LEGACY_SILENT_HOOK_COMMAND));
+        assert!(is_legacy_hook_command(LEGACY_HOOK_COMMAND));
+        assert!(!is_legacy_hook_command(HOOK_COMMAND));
+    }
 }

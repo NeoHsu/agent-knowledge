@@ -54,7 +54,12 @@ fn setup_claude_code_wires_policy_skill_and_hook() {
     assert_eq!(result["session_hook"]["status"], "installed");
 
     let policy = fs::read_to_string(base.join(".claude/CLAUDE.md")).expect("policy file");
-    assert!(policy.contains("<!-- mnemark-policy v5 -->"));
+    assert!(policy.contains("<!-- mnemark-policy v6 -->"));
+    assert!(policy.contains(&format!(
+        "mem --json-errors contract --skill-version {}",
+        env!("CARGO_PKG_VERSION")
+    )));
+    assert!(policy.contains("mem --read-only prime"));
     assert!(policy.contains("mem config show"));
     assert!(policy.contains("mem sync --dry-run"));
     assert!(base.join(".agents/skills/mnemark/SKILL.md").exists());
@@ -81,7 +86,11 @@ fn setup_claude_code_wires_policy_skill_and_hook() {
     let command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
         .as_str()
         .expect("hook command");
-    assert!(command.contains("mem prime 2>&1"));
+    assert!(command.contains(&format!(
+        "mem --json-errors contract --skill-version {}",
+        env!("CARGO_PKG_VERSION")
+    )));
+    assert!(command.contains("mem --read-only prime 2>&1"));
     assert!(command.contains("mnemark unavailable"));
     assert!(!command.contains("2>/dev/null"));
 
@@ -165,7 +174,7 @@ fn setup_claude_code_preserves_existing_settings() {
         settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
             .as_str()
             .expect("command")
-            .contains("mem prime")
+            .contains("mem --read-only prime")
     );
 
     fs::remove_dir_all(base).ok();
@@ -214,6 +223,11 @@ fn setup_claude_code_upgrades_silent_prime_hook() {
     let command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
         .as_str()
         .expect("command");
+    assert!(command.contains(&format!(
+        "mem --json-errors contract --skill-version {}",
+        env!("CARGO_PKG_VERSION")
+    )));
+    assert!(command.contains("mem --read-only prime"));
     assert!(command.contains("mnemark unavailable"));
     assert!(!command.contains("2>/dev/null"));
 
@@ -331,7 +345,7 @@ fn setup_upgrades_legacy_policy_block() {
     assert_eq!(result["session_hook"]["status"], "policy_prose");
 
     let content = fs::read_to_string(base.join(".codex/AGENTS.md")).expect("agents");
-    assert!(content.contains("<!-- mnemark-policy v5 -->"));
+    assert!(content.contains("<!-- mnemark-policy v6 -->"));
     assert!(content.contains("# Keep\n\nuser content"));
     assert!(!content.contains("whenever the user asks to remember, save, recall"));
 
@@ -400,7 +414,7 @@ fn setup_gemini_has_no_skill_dir_and_list_reports_platforms() {
 }
 
 #[test]
-fn setup_upgrades_v2_policy_block_to_v5() {
+fn setup_upgrades_v2_policy_block_to_v6() {
     let repo = TestRepo::new("setup-upgrade-v2");
     let base = temp_path("setup-upgrade-v2-base");
     fs::create_dir_all(base.join(".codex")).expect("base dir");
@@ -422,7 +436,7 @@ fn setup_upgrades_v2_policy_block_to_v5() {
     assert_eq!(result["policy"]["status"], "upgraded");
 
     let content = fs::read_to_string(base.join(".codex/AGENTS.md")).expect("agents");
-    assert!(content.contains("<!-- mnemark-policy v5 -->"));
+    assert!(content.contains("<!-- mnemark-policy v6 -->"));
     assert!(!content.contains("<!-- mnemark-policy v2 -->"));
     assert!(content.contains("Keep the store read-only"));
     assert!(content.contains("# Keep\n\nuser content"));
@@ -431,7 +445,7 @@ fn setup_upgrades_v2_policy_block_to_v5() {
 }
 
 #[test]
-fn setup_upgrades_v3_policy_block_to_v5() {
+fn setup_upgrades_v3_policy_block_to_v6() {
     let repo = TestRepo::new("setup-upgrade-v3");
     let base = temp_path("setup-upgrade-v3-base");
     fs::create_dir_all(base.join(".codex")).expect("base dir");
@@ -463,7 +477,7 @@ fn setup_upgrades_v3_policy_block_to_v5() {
     assert_eq!(result["policy"]["status"], "upgraded");
 
     let content = fs::read_to_string(base.join(".codex/AGENTS.md")).expect("agents");
-    assert!(content.contains("<!-- mnemark-policy v5 -->"));
+    assert!(content.contains("<!-- mnemark-policy v6 -->"));
     assert!(!content.contains("<!-- mnemark-policy v3 -->"));
     assert!(content.contains("mem sync --dry-run"));
     assert!(content.contains("# Keep\n\nuser content"));
@@ -472,7 +486,7 @@ fn setup_upgrades_v3_policy_block_to_v5() {
 }
 
 #[test]
-fn setup_reports_drifted_v5_policy_without_overwriting_it() {
+fn setup_reports_drifted_v6_policy_without_overwriting_it() {
     let repo = TestRepo::new("setup-policy-drift");
     let base = temp_path("setup-policy-drift-base");
     fs::create_dir_all(base.join(".codex")).expect("base dir");

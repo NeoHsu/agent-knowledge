@@ -180,7 +180,7 @@ fn doctor_reports_sqlite_integrity_failure() {
 }
 
 #[test]
-fn doctor_warns_when_v5_policy_content_has_drifted() {
+fn doctor_warns_when_v6_policy_content_has_drifted() {
     let store = TestRuntimeStore::new("doctor-policy-drift");
     store.run(&["init"]);
     let base = temp_path("doctor-policy-drift-base");
@@ -208,14 +208,14 @@ fn doctor_warns_when_v5_policy_content_has_drifted() {
         policy["detail"]
             .as_str()
             .expect("detail")
-            .contains("drifted v5 policy")
+            .contains("drifted v6 policy")
     );
 
     fs::remove_dir_all(base).ok();
 }
 
 #[test]
-fn doctor_warns_when_prime_hook_hides_failures() {
+fn doctor_warns_when_prime_hook_lacks_session_gates() {
     let store = TestRuntimeStore::new("doctor-legacy-hook");
     store.run(&["init"]);
     let base = temp_path("doctor-legacy-hook-base");
@@ -254,7 +254,7 @@ fn doctor_warns_when_prime_hook_hides_failures() {
         hook["detail"]
             .as_str()
             .expect("detail")
-            .contains("hides `mem prime` failures")
+            .contains("lacks compatibility-first read-only priming")
     );
 
     fs::remove_dir_all(base).ok();

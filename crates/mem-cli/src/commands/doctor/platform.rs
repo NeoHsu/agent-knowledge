@@ -1,9 +1,9 @@
 use super::super::*;
 use super::report::check;
 use crate::commands::setup::{
-    HOOK_COMMAND, LEGACY_HOOK_COMMAND, POLICY_MARKER_V2, POLICY_MARKER_V3, POLICY_MARKER_V4,
-    POLICY_MARKER_V5, PlatformSpec, has_current_policy, has_v4_policy, skill_files_current,
-    skill_link_points_to,
+    HOOK_COMMAND, POLICY_MARKER_V2, POLICY_MARKER_V3, POLICY_MARKER_V4, POLICY_MARKER_V5,
+    POLICY_MARKER_V6, PlatformSpec, has_current_policy, has_v4_policy, has_v5_policy,
+    is_custom_prime_hook, is_legacy_hook_command, skill_files_current, skill_link_points_to,
 };
 
 pub(super) fn check_shared_skill(checks: &mut Vec<Value>, shared_root: &Path) {
@@ -49,8 +49,20 @@ pub(super) fn check_platform(
         Ok(content) if has_current_policy(&content) => checks.push(check(
             format!("{prefix}.policy"),
             "ok",
-            format!("v5 policy in {}", instructions.display()),
+            format!("v6 policy in {}", instructions.display()),
             None,
+        )),
+        Ok(content) if content.contains(POLICY_MARKER_V6) => checks.push(check(
+            format!("{prefix}.policy"),
+            "warn",
+            format!("drifted v6 policy in {}", instructions.display()),
+            Some("replace the managed block with the policy from `mem setup <platform> --dry-run`"),
+        )),
+        Ok(content) if has_v5_policy(&content) => checks.push(check(
+            format!("{prefix}.policy"),
+            "warn",
+            format!("v5 policy in {}", instructions.display()),
+            Some("run `mem setup <platform>` to upgrade the policy block to v6"),
         )),
         Ok(content) if content.contains(POLICY_MARKER_V5) => checks.push(check(
             format!("{prefix}.policy"),
@@ -62,7 +74,7 @@ pub(super) fn check_platform(
             format!("{prefix}.policy"),
             "warn",
             format!("v4 policy in {}", instructions.display()),
-            Some("run `mem setup <platform>` to upgrade the policy block to v5"),
+            Some("run `mem setup <platform>` to upgrade the policy block to v6"),
         )),
         Ok(content) if content.contains(POLICY_MARKER_V4) => checks.push(check(
             format!("{prefix}.policy"),
@@ -74,19 +86,19 @@ pub(super) fn check_platform(
             format!("{prefix}.policy"),
             "warn",
             format!("v3 policy in {}", instructions.display()),
-            Some("run `mem setup <platform>` to upgrade the policy block to v5"),
+            Some("run `mem setup <platform>` to upgrade the policy block to v6"),
         )),
         Ok(content) if content.contains(POLICY_MARKER_V2) => checks.push(check(
             format!("{prefix}.policy"),
             "warn",
             format!("v2 policy in {}", instructions.display()),
-            Some("run `mem setup <platform>` to upgrade the policy block to v5"),
+            Some("run `mem setup <platform>` to upgrade the policy block to v6"),
         )),
         Ok(content) if content.contains("mnemark memory policy") => checks.push(check(
             format!("{prefix}.policy"),
             "warn",
             format!("legacy policy block in {}", instructions.display()),
-            Some("run `mem setup <platform>` and replace the old block with v5"),
+            Some("run `mem setup <platform>` and replace the old block with v6"),
         )),
         Ok(_) => checks.push(check(
             format!("{prefix}.policy"),
@@ -200,11 +212,9 @@ pub(super) fn check_platform(
                             };
                             if command == HOOK_COMMAND {
                                 current = true;
-                            } else if command == LEGACY_HOOK_COMMAND {
+                            } else if is_legacy_hook_command(command) {
                                 legacy = true;
-                            } else if command.contains("mem prime")
-                                || command.contains("session-prime")
-                            {
+                            } else if is_custom_prime_hook(command) {
                                 custom = true;
                             }
                         }
@@ -231,7 +241,7 @@ pub(super) fn check_platform(
                 format!("{prefix}.session_hook"),
                 "warn",
                 format!(
-                    "legacy SessionStart hook hides `mem prime` failures in {}",
+                    "legacy SessionStart hook lacks compatibility-first read-only priming in {}",
                     settings.display()
                 ),
                 Some("run `mem setup claude-code` to upgrade the hook"),
@@ -246,7 +256,7 @@ pub(super) fn check_platform(
                 format!("{prefix}.session_hook"),
                 "warn",
                 format!("no mnemark SessionStart hook in {}", settings.display()),
-                Some("run `mem setup claude-code` to add the `mem prime` hook"),
+                Some("run `mem setup claude-code` to add the guarded mnemark prime hook"),
             )),
             None => checks.push(check(
                 format!("{prefix}.session_hook"),

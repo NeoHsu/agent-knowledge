@@ -10,11 +10,11 @@ use policy::install_policy;
 use skill::install_shared_skill;
 use transaction::SetupTransaction;
 
-pub(crate) use hook::{HOOK_COMMAND, LEGACY_HOOK_COMMAND};
+pub(crate) use hook::{HOOK_COMMAND, is_custom_prime_hook, is_legacy_hook_command};
 pub(crate) use platform::{PLATFORMS, PlatformSpec, SHARED_SKILLS_DIR, base_dir, platform_by_name};
 pub(crate) use policy::{
-    POLICY_MARKER_V2, POLICY_MARKER_V3, POLICY_MARKER_V4, POLICY_MARKER_V5, has_current_policy,
-    has_v4_policy,
+    POLICY_MARKER_V2, POLICY_MARKER_V3, POLICY_MARKER_V4, POLICY_MARKER_V5, POLICY_MARKER_V6,
+    has_current_policy, has_v4_policy, has_v5_policy,
 };
 pub(crate) use skill::{skill_files_current, skill_link_points_to};
 
@@ -53,7 +53,7 @@ fn cmd_setup_list() -> Result<()> {
                 "session_start": if platform.claude_settings.is_some() {
                     "hook"
                 } else {
-                    "policy_prose (mem prime)"
+                    "policy_prose (contract then read-only prime)"
                 }
             })
         })
@@ -113,7 +113,7 @@ fn cmd_setup_platform(name: &str, args: SetupPlatformArgs) -> Result<()> {
         } else {
             json!({
                 "status": "policy_prose",
-                "detail": "no session-start hook mechanism; the policy block instructs agents to run `mem prime`"
+                "detail": "no session-start hook mechanism; the policy block requires compatibility inspection before read-only priming"
             })
         };
         Ok((policy, skill, hook))

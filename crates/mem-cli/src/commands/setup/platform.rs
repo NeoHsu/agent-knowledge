@@ -8,7 +8,7 @@ pub(crate) const SHARED_SKILLS_DIR: &str = ".agents/skills";
 /// home directory (overridable per call). `skills_dir: None` means the
 /// platform has no known skill directory and relies on the policy block;
 /// `claude_settings: None` means there is no session-start hook mechanism
-/// and the policy block's `mem prime` instruction is the fallback.
+/// and the policy block's contract-first, read-only prime instruction is the fallback.
 pub(crate) struct PlatformSpec {
     pub(crate) name: &'static str,
     pub(crate) instructions: &'static str,
