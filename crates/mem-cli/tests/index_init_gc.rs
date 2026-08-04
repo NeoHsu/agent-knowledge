@@ -6,9 +6,7 @@ use std::os::unix::fs::symlink;
 
 use rusqlite::{Connection, params};
 
-mod support;
-
-use support::{TestRepo, TestRuntimeStore, mem_bin, temp_path};
+use crate::support::{TestRepo, TestRuntimeStore, mem_bin, temp_path};
 
 const INDEX_VERSION_MARKER: &str = "index/.mnemark-index-version";
 

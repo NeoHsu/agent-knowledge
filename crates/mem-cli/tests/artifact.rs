@@ -3,11 +3,9 @@ use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::{PermissionsExt, symlink};
 
-mod support;
-
-use support::TestRepo;
 #[cfg(unix)]
-use support::temp_path;
+use crate::support::temp_path;
+use crate::support::{TestRepo, synthetic_generic_secret, synthetic_github_token};
 
 const HELLO_SHA256: &str =
     "sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03";
@@ -208,10 +206,10 @@ fn artifact_redaction_rejects_symlinks_before_touching_external_files() {
     repo.run(&["init"]);
     let outside = temp_path("artifact-symlink-outside");
     fs::create_dir_all(&outside).expect("outside directory");
-    let secret = "token: abcdefgh12345678\n";
+    let secret = synthetic_generic_secret();
 
     let external_file = outside.join("external.txt");
-    fs::write(&external_file, secret).expect("external file");
+    fs::write(&external_file, &secret).expect("external file");
     fs::create_dir_all(repo.join("artifacts/snippets")).expect("artifact directory");
     symlink(&external_file, repo.join("artifacts/snippets/direct.txt"))
         .expect("direct artifact symlink");
@@ -254,7 +252,7 @@ fn artifact_redaction_rejects_symlinks_before_touching_external_files() {
 fn artifact_secret_policy_requires_explicit_redaction() {
     let repo = TestRepo::new("artifact-secret-policy");
     let artifact_path = repo.join("artifacts/snippets/credentials.txt");
-    let secret = "ghp_abcdefghijklmnop1234567890";
+    let secret = synthetic_github_token();
     write_file(&artifact_path, &format!("token={secret}\n"), false);
 
     let rejected = repo.run_fail(&[
@@ -285,10 +283,10 @@ fn artifact_secret_policy_requires_explicit_redaction() {
     assert_eq!(added["name"], "snippets.credentials");
     let content = fs::read_to_string(&artifact_path).expect("redacted artifact");
     assert!(content.contains("[REDACTED]"));
-    assert!(!content.contains(secret));
+    assert!(!content.contains(&secret));
     let manifest = fs::read_to_string(repo.join("manifest.toml")).expect("manifest");
     assert!(manifest.contains("[REDACTED]"));
-    assert!(!manifest.contains(secret));
+    assert!(!manifest.contains(&secret));
 }
 
 fn array_contains(value: &serde_json::Value, wanted: &str) -> bool {

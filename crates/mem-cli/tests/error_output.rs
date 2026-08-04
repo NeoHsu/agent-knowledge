@@ -1,10 +1,10 @@
 use std::fs;
+use std::io::Read;
+use std::process::{Command, Stdio};
 
 use rusqlite::Connection;
 
-mod support;
-
-use support::TestRepo;
+use crate::support::{TestRepo, mem_bin};
 
 fn parse_error(output: &str) -> serde_json::Value {
     serde_json::from_str(output.trim())
@@ -341,6 +341,23 @@ fn json_errors_redact_secret_like_parse_input() {
 }
 
 #[test]
+fn human_parse_errors_redact_secrets_and_escape_terminal_controls() {
+    let repo = TestRepo::new("human-safe-error");
+    let secret = ["ghp_", "abcdefghijklmnop1234567890"].concat();
+    let unsafe_argument = format!("\u{1b}[31m{secret}\u{202e}");
+
+    let output = repo.run_fail(&[&unsafe_argument]);
+
+    assert!(!output.contains(&secret));
+    assert!(!output.contains('\u{1b}'));
+    assert!(!output.contains('\u{202e}'));
+    assert!(output.contains("[REDACTED]"));
+    // Clap may discard ANSI escape sequences while rendering parse errors;
+    // bidi controls that remain must be escaped by our terminal boundary.
+    assert!(output.contains(r"\u{202e}"));
+}
+
+#[test]
 fn default_errors_remain_human_readable() {
     let repo = TestRepo::new("human-error");
 
@@ -351,6 +368,101 @@ fn default_errors_remain_human_readable() {
 }
 
 #[test]
+fn read_only_blocks_cli_and_environment_side_effects() {
+    let repo = TestRepo::new("read-only-gate");
+    repo.run(&["init"]);
+
+    let query = repo.run(&["--read-only", "query", "nothing"]);
+    assert_eq!(query.trim(), "[]");
+
+    let blocked = repo.run_fail(&[
+        "--json-errors",
+        "--read-only",
+        "save",
+        "--name",
+        "blocked_write",
+        "--content",
+        "must not persist",
+        "--force",
+    ]);
+    let error = parse_error(&blocked);
+    assert_eq!(error["code"], "safety_violation");
+    assert!(
+        error["message"]
+            .as_str()
+            .expect("message")
+            .contains("blocked by --read-only")
+    );
+
+    let env_blocked = repo.run_fail_with_env(
+        &["--json-errors", "workflow", "new", "blocked_scaffold"],
+        "MNEMARK_READ_ONLY",
+        "true",
+    );
+    assert_eq!(parse_error(&env_blocked)["code"], "safety_violation");
+    assert!(!repo.join("blocked_scaffold.yaml").exists());
+}
+
+#[test]
+fn broken_stdout_pipe_is_a_successful_consumer_exit() {
+    let repo = TestRepo::new("broken-pipe");
+    repo.run(&["init"]);
+    let import_file = repo.join("large.json");
+    let items = (0..500)
+        .map(|index| {
+            serde_json::json!({
+                "name": format!("large_output_{index}"),
+                "content": "x".repeat(512)
+            })
+        })
+        .collect::<Vec<_>>();
+    fs::write(
+        &import_file,
+        serde_json::to_vec(&items).expect("serialize import"),
+    )
+    .expect("write import");
+    repo.run(&[
+        "import",
+        import_file.to_str().expect("import path"),
+        "--summary-only",
+    ]);
+
+    let mut child = Command::new(mem_bin())
+        .args(["--home", repo.path().to_str().expect("repo path"), "export"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn export");
+    let mut stdout = child.stdout.take().expect("stdout pipe");
+    let mut byte = [0_u8; 1];
+    stdout.read_exact(&mut byte).expect("read first byte");
+    drop(stdout);
+
+    let output = child.wait_with_output().expect("wait for export");
+    assert!(
+        output.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn max_bytes_rejects_output_before_stdout_is_written() {
+    let repo = TestRepo::new("max-output-bytes");
+
+    let output = repo.run_fail(&["--json-errors", "--max-bytes", "32", "contract"]);
+    let error = parse_error(&output);
+
+    assert_eq!(error["code"], "command_failed");
+    assert!(
+        error["message"]
+            .as_str()
+            .expect("message")
+            .contains("exceeding --max-bytes 32")
+    );
+}
+
+#[test]
 fn json_errors_does_not_change_help_success_output() {
     let repo = TestRepo::new("json-help");
 
@@ -358,4 +470,6 @@ fn json_errors_does_not_change_help_success_output() {
 
     assert!(output.contains("Portable agent memory CLI"));
     assert!(output.contains("--json-errors"));
+    assert!(output.contains("--read-only"));
+    assert!(output.contains("--max-bytes"));
 }

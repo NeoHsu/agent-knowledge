@@ -1,8 +1,6 @@
 use std::fs;
 
-mod support;
-
-use support::{TestRepo, temp_path};
+use crate::support::{TestRepo, temp_path};
 
 #[test]
 fn setup_agent_policy_subcommand_is_removed() {
@@ -94,6 +92,46 @@ fn setup_claude_code_wires_policy_skill_and_hook() {
     assert_eq!(result["skill"]["status"], "up_to_date");
     assert_eq!(result["skill"]["platform"]["status"], "up_to_date");
     assert_eq!(result["session_hook"]["status"], "already_present");
+
+    fs::remove_dir_all(base).ok();
+}
+
+#[test]
+fn setup_rolls_back_policy_and_skill_when_hook_wiring_fails() {
+    let repo = TestRepo::new("setup-transaction-rollback");
+    let base = temp_path("setup-transaction-rollback-base");
+    let policy_path = base.join(".claude/CLAUDE.md");
+    let settings_path = base.join(".claude/settings.json");
+    let shared_skill = base.join(".agents/skills/mnemark");
+    let platform_skill = base.join(".claude/skills/mnemark");
+    fs::create_dir_all(&shared_skill).expect("shared skill directory");
+    fs::create_dir_all(policy_path.parent().expect("policy parent")).expect("policy directory");
+    fs::write(&policy_path, "# Existing policy\n").expect("seed policy");
+    fs::write(shared_skill.join("SKILL.md"), "existing custom skill\n").expect("seed skill");
+    fs::write(&settings_path, "{invalid json\n").expect("seed invalid settings");
+
+    let error = repo.run_fail(&[
+        "setup",
+        "claude-code",
+        "--base-dir",
+        base.to_str().expect("base"),
+    ]);
+
+    assert!(error.contains("parse"));
+    assert_eq!(
+        fs::read_to_string(&policy_path).expect("restored policy"),
+        "# Existing policy\n"
+    );
+    assert_eq!(
+        fs::read_to_string(shared_skill.join("SKILL.md")).expect("restored skill"),
+        "existing custom skill\n"
+    );
+    assert_eq!(
+        fs::read_to_string(&settings_path).expect("unchanged settings"),
+        "{invalid json\n"
+    );
+    assert!(!shared_skill.join("references").exists());
+    assert!(!platform_skill.exists());
 
     fs::remove_dir_all(base).ok();
 }

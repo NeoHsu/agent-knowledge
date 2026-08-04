@@ -3,9 +3,7 @@ use std::fs;
 use rusqlite::Connection;
 use serde_json::Value;
 
-mod support;
-
-use support::TestRepo;
+use crate::support::TestRepo;
 
 #[test]
 fn merge_invalid_workflow_requires_human_review() {

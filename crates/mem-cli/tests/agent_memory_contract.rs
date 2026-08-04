@@ -2,9 +2,7 @@ use std::fs;
 
 use rusqlite::Connection;
 
-mod support;
-
-use support::TestRepo;
+use crate::support::{TestRepo, synthetic_github_token};
 
 fn json(output: &str) -> serde_json::Value {
     serde_json::from_str(output).expect("json output")
@@ -150,7 +148,7 @@ fn expired_memories_are_excluded_consistently_and_timestamps_are_strict() {
 fn secret_writes_are_rejected_unless_redaction_is_explicit() {
     let repo = TestRepo::new("secret-contract");
     repo.run(&["init"]);
-    let secret = "ghp_abcdefghijklmnop1234567890";
+    let secret = synthetic_github_token();
     let rejected = repo.run_fail(&[
         "save",
         "--name",
@@ -177,7 +175,7 @@ fn secret_writes_are_rejected_unless_redaction_is_explicit() {
     ]);
     let exported = repo.run(&["export", "--format", "json"]);
     assert!(exported.contains("[REDACTED]"));
-    assert!(!exported.contains(secret));
+    assert!(!exported.contains(&secret));
 
     let manual = repo.run_fail(&[
         "save",
@@ -288,7 +286,7 @@ fn durable_side_state_applies_secret_and_manual_source_gates() {
         workflow.to_str().expect("workflow path"),
         "--force",
     ]);
-    let secret = "ghp_abcdefghijklmnop1234567890";
+    let secret = synthetic_github_token();
     let rejected_run = repo.run_fail(&[
         "workflow",
         "record",
@@ -390,7 +388,7 @@ fn durable_side_state_applies_secret_and_manual_source_gates() {
         .expect("ambiguity resolution");
     for durable_value in [note, context, resolution] {
         assert!(durable_value.contains("[REDACTED]"));
-        assert!(!durable_value.contains(secret));
+        assert!(!durable_value.contains(&secret));
     }
 }
 

@@ -2,9 +2,7 @@ use std::fs;
 
 use rusqlite::Connection;
 
-mod support;
-
-use support::TestRepo;
+use crate::support::TestRepo;
 
 fn json(output: &str) -> serde_json::Value {
     serde_json::from_str(output).expect("json output")

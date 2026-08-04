@@ -3,9 +3,7 @@ use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-mod support;
-
-use support::TestRepo;
+use crate::support::TestRepo;
 
 const HELLO_SHA256: &str =
     "sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03";

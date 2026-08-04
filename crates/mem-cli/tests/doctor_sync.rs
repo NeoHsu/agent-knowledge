@@ -6,9 +6,9 @@ use std::process::Command;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-mod support;
-
-use support::{TestRuntimeStore, temp_path};
+use crate::support::{
+    TestRuntimeStore, synthetic_generic_secret, synthetic_github_token, temp_path,
+};
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
@@ -323,9 +323,10 @@ fn sync_dry_run_rejects_secret_leakage_without_committing() {
         "--force",
     ]);
     let conn = Connection::open(root.join("memory.db")).expect("open store");
+    let secret = synthetic_github_token();
     conn.execute(
         "UPDATE memories SET description = ?1 WHERE name = 'sync_secret_probe'",
-        ["ghp_abcdefghijklmnop1234567890"],
+        [secret],
     )
     .expect("inject secret");
     drop(conn);
@@ -348,7 +349,7 @@ fn sync_rejects_stale_bundle_backup_without_scanning_or_staging_it() {
     git_init_store(store.home());
     let backup = store.home().join(".bundle-replace-backup-stale");
     fs::create_dir_all(&backup).expect("stale backup directory");
-    fs::write(backup.join("old.txt"), "token: abcdefgh12345678\n").expect("stale backup content");
+    fs::write(backup.join("old.txt"), synthetic_generic_secret()).expect("stale backup content");
 
     let error = store.run_fail(&["sync", "--dry-run"]);
     assert!(error.contains("stale bundle replacement backup found"));

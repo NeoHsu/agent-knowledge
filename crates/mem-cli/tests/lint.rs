@@ -1,6 +1,4 @@
-mod support;
-
-use support::TestRepo;
+use crate::support::TestRepo;
 
 fn warning_codes(result: &serde_json::Value) -> Vec<String> {
     result["warnings"]

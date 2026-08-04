@@ -1,9 +1,7 @@
 use std::fs;
 use std::process::Command;
 
-mod support;
-
-use support::{TestRepo, mem_bin, temp_path};
+use crate::support::{TestRepo, mem_bin, temp_path};
 
 fn schema_root() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/schemas")
@@ -194,6 +192,7 @@ fn schema_and_operation_discovery_are_store_independent() {
     assert_eq!(inspected["operation"], "query");
     assert_eq!(inspected["effect"]["store_access"], "exclusive_lock");
     assert_eq!(inspected["effect"]["durable_write"], true);
+    assert_eq!(inspected["allowed_in_read_only"], false);
 }
 
 #[test]

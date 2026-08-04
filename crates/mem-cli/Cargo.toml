@@ -7,6 +7,7 @@ repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
 description = "Portable, local-first memory and workflow runbooks for coding agents"
+autotests = false
 readme = "../../README.md"
 keywords = ["ai", "memory", "cli", "sqlite", "agents"]
 categories = ["command-line-utilities", "development-tools"]
@@ -17,6 +18,14 @@ workspace = true
 [[bin]]
 name = "mem"
 path = "src/main.rs"
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+
+[[test]]
+name = "doc_drift"
+path = "tests/doc_drift.rs"
 
 [dependencies]
 anyhow.workspace = true

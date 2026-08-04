@@ -793,33 +793,31 @@ fn repository_mem_examples_parse_with_real_clap() {
                         continue;
                     }
 
-                    if example.kind == ExampleKind::Inline {
-                        if let Some(option) = invocation
+                    if example.kind == ExampleKind::Inline
+                        && let Some(option) = invocation
                             .last()
                             .filter(|token| token.starts_with("--"))
                             .cloned()
-                        {
-                            let mut completed = invocation.clone();
-                            completed.push(
-                                placeholder_value(Some(&option), &completed, completed.len())
-                                    .into(),
-                            );
-                            match cli_args::Cli::try_parse_from(&completed) {
-                                Ok(_) => continue,
-                                Err(completed_error)
-                                    if matches!(
-                                        completed_error.kind(),
-                                        ErrorKind::MissingRequiredArgument
-                                            | ErrorKind::MissingSubcommand
-                                            | ErrorKind::DisplayHelp
-                                            | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
-                                            | ErrorKind::DisplayVersion
-                                    ) =>
-                                {
-                                    continue;
-                                }
-                                Err(_) => {}
+                    {
+                        let mut completed = invocation.clone();
+                        completed.push(
+                            placeholder_value(Some(&option), &completed, completed.len()).into(),
+                        );
+                        match cli_args::Cli::try_parse_from(&completed) {
+                            Ok(_) => continue,
+                            Err(completed_error)
+                                if matches!(
+                                    completed_error.kind(),
+                                    ErrorKind::MissingRequiredArgument
+                                        | ErrorKind::MissingSubcommand
+                                        | ErrorKind::DisplayHelp
+                                        | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+                                        | ErrorKind::DisplayVersion
+                                ) =>
+                            {
+                                continue;
                             }
+                            Err(_) => {}
                         }
                     }
 

@@ -1,9 +1,7 @@
 use rusqlite::Connection;
 use std::fs;
 
-mod support;
-
-use support::TestRepo;
+use crate::support::TestRepo;
 
 #[test]
 fn save_query_and_version_conflict() {

@@ -1,9 +1,7 @@
 use rusqlite::Connection;
 use std::fs;
 
-mod support;
-
-use support::TestRepo;
+use crate::support::TestRepo;
 
 fn save_reference(repo: &TestRepo, name: &str) {
     repo.run(&[

@@ -12,9 +12,7 @@ use mem_core::artifact::artifact_file_checksum;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-mod support;
-
-use support::TestRepo;
+use crate::support::{TestRepo, synthetic_github_token};
 
 #[test]
 fn bundle_export_inspect_and_import_clean_store() {
@@ -300,7 +298,7 @@ fn bundle_export_rejects_secrets_or_redacts_only_the_exported_copy() {
         "Action: create a safe placeholder.",
         "--force",
     ]);
-    let secret = "ghp_abcdefghijklmnop1234567890";
+    let secret = synthetic_github_token();
     let conn = rusqlite::Connection::open(source.join("memory.db")).expect("open source db");
     conn.execute(
         "UPDATE memories SET description = ?1, content = ?1 WHERE name = 'bundle_secret'",
@@ -334,7 +332,7 @@ fn bundle_export_rejects_secrets_or_redacts_only_the_exported_copy() {
         )
         .expect("source content");
     assert!(
-        source_content.contains(secret),
+        source_content.contains(&secret),
         "export must not mutate source"
     );
 
@@ -346,7 +344,7 @@ fn bundle_export_rejects_secrets_or_redacts_only_the_exported_copy() {
     ]);
     let exported = target.run(&["export", "--format", "json"]);
     assert!(exported.contains("[REDACTED]"));
-    assert!(!exported.contains(secret));
+    assert!(!exported.contains(&secret));
 }
 
 #[test]

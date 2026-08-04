@@ -1,9 +1,7 @@
 use std::fs;
 use std::process::Command;
 
-mod support;
-
-use support::{TestRepo, mem_bin, temp_path};
+use crate::support::{TestRepo, mem_bin, temp_path};
 
 #[test]
 fn contract_is_store_independent_and_versions_machine_interfaces() {

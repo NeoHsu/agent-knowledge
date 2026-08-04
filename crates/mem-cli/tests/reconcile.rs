@@ -1,8 +1,6 @@
 use std::fs;
 
-mod support;
-
-use support::TestRepo;
+use crate::support::TestRepo;
 
 fn save(repo: &TestRepo, name: &str, content: &str, extra: &[&str]) {
     let mut args = vec![
@@ -185,7 +183,7 @@ fn reconcile_explicit_scope_checks_only_that_scope() {
 fn reconcile_resolves_relative_paths_against_repo_flag() {
     let repo = TestRepo::new("reconcile-repo-flag");
     repo.run(&["init"]);
-    let other = support::temp_path("reconcile-other-repo");
+    let other = crate::support::temp_path("reconcile-other-repo");
     fs::create_dir_all(other.join("src")).expect("other repo");
     fs::write(other.join("src/lib.rs"), "// lib").expect("lib file");
     save(

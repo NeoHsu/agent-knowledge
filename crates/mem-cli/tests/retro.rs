@@ -1,6 +1,4 @@
-mod support;
-
-use support::TestRepo;
+use crate::support::TestRepo;
 
 #[test]
 fn retro_bundle_contains_repository_state() {

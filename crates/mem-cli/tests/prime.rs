@@ -1,8 +1,6 @@
 use std::fs;
 
-mod support;
-
-use support::TestRuntimeStore;
+use crate::support::TestRuntimeStore;
 
 #[test]
 fn prime_renders_sections_and_protocol() {

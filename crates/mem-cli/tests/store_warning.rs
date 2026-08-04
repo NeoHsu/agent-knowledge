@@ -1,9 +1,7 @@
 use std::fs;
 use std::process::Command;
 
-mod support;
-
-use support::{TestRepo, TestRuntimeStore, mem_bin, temp_path};
+use crate::support::{TestRepo, TestRuntimeStore, mem_bin, temp_path};
 
 #[test]
 fn source_checkout_is_never_selected_implicitly() {
