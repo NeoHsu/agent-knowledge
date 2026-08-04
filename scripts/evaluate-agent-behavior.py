@@ -28,6 +28,7 @@ ASSERTION_TYPES = {
     "ordered",
     "first_command",
     "approval_before",
+    "at_least_one_of",
     "exactly_one_of",
 }
 
@@ -139,7 +140,12 @@ def validate_fixture(fixture: dict[str, Any]) -> None:
                 raise EvaluationError(f"unsupported assertion type: {assertion_type}")
             if assertion_type in {"required", "first_command"}:
                 validate_matcher(assertion.get("matcher"), f"{label}.matcher")
-            elif assertion_type in {"forbidden", "ordered", "exactly_one_of"}:
+            elif assertion_type in {
+                "forbidden",
+                "ordered",
+                "at_least_one_of",
+                "exactly_one_of",
+            }:
                 matchers = require_list(assertion.get("matchers"), f"{label}.matchers")
                 if not matchers:
                     raise EvaluationError(f"{label}.matchers must not be empty")
@@ -296,13 +302,16 @@ def evaluate_assertion(
         commands = matching_indices(actions, assertion["command"])
         passed = bool(approvals and commands and min(approvals) < min(commands))
         return passed, f"approval indices {approvals}; command indices {commands}"
-    if assertion_type == "exactly_one_of":
+    if assertion_type in {"at_least_one_of", "exactly_one_of"}:
         matches_found = [
             (matcher_index, action_index)
             for matcher_index, matcher in enumerate(assertion["matchers"])
             for action_index in matching_indices(actions, matcher)
         ]
-        return len(matches_found) == 1, f"matcher/action pairs {matches_found}"
+        passed = bool(matches_found)
+        if assertion_type == "exactly_one_of":
+            passed = len(matches_found) == 1
+        return passed, f"matcher/action pairs {matches_found}"
     raise EvaluationError(f"unsupported assertion type: {assertion_type}")
 
 

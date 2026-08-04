@@ -73,6 +73,105 @@ class AgentBehaviorEvaluationTests(unittest.TestCase):
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("does not match the evaluated fixture", completed.stderr)
 
+    def test_session_prime_requires_process_read_only_guard(self) -> None:
+        responses = self.responses()
+        trace = next(
+            trace
+            for trace in responses["traces"]
+            if trace["case_id"] == "session-start-without-hook"
+        )
+        trace["actions"][1]["argv"] = ["mem", "prime"]
+        completed = self.run_checker(responses)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("agent behavior evaluation failed", completed.stdout)
+
+    def test_missing_store_recall_requires_read_only_guard(self) -> None:
+        responses = self.responses()
+        trace = next(
+            trace
+            for trace in responses["traces"]
+            if trace["case_id"] == "missing-store-during-recall"
+        )
+        trace["actions"][1]["argv"] = [
+            "mem",
+            "query",
+            "reply preference",
+            "--scope",
+            "auto",
+        ]
+        completed = self.run_checker(responses)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("agent behavior evaluation failed", completed.stdout)
+
+    def test_conditional_repair_requires_effect_inspection(self) -> None:
+        responses = self.responses()
+        trace = next(
+            trace
+            for trace in responses["traces"]
+            if trace["case_id"] == "read-only-conditional-repair"
+        )
+        trace["actions"].pop(1)
+        completed = self.run_checker(responses)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("agent behavior evaluation failed", completed.stdout)
+
+    def test_guarded_conditional_repair_path_is_accepted(self) -> None:
+        responses = self.responses()
+        trace = next(
+            trace
+            for trace in responses["traces"]
+            if trace["case_id"] == "read-only-conditional-repair"
+        )
+        trace["actions"][2] = {
+            "kind": "command",
+            "argv": [
+                "mem",
+                "--read-only",
+                "query",
+                "release safety",
+                "--repair-index",
+            ],
+        }
+        completed = self.run_checker(responses)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_codebase_graph_stays_outside_mnemark(self) -> None:
+        responses = self.responses()
+        trace = next(
+            trace
+            for trace in responses["traces"]
+            if trace["case_id"] == "ordinary-codebase-architecture-graph"
+        )
+        trace["actions"] = [
+            {"kind": "command", "argv": ["mem", "graph", "query", "architecture"]}
+        ]
+        completed = self.run_checker(responses)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("agent behavior evaluation failed", completed.stdout)
+
+    def test_ordinary_git_sync_does_not_invoke_mem(self) -> None:
+        responses = self.responses()
+        trace = next(
+            trace
+            for trace in responses["traces"]
+            if trace["case_id"] == "ordinary-git-sync"
+        )
+        trace["actions"].append(
+            {
+                "kind": "command",
+                "argv": [
+                    "mem",
+                    "--json-errors",
+                    "contract",
+                    "--skill-version",
+                    "0.9.0",
+                ],
+            }
+        )
+        completed = self.run_checker(responses)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("agent behavior evaluation failed", completed.stdout)
+
     def test_push_before_approval_fails(self) -> None:
         responses = self.responses()
         trace = next(
@@ -91,7 +190,9 @@ class AgentBehaviorEvaluationTests(unittest.TestCase):
         responses["traces"] = responses["traces"][:-1]
         completed = self.run_checker(responses)
         self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("coverage=0.900", completed.stdout)
+        case_count = len(self.fixture()["cases"])
+        expected_coverage = (case_count - 1) / case_count
+        self.assertIn(f"coverage={expected_coverage:.3f}", completed.stdout)
 
     def test_unknown_action_fields_are_rejected(self) -> None:
         responses = copy.deepcopy(self.responses())

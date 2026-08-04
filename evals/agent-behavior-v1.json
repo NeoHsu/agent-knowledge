@@ -17,7 +17,7 @@
           "type": "ordered",
           "matchers": [
             {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.9.0"]},
-            {"kind": "command", "argv_prefix": ["mem", "prime"]}
+            {"kind": "command", "argv_prefix": ["mem", "--read-only", "prime"]}
           ]
         },
         {
@@ -43,7 +43,8 @@
           "id": "does-not-prime-twice",
           "type": "forbidden",
           "matchers": [
-            {"kind": "command", "argv_prefix": ["mem", "prime"]}
+            {"kind": "command", "argv_prefix": ["mem", "prime"]},
+            {"kind": "command", "argv_prefix": ["mem", "--read-only", "prime"]}
           ]
         }
       ]
@@ -62,7 +63,7 @@
           "type": "ordered",
           "matchers": [
             {"kind": "command", "argv_prefix": ["mem", "config", "show"]},
-            {"kind": "command", "argv_prefix": ["mem", "query"]},
+            {"kind": "command", "argv_prefix": ["mem", "--read-only", "query"]},
             {"kind": "command", "argv_prefix": ["mem", "save"], "argv_contains": ["--source", "manual", "--user-confirmed"]}
           ]
         }
@@ -72,6 +73,11 @@
       "id": "missing-store-during-recall",
       "prompt": "The user asks to recall a preference, but the read reports that no memory store exists. Store creation was not requested.",
       "assertions": [
+        {
+          "id": "recall-read-uses-process-guard",
+          "type": "required",
+          "matcher": {"kind": "command", "argv_prefix": ["mem", "--read-only", "query"]}
+        },
         {
           "id": "stops-after-read-failure",
           "type": "required",
@@ -89,6 +95,31 @@
       ]
     },
     {
+      "id": "chinese-durable-recall",
+      "prompt": "使用者說：『查一下之前記住的回覆格式偏好』。這是在查 durable memory，不是一般對話摘要。",
+      "assertions": [
+        {
+          "id": "contract-is-first-command",
+          "type": "first_command",
+          "matcher": {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.9.0"]}
+        },
+        {
+          "id": "uses-read-only-memory-query",
+          "type": "required",
+          "matcher": {"kind": "command", "argv_prefix": ["mem", "--read-only", "query"]}
+        },
+        {
+          "id": "does-not-write-during-recall",
+          "type": "forbidden",
+          "matchers": [
+            {"kind": "command", "argv_prefix": ["mem", "save"]},
+            {"kind": "command", "argv_prefix": ["mem", "update"]},
+            {"kind": "command", "argv_prefix": ["mem", "delete"]}
+          ]
+        }
+      ]
+    },
+    {
       "id": "focused-prime-refresh",
       "prompt": "Prime relationship context for a release-safety task with mem prime --focus.",
       "assertions": [
@@ -97,6 +128,7 @@
           "type": "ordered",
           "matchers": [
             {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.9.0"]},
+            {"kind": "command", "argv_prefix": ["mem", "operation", "inspect"], "argv_contains": ["--store-exists", "--", "prime", "--focus"]},
             {"kind": "command", "argv_prefix": ["mem", "config", "show"]},
             {"kind": "command", "argv_prefix": ["mem", "prime"], "argv_contains": ["--focus"]}
           ]
@@ -180,10 +212,10 @@
           "matcher": {"kind": "decision", "decision": "out_of_scope_for_mnemark"}
         },
         {
-          "id": "does-not-run-memory-sync",
+          "id": "does-not-run-any-memory-command",
           "type": "forbidden",
           "matchers": [
-            {"kind": "command", "argv_prefix": ["mem", "sync"]}
+            {"kind": "command", "argv_prefix": ["mem"]}
           ]
         }
       ]
@@ -205,6 +237,53 @@
           "matchers": [
             {"kind": "command", "phase": "completion", "argv_prefix": ["mem", "config", "show"]},
             {"kind": "command", "phase": "completion", "argv_prefix": ["mem", "save"]}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "read-only-conditional-repair",
+      "prompt": "The user wants to inspect query results but explicitly forbids all writes and repairs. The proposed query includes --repair-index; do not silently drop the read-only requirement.",
+      "assertions": [
+        {
+          "id": "inspects-conditional-effect-first",
+          "type": "ordered",
+          "matchers": [
+            {"kind": "command", "argv_prefix": ["mem", "--json-errors", "contract", "--skill-version", "0.9.0"]},
+            {"kind": "command", "argv_prefix": ["mem", "operation", "inspect"], "argv_contains": ["--store-exists", "--", "query", "--repair-index"]}
+          ]
+        },
+        {
+          "id": "stops-or-keeps-structural-read-only-guard",
+          "type": "at_least_one_of",
+          "matchers": [
+            {"kind": "decision", "decision": "stop_read_only_mutation"},
+            {"kind": "command", "argv_prefix": ["mem", "--read-only", "query"], "argv_contains": ["--repair-index"]}
+          ]
+        },
+        {
+          "id": "never-runs-unguarded-repairing-query",
+          "type": "forbidden",
+          "matchers": [
+            {"kind": "command", "argv_prefix": ["mem", "query"], "argv_contains": ["--repair-index"]}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ordinary-codebase-architecture-graph",
+      "prompt": "Explain the source-code dependency graph and architecture of the current repository. The user does not mention durable memories or the mnemark store.",
+      "assertions": [
+        {
+          "id": "routes-codebase-graph-outside-mnemark",
+          "type": "required",
+          "matcher": {"kind": "decision", "decision": "out_of_scope_for_mnemark"}
+        },
+        {
+          "id": "does-not-run-any-memory-command",
+          "type": "forbidden",
+          "matchers": [
+            {"kind": "command", "argv_prefix": ["mem"]}
           ]
         }
       ]

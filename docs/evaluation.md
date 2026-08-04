@@ -54,13 +54,19 @@ to make CI green.
 cross-agent scenarios for:
 
 - session startup with and without an injected context block;
-- explicit remember requests and end-of-work batching;
-- missing-store recall;
-- focused priming target preflight;
+- explicit remember requests, multilingual durable recall, and end-of-work
+  batching;
+- missing-store recall and process-level read-only priming/query guards;
+- parsed effect inspection before focused priming or conditional repair;
 - sync push approval;
 - risky workflow execution and run recording;
 - secret-storage rejection;
-- the negative case of ordinary Git sync.
+- negative routing cases for ordinary Git sync and source-code architecture
+  graphs.
+
+For a conditionally mutating invocation under an explicit read-only requirement,
+the trace may stop after effect inspection or execute the command with global
+`--read-only` so the CLI blocks it; an unguarded invocation always fails.
 
 The evaluator consumes captured actions, not prose explanations. Commands are
 argv arrays so ordering and flags can be checked without parsing shell strings.
