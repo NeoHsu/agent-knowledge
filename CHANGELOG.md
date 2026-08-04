@@ -49,6 +49,8 @@ All notable changes to mnemark are documented here.
 
 - Ensured direct-main CI exposes the compiled `actionlint` binary on `PATH`
   before validating workflow contracts.
+- Recorded the exact release tag for pinned `taiki-e/install-action` SHAs so
+  online workflow-security audits can verify pin provenance.
 
 ## [0.9.0] - 2026-07-30
 

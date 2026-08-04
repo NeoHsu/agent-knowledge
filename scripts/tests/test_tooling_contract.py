@@ -97,6 +97,21 @@ class ToolingContractTests(unittest.TestCase):
         self.assertIn("workflow-security:", self.ci)
         self.assertIn('echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"', self.ci)
 
+    def test_install_action_pins_have_exact_version_comments(self) -> None:
+        for name, workflow in (("CI", self.ci), ("Release", self.release)):
+            install_lines = [
+                line.strip()
+                for line in workflow.splitlines()
+                if "uses: taiki-e/install-action@" in line
+            ]
+            self.assertTrue(install_lines, name)
+            for line in install_lines:
+                self.assertRegex(
+                    line,
+                    r"^(?:- )?uses: taiki-e/install-action@[0-9a-f]{40} # v\d+\.\d+\.\d+$",
+                    name,
+                )
+
     def test_local_gate_keeps_security_and_msrv_checks(self) -> None:
         commands = self.config["tasks"]["check:pr"]["run"]
         for command in (
