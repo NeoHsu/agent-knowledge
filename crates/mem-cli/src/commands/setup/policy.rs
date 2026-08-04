@@ -158,7 +158,8 @@ pub(super) fn install_policy(target: &Path, dry_run: bool) -> Result<Value> {
         fs::create_dir_all(parent)
             .with_context(|| format!("create parent directory {}", parent.display()))?;
     }
-    fs::write(target, updated).with_context(|| format!("write {}", target.display()))?;
+    atomic_write(target, updated.as_bytes())
+        .with_context(|| format!("write {}", target.display()))?;
     Ok(json!({"status": action, "target": target_text}))
 }
 

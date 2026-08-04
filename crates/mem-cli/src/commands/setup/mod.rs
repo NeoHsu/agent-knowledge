@@ -2,11 +2,13 @@ mod hook;
 mod platform;
 mod policy;
 mod skill;
+mod transaction;
 
 use super::*;
 use hook::wire_claude_hook;
 use policy::install_policy;
 use skill::install_shared_skill;
+use transaction::SetupTransaction;
 
 pub(crate) use hook::{HOOK_COMMAND, LEGACY_HOOK_COMMAND};
 pub(crate) use platform::{PLATFORMS, PlatformSpec, SHARED_SKILLS_DIR, base_dir, platform_by_name};
@@ -73,26 +75,62 @@ fn cmd_setup_platform(name: &str, args: SetupPlatformArgs) -> Result<()> {
         .shared_skills_dir
         .unwrap_or_else(|| base.join(SHARED_SKILLS_DIR))
         .join("mnemark");
+    let hook_path = (!args.no_hook)
+        .then(|| platform.claude_settings.map(|settings| base.join(settings)))
+        .flatten();
 
-    let policy = install_policy(&instructions, args.dry_run)?;
-    let skill = if args.no_skill {
-        json!({"status": "skipped"})
+    let transaction = if args.dry_run {
+        None
     } else {
-        install_shared_skill(
-            &shared_skill_root,
-            platform_skill_root.as_deref(),
-            args.dry_run,
-        )?
+        let mut paths = vec![instructions.clone()];
+        if !args.no_skill {
+            paths.push(shared_skill_root.clone());
+            if let Some(root) = &platform_skill_root {
+                paths.push(root.clone());
+            }
+        }
+        if let Some(path) = &hook_path {
+            paths.push(path.clone());
+        }
+        Some(SetupTransaction::begin(paths)?)
     };
-    let hook = if args.no_hook {
-        json!({"status": "skipped"})
-    } else if let Some(settings) = platform.claude_settings {
-        wire_claude_hook(&base.join(settings), args.dry_run)?
-    } else {
-        json!({
-            "status": "policy_prose",
-            "detail": "no session-start hook mechanism; the policy block instructs agents to run `mem prime`"
-        })
+
+    let configured = (|| -> Result<(Value, Value, Value)> {
+        let policy = install_policy(&instructions, args.dry_run)?;
+        let skill = if args.no_skill {
+            json!({"status": "skipped"})
+        } else {
+            install_shared_skill(
+                &shared_skill_root,
+                platform_skill_root.as_deref(),
+                args.dry_run,
+            )?
+        };
+        let hook = if args.no_hook {
+            json!({"status": "skipped"})
+        } else if let Some(settings) = &hook_path {
+            wire_claude_hook(settings, args.dry_run)?
+        } else {
+            json!({
+                "status": "policy_prose",
+                "detail": "no session-start hook mechanism; the policy block instructs agents to run `mem prime`"
+            })
+        };
+        Ok((policy, skill, hook))
+    })();
+
+    let (policy, skill, hook) = match configured {
+        Ok(result) => result,
+        Err(error) => {
+            if let Some(transaction) = transaction
+                && let Err(rollback) = transaction.rollback()
+            {
+                return Err(anyhow!(
+                    "{error:#}; setup rollback also failed: {rollback:#}"
+                ));
+            }
+            return Err(error);
+        }
     };
 
     print_json_pretty(&json!({

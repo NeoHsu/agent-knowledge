@@ -92,7 +92,7 @@ pub(super) fn wire_claude_hook(settings_path: &Path, dry_run: bool) -> Result<Va
     }
     let mut rendered = serde_json::to_string_pretty(&root)?;
     rendered.push('\n');
-    fs::write(settings_path, rendered)
+    atomic_write(settings_path, rendered.as_bytes())
         .with_context(|| format!("write {}", settings_path.display()))?;
     Ok(json!({
         "status": if upgraded { "upgraded" } else { "installed" },

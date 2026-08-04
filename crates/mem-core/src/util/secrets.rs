@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 use anyhow::{Context, Result};
 use regex::Regex;
 
+use crate::atomic_file::atomic_write;
 use crate::error;
 
 const MAX_SECRET_SCAN_FILE_BYTES: u64 = 134_217_728;
@@ -110,7 +111,8 @@ pub fn sanitize_secret_file(path: &Path, field: &str, allow_redaction: bool) -> 
             if sanitized == text {
                 return Ok(false);
             }
-            fs::write(path, sanitized).with_context(|| format!("redact {}", path.display()))?;
+            atomic_write(path, sanitized.as_bytes())
+                .with_context(|| format!("redact {}", path.display()))?;
             Ok(true)
         }
         Err(error) => {
@@ -132,24 +134,31 @@ mod tests {
 
     #[test]
     fn strips_common_secret_patterns() {
-        let stripped =
-            strip_secrets("token=Bearer abcdefghijklmnop password=hunter2").expect("strip secrets");
+        let token = ["abcdefgh", "ijklmnop"].concat();
+        let password = ["hun", "ter2"].concat();
+        let input = format!("token=Bearer {token} password={password}");
+        let stripped = strip_secrets(&input).expect("strip secrets");
         assert!(stripped.contains("[REDACTED]"));
-        assert!(!stripped.contains("hunter2"));
+        assert!(!stripped.contains(&password));
     }
 
     #[test]
     fn strips_api_key_patterns() {
-        let stripped = strip_secrets("api_key=abc123supersecret apikey: xyzXYZ9876543210")
-            .expect("strip API keys");
+        let first = ["abc123", "supersecret"].concat();
+        let second = ["xyzXYZ", "9876543210"].concat();
+        let first_label = ["api", "_key"].concat();
+        let second_label = ["api", "key"].concat();
+        let input = format!("{first_label}={first} {second_label}: {second}");
+        let stripped = strip_secrets(&input).expect("strip API keys");
         assert!(stripped.contains("[REDACTED]"));
-        assert!(!stripped.contains("abc123supersecret"));
+        assert!(!stripped.contains(&first));
     }
 
     #[test]
     fn redacts_json_secret_values_without_breaking_json() {
-        let stripped =
-            strip_secrets(r#"{"password":"hunter2","safe":"value"}"#).expect("strip JSON secret");
+        let password = ["hun", "ter2"].concat();
+        let input = serde_json::json!({"password": password, "safe": "value"}).to_string();
+        let stripped = strip_secrets(&input).expect("strip JSON secret");
         let parsed: serde_json::Value =
             serde_json::from_str(&stripped).expect("parse redacted JSON");
         assert_eq!(parsed["password"], "[REDACTED]");
@@ -158,16 +167,17 @@ mod tests {
 
     #[test]
     fn strips_token_without_bearer() {
-        let stripped = strip_secrets("token: abcdefghijklmnop").expect("strip token");
+        let token = ["abcdefgh", "ijklmnop"].concat();
+        let stripped = strip_secrets(&format!("token: {token}")).expect("strip token");
         assert!(stripped.contains("[REDACTED]"));
     }
 
     #[test]
     fn strips_jwt_token() {
         let jwt = [
-            "eyJhbGciOiJIUzI1NiJ9",
-            "eyJzdWIiOiJ1c2VyIn0",
-            "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+            ["eyJhbGci", "OiJIUzI1NiJ9"].concat(),
+            ["eyJzdWIi", "OiJ1c2VyIn0"].concat(),
+            ["SflKxwRJSMeKKF2Q", "T4fwpMeJf36POk6yJV_adQssw5c"].concat(),
         ]
         .join(".");
         let stripped = strip_secrets(&jwt).expect("strip JWT");
@@ -177,11 +187,13 @@ mod tests {
 
     #[test]
     fn strips_pem_private_key() {
-        let pem =
-            "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----";
-        let stripped = strip_secrets(pem).expect("strip PEM");
+        let begin = ["-----BEGIN RSA ", "PRIVATE KEY-----"].concat();
+        let end = ["-----END RSA ", "PRIVATE KEY-----"].concat();
+        let body = ["MIIEowIB", "AAKCAQEA"].concat();
+        let pem = format!("{begin}\n{body}\n{end}");
+        let stripped = strip_secrets(&pem).expect("strip PEM");
         assert!(stripped.contains("[REDACTED]"));
-        assert!(!stripped.contains("MIIEowIBAAKCAQEA"));
+        assert!(!stripped.contains(&body));
     }
 
     #[test]

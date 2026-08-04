@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 use crate::args::*;
 use crate::cli_error::committed_index_error;
 use mem_core::app::App;
+use mem_core::atomic_file::atomic_write;
 use mem_core::db::*;
 use mem_core::index as memory_index;
 use mem_core::scope;

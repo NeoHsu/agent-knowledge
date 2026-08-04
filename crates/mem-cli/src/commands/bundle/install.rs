@@ -6,34 +6,8 @@ use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 
 use super::*;
 
-#[cfg(not(windows))]
 pub(super) fn install_bundle_file(temporary: &Path, target: &Path) -> Result<()> {
-    fs::rename(temporary, target)?;
-    Ok(())
-}
-
-#[cfg(windows)]
-pub(super) fn install_bundle_file(temporary: &Path, target: &Path) -> Result<()> {
-    if !target.exists() {
-        fs::rename(temporary, target)?;
-        return Ok(());
-    }
-    let metadata = fs::symlink_metadata(target)?;
-    if !metadata.is_file() && !metadata.file_type().is_symlink() {
-        bail!(
-            "bundle output target is not a regular file: {}",
-            target.display()
-        );
-    }
-    let backup =
-        target.with_extension(format!("mnemark-replace-{}", uuid::Uuid::new_v4().simple()));
-    fs::rename(target, &backup)?;
-    if let Err(error) = fs::rename(temporary, target) {
-        let _ = fs::rename(&backup, target);
-        return Err(error.into());
-    }
-    fs::remove_file(backup).ok();
-    Ok(())
+    mem_core::atomic_file::replace_staged_file(temporary, target)
 }
 
 #[cfg(unix)]

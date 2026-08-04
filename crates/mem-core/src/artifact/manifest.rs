@@ -1,14 +1,11 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::Write;
 use std::path::Path;
-
-#[cfg(unix)]
-use std::os::unix::fs::OpenOptionsExt;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::atomic_file::atomic_write_private;
 use crate::error;
 
 const MANIFEST_FILE: &str = "manifest.toml";
@@ -106,25 +103,8 @@ impl ArtifactManifest {
                 "artifact manifest exceeds 8388608 bytes",
             ));
         }
-        let temporary = root.join(format!(
-            ".manifest.toml.tmp-{}",
-            uuid::Uuid::new_v4().simple()
-        ));
-        let write_result = (|| -> Result<()> {
-            let mut options = fs::OpenOptions::new();
-            options.create_new(true).write(true);
-            #[cfg(unix)]
-            options.mode(0o600);
-            let mut file = options.open(&temporary)?;
-            file.write_all(content.as_bytes())?;
-            file.sync_all()?;
-            install_atomic_file(&temporary, &path)?;
-            Ok(())
-        })();
-        if write_result.is_err() {
-            fs::remove_file(&temporary).ok();
-        }
-        write_result.with_context(|| format!("write {}", path.display()))
+        atomic_write_private(&path, content.as_bytes())
+            .with_context(|| format!("write {}", path.display()))
     }
 
     pub fn entries(&self) -> Vec<ArtifactEntry> {
@@ -164,29 +144,6 @@ impl ArtifactManifest {
         let entry = self.find_entry(reference)?;
         Ok((entry.group, entry.short_name))
     }
-}
-
-#[cfg(not(windows))]
-fn install_atomic_file(temporary: &Path, target: &Path) -> Result<()> {
-    fs::rename(temporary, target)?;
-    Ok(())
-}
-
-#[cfg(windows)]
-fn install_atomic_file(temporary: &Path, target: &Path) -> Result<()> {
-    if !target.exists() {
-        fs::rename(temporary, target)?;
-        return Ok(());
-    }
-    let backup =
-        target.with_extension(format!("mnemark-replace-{}", uuid::Uuid::new_v4().simple()));
-    fs::rename(target, &backup)?;
-    if let Err(error) = fs::rename(temporary, target) {
-        let _ = fs::rename(&backup, target);
-        return Err(error.into());
-    }
-    fs::remove_file(backup).ok();
-    Ok(())
 }
 
 #[cfg(test)]

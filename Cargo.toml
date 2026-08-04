@@ -24,6 +24,7 @@ serde_json = "1.0.150"
 # We alias it as `serde_yaml` so code using `serde_yaml::` imports works without changes.
 serde_yaml = { package = "serde_yaml_ng", version = "0.10" }
 tantivy = "0.26.1"
+tempfile = "3.27.0"
 toml = "1.1.2"
 uuid = { version = "1.23.2", features = ["v4"] }
 

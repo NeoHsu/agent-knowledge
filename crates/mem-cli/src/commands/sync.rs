@@ -193,7 +193,7 @@ fn resolve_db_conflict(
 
     let theirs_path = root.join(".mem-sync-theirs.db");
     let theirs_bytes = git_capture_bytes(root, &["show", &format!("{remote_ref}:memory.db")])?;
-    fs::write(&theirs_path, theirs_bytes).context("write remote memory.db snapshot")?;
+    atomic_write(&theirs_path, &theirs_bytes).context("write remote memory.db snapshot")?;
     git_run(root, &["checkout", "--ours", "memory.db"])?;
     git_run(root, &["add", "memory.db"])?;
 
@@ -356,7 +356,7 @@ fn ensure_gitignore(root: &Path) -> Result<()> {
         }
     }
     if updated != existing {
-        fs::write(&path, updated).context("update store .gitignore")?;
+        atomic_write(&path, updated.as_bytes()).context("update store .gitignore")?;
     }
     Ok(())
 }

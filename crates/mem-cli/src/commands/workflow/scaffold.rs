@@ -21,17 +21,18 @@ pub(super) fn scaffold(args: WorkflowNewArgs) -> Result<()> {
             output.display()
         );
     }
-    if let Some(parent) = output.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("create directory {}", parent.display()))?;
-        }
+    if let Some(parent) = output.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create directory {}", parent.display()))?;
     }
     let (template_name, template) = match examples {
         WorkflowExamples::Minimal => ("minimal", MINIMAL_WORKFLOW_TEMPLATE),
         WorkflowExamples::Full => ("full", FULL_WORKFLOW_TEMPLATE),
     };
-    fs::write(&output, template).with_context(|| format!("write {}", output.display()))?;
+    atomic_write(&output, template.as_bytes())
+        .with_context(|| format!("write {}", output.display()))?;
 
     let path = output.display().to_string();
     let tags = json!([format!("workflow:{name}")]).to_string();

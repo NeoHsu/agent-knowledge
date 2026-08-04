@@ -15,6 +15,7 @@ use tantivy::schema::{
 };
 use tantivy::{Index, IndexWriter, TantivyDocument, Term, doc};
 
+use crate::atomic_file::atomic_write;
 use crate::error;
 use crate::index::{SearchFilters, SearchLifecycle};
 use crate::search_tokenizer;
@@ -408,9 +409,9 @@ fn read_index_version(index_path: &Path) -> Result<i64, IndexCompatibilityError>
 }
 
 fn write_index_version(index_path: &Path) -> Result<()> {
-    fs::write(
-        index_version_marker_path(index_path),
-        format!("{INDEX_SCHEMA_VERSION}\n"),
+    atomic_write(
+        &index_version_marker_path(index_path),
+        format!("{INDEX_SCHEMA_VERSION}\n").as_bytes(),
     )
     .context("write index schema version marker")
 }

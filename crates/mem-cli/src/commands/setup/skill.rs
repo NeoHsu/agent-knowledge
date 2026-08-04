@@ -59,7 +59,8 @@ fn install_skill_files(skill_root: &Path, dry_run: bool) -> Result<Value> {
             fs::create_dir_all(parent)
                 .with_context(|| format!("create skill directory {}", parent.display()))?;
         }
-        fs::write(&path, content).with_context(|| format!("write {}", path.display()))?;
+        atomic_write(&path, content.as_bytes())
+            .with_context(|| format!("write {}", path.display()))?;
     }
     Ok(json!({
         "status": if written.is_empty() { "up_to_date" } else if dry_run { "dry_run" } else { "installed" },
