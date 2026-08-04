@@ -95,6 +95,7 @@ class ToolingContractTests(unittest.TestCase):
         self.assertIn("cancel-in-progress: true", self.ci)
         self.assertGreaterEqual(self.ci.count("timeout-minutes:"), 3)
         self.assertIn("workflow-security:", self.ci)
+        self.assertIn('echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"', self.ci)
 
     def test_local_gate_keeps_security_and_msrv_checks(self) -> None:
         commands = self.config["tasks"]["check:pr"]["run"]

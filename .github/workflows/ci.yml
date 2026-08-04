@@ -169,7 +169,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Install actionlint
-        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Validate workflow contracts
         run: scripts/check-workflows.sh
       - name: Audit GitHub Actions workflows
