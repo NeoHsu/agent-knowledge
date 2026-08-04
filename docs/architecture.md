@@ -57,9 +57,11 @@ policy/skill/hook target and rolls the group back if a later step fails.
 
 ## Output boundary
 
-CLI output is written through fallible locked writers. Broken stdout pipes are
-a successful early consumer exit. `--max-bytes` rejects oversized rendered
-stdout before partial output. Error text is secret-redacted and escapes
+CLI output is serialized into a bounded spool before a locked stdout writer is
+touched. Small output remains in memory and larger output rolls to an unnamed
+temporary file, so `--max-bytes` rejects oversized output without retaining the
+whole JSON payload or publishing a partial response. Broken stdout pipes are a
+successful early consumer exit. Error text is secret-redacted and escapes
 control/bidirectional characters before terminal rendering. Machine interfaces
 remain versioned by the contract and JSON schemas.
 
@@ -68,8 +70,12 @@ remain versioned by the contract and JSON schemas.
 Rust unit tests live beside domain code. CLI acceptance coverage is linked into
 one `integration` target with a shared `TempDir` harness; `doc_drift` remains a
 separate target because it owns CLI-surface regeneration. Property tests cover
-byte-preserving atomic replacement, while deterministic integration tests cover
-store, import, graph, workflow, setup rollback, and error contracts.
+byte-preserving atomic replacement; injected failures cover pre/post-replacement
+state, Windows-style rollback, setup restoration,
+and symlink/permission preservation. Focused semantic ingest/merge tests cover
+trust precedence, unresolved/cross-scope review, secret handling, and resource
+bounds, while deterministic integration tests cover store, import, graph,
+workflow, setup rollback, and error contracts.
 
 See the [runtime model](runtime-model.md) for command effects and durable state,
 and the [ADRs](adr/README.md) for the decisions behind these boundaries.

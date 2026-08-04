@@ -23,7 +23,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --locked --all-targets -- -D warnings
 cargo nextest run --workspace --locked --status-level all
 cargo test --doc --workspace --locked
-cargo +1.97.0 check --workspace --all-targets --locked
+cargo +1.97.1 check --workspace --all-targets --locked
 cargo audit --deny warnings
 cargo deny check
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'

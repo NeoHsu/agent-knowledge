@@ -169,7 +169,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --locked --all-targets -- -D warnings
 cargo nextest run --workspace --locked --status-level all
 cargo test --doc --workspace --locked
-cargo +1.97.0 check --workspace --all-targets --locked
+cargo +1.97.1 check --workspace --all-targets --locked
 cargo audit --deny warnings
 cargo deny check
 python3 scripts/check-skill-version.py
@@ -184,8 +184,9 @@ scripts/smoke-release.sh
 
 Install pinned tools with `mise install`. `.cargo/config.toml` supplies
 PATH-resolved target-specific compiler names on macOS so malformed generic Zig
-compiler variables do not reach cc-rs. CI also tests the declared Rust 1.97
-MSRV and runs a bounded benchmark correctness smoke.
+compiler variables do not reach cc-rs. CI also tests the declared Rust 1.97.1
+MSRV, builds cargo-dist artifacts on pull requests without publishing, and runs
+a bounded benchmark correctness smoke.
 
 For release qualification, prefer the single mechanism that also checks a
 clean tree, release metadata, recovery, and benchmark guardrails:

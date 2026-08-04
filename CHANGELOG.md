@@ -13,6 +13,8 @@ All notable changes to mnemark are documented here.
   policy, skill, symlink, and hook setup targets.
 - Added versioned save/import wire requests, normalized core-domain requests,
   and typed save outcomes.
+- Added bounded-memory stdout spooling plus injected atomic replacement,
+  rollback, semantic ingest, and semantic merge regression coverage.
 
 ### Changed
 
@@ -28,7 +30,9 @@ All notable changes to mnemark are documented here.
 - Expanded local and CI contracts with nextest, sccache, cargo-machete, Ruff,
   gitleaks history/current-source scans, actionlint, zizmor, bounded jobs, a
   50 MiB release size budget, and exact native execution of cargo-dist archive
-  binaries.
+  binaries on pull requests as well as release tags.
+- Raised the declared Rust MSRV from 1.97.0 to 1.97.1 and the measured line
+  coverage floor from 84% to 86%.
 
 ## [0.9.0] - 2026-07-30
 

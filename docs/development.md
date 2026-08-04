@@ -35,7 +35,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --locked --all-targets -- -D warnings
 cargo nextest run --workspace --locked --status-level all
 cargo test --doc --workspace --locked
-cargo +1.97.0 check --workspace --all-targets --locked
+cargo +1.97.1 check --workspace --all-targets --locked
 cargo audit --deny warnings
 cargo deny check
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
@@ -79,16 +79,21 @@ skip a missing auxiliary workflow/shell tool for bounded development only and
 cannot provide complete release evidence. Gitleaks, Ruff, cargo-nextest, and
 cargo-machete remain mandatory.
 
-CI tests both stable Rust and the declared Rust 1.97 MSRV. Pull requests use the
-stable Linux lane in `ci.yml` plus the Rust 1.97 Linux/macOS/Windows release
-verification matrix; direct `main` pushes run stable and MSRV lanes in `ci.yml`.
-This avoids duplicating the same Ubuntu MSRV test on every pull request. The
+CI tests both stable Rust and the declared Rust 1.97.1 MSRV. Pull requests use
+the stable Linux lane in `ci.yml` plus the Rust 1.97.1 Linux/macOS/Windows
+release verification matrix; direct `main` pushes run stable and MSRV lanes in
+`ci.yml`. Cargo-dist uses PR upload mode, so pull requests also build the real
+archives and installers and execute host-compatible archive binaries without
+publishing a release. This avoids duplicating the same Ubuntu MSRV test on every
+pull request. The
 stable lane uses sccache and nextest, builds and smoke-tests the release binary,
 and runs a bounded benchmark correctness smoke. Separate gates scan Git history
 plus current non-ignored sources, lint Python, reject unused Cargo dependencies,
-and audit workflows. A separate Rust 1.97 coverage lane retains LCOV
-and enforces an 84% line floor, set below the measured 84.77% baseline from
-2026-08-04 so the gate prevents regression without claiming complete coverage.
+and audit workflows. A separate Rust 1.97.1 coverage lane retains LCOV and
+enforces an 86% line floor against the measured 86.43% baseline from
+2026-08-04. Targeted semantic ingest/merge, tag, atomic-failure, output-spool,
+and setup-rollback tests provide the additional safety-path coverage without
+claiming complete coverage.
 Run it locally with `mise run coverage`.
 
 ## Release build and smoke test

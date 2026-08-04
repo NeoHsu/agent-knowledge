@@ -63,8 +63,9 @@ intends that checkout to be the active store.
 
 All commands accept the global `--json-errors`, `--read-only`, and
 `--max-bytes <N>` flags. `--max-bytes` can also be set with
-`MNEMARK_MAX_BYTES`; it fails before writing stdout when the rendered response
-would exceed the bound, avoiding partial machine output. `--read-only` can also
+`MNEMARK_MAX_BYTES`; output is serialized through a bounded memory/disk spool,
+and the command fails before writing stdout when the rendered response would
+exceed the bound, avoiding partial machine output. `--read-only` can also
 be set with `MNEMARK_READ_ONLY=true`; it rejects exact
 invocations classified with durable, rebuildable, output-file, or network side
 effects before mutation. Dry-run and ordinary read commands remain available,

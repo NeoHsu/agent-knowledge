@@ -481,8 +481,9 @@ mem --read-only query "release notes"
 - `--read-only` (or `MNEMARK_READ_ONLY=true`) blocks commands with durable,
   rebuildable, output-file, or network side effects before they acquire a write
   lock or mutate state.
-- `--max-bytes <N>` (or `MNEMARK_MAX_BYTES`) rejects rendered stdout larger
-  than the configured bound before writing a partial response.
+- `--max-bytes <N>` (or `MNEMARK_MAX_BYTES`) serializes through a bounded
+  memory/disk spool and rejects stdout larger than the configured bound before
+  writing a partial response.
 - `--json-errors` emits versioned typed error envelopes while successful output
   remains unchanged.
 

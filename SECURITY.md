@@ -37,8 +37,9 @@ The local operating-system account is trusted. A process with permission to modi
   replacement, index repair, or network access.
 - Atomic managed-file replacement plus grouped rollback for agent policy,
   skill, symlink, and hook setup.
-- Fallible broken-pipe-safe output and terminal control/bidirectional-character
-  escaping after secret redaction.
+- Fallible broken-pipe-safe output staged through a bounded in-memory/unnamed
+  temporary-file spool, with terminal control/bidirectional-character escaping
+  after secret redaction.
 - Default-reject secret-pattern scanning across durable database fields, side-state, artifacts, bundles, merges, and sync worktrees.
 - Manual-source attestation and source-trust checks during overwrite and merge.
 - Resource limits for text, files, archives, graph payloads, paths, and collection sizes.
