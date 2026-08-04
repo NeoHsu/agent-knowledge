@@ -11,6 +11,9 @@ readme = "../../README.md"
 keywords = ["ai", "memory", "sqlite", "search", "agents"]
 categories = ["database", "development-tools"]
 
+[lints]
+workspace = true
+
 [features]
 default = ["cjk"]
 cjk = ["lindera/embed-cc-cedict"]

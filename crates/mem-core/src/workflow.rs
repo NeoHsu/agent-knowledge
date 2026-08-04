@@ -8,8 +8,8 @@ use serde_json::Value;
 use serde_yaml::Value as YamlValue;
 
 use crate::artifact::{
-    artifact_file_checksum, artifact_file_is_executable, validate_artifact_file,
-    validate_artifact_path, ArtifactManifest,
+    ArtifactManifest, artifact_file_checksum, artifact_file_is_executable, validate_artifact_file,
+    validate_artifact_path,
 };
 use crate::{db::Memory, error, util::normalized_text};
 
@@ -278,7 +278,7 @@ fn validate_repo_script_reference(
             }
             Err(source) => {
                 return Err(source)
-                    .with_context(|| format!("inspect repository script {}", current.display()))
+                    .with_context(|| format!("inspect repository script {}", current.display()));
             }
         };
         if metadata.file_type().is_symlink() {
@@ -538,7 +538,7 @@ pub fn validate_content(content: &str) -> Result<()> {
         Some(YamlValue::Bool(true)) => {
             return Err(error::usage(
                 "workflow is still a scaffold draft; replace placeholders and set draft: false before validation or save",
-            ))
+            ));
         }
         Some(YamlValue::Bool(false)) | None => {}
         Some(_) => return Err(error::usage("workflow draft must be boolean")),

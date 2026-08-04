@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use clap::{error::ErrorKind, CommandFactory, Parser};
+use clap::{CommandFactory, Parser, error::ErrorKind};
 
 #[allow(dead_code)]
 #[path = "../src/args/mod.rs"]

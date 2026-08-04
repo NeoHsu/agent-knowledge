@@ -152,11 +152,13 @@ fn audit_graph_health_marks_stale_derivations_and_reports_current_orphans() {
     let current: serde_json::Value =
         serde_json::from_str(&repo.run(&["audit"])).expect("current audit json");
     assert_eq!(current["graph"]["derived_status"], "current");
-    assert!(current["graph"]["orphan_memories"]
-        .as_array()
-        .expect("orphan memories")
-        .iter()
-        .any(|memory| memory["id"] == "memory:isolated_memory"));
+    assert!(
+        current["graph"]["orphan_memories"]
+            .as_array()
+            .expect("orphan memories")
+            .iter()
+            .any(|memory| memory["id"] == "memory:isolated_memory")
+    );
 }
 
 #[test]

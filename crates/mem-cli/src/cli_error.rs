@@ -1,7 +1,7 @@
 use std::fmt;
 
 use anyhow::Error;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 pub(crate) const INDEX_STALE_AFTER_WRITE: &str = "index_stale_after_write";
 pub(crate) const NOT_FOUND: &str = "not_found";

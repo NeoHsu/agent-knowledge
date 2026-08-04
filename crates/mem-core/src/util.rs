@@ -6,10 +6,10 @@ mod tags;
 mod text;
 mod time;
 
-pub use claims::{extract_claims, Claim, ClaimKind, ExtractedClaims};
+pub use claims::{Claim, ClaimKind, ExtractedClaims, extract_claims};
 pub use content::{
-    optional_content, required_content, slugify, validate_memory_resource_limits,
-    MAX_MEMORY_CONTENT_BYTES,
+    MAX_MEMORY_CONTENT_BYTES, optional_content, required_content, slugify,
+    validate_memory_resource_limits,
 };
 pub use secrets::{sanitize_secret_field, sanitize_secret_file, strip_secrets};
 pub use source::{confidence_for_source, source_priority, version_conflict};

@@ -68,12 +68,16 @@ fn graph_rebuild_extracts_memory_metadata_claims_and_shared_tag_paths() {
     assert_eq!(explained["node"]["id"], "memory:release_policy");
     let neighbors = explained["neighbors"].as_array().expect("neighbors");
     assert!(neighbors.iter().any(|edge| edge["relation"] == "has_tag"));
-    assert!(neighbors
-        .iter()
-        .any(|edge| edge["relation"] == "mentions_path"));
-    assert!(neighbors
-        .iter()
-        .any(|edge| edge["relation"] == "mentions_command"));
+    assert!(
+        neighbors
+            .iter()
+            .any(|edge| edge["relation"] == "mentions_path")
+    );
+    assert!(
+        neighbors
+            .iter()
+            .any(|edge| edge["relation"] == "mentions_command")
+    );
 
     let path = json(&repo.run(&[
         "graph",
@@ -85,24 +89,30 @@ fn graph_rebuild_extracts_memory_metadata_claims_and_shared_tag_paths() {
     ]));
     assert_eq!(path["status"], "ok");
     assert_eq!(path["hops"], 2);
-    assert!(path["nodes"]
-        .as_array()
-        .expect("path nodes")
-        .iter()
-        .any(|node| node["id"] == "tag:domain:release"));
+    assert!(
+        path["nodes"]
+            .as_array()
+            .expect("path nodes")
+            .iter()
+            .any(|node| node["id"] == "tag:domain:release")
+    );
 
     let exported = json(&repo.run(&["graph", "export", "--format", "json"]));
     assert_eq!(exported["schema_version"], 1);
-    assert!(exported["nodes"]
-        .as_array()
-        .expect("export nodes")
-        .iter()
-        .any(|node| node["id"] == "memory:release_policy"));
-    assert!(exported["edges"]
-        .as_array()
-        .expect("export edges")
-        .iter()
-        .any(|edge| edge["relation"] == "mentions_path"));
+    assert!(
+        exported["nodes"]
+            .as_array()
+            .expect("export nodes")
+            .iter()
+            .any(|node| node["id"] == "memory:release_policy")
+    );
+    assert!(
+        exported["edges"]
+            .as_array()
+            .expect("export edges")
+            .iter()
+            .any(|edge| edge["relation"] == "mentions_path")
+    );
 }
 
 #[test]
@@ -146,15 +156,21 @@ fn graph_rebuild_extracts_workflow_artifacts_steps_and_runs() {
 
     let explained = json(&repo.run(&["graph", "explain", "ci_triage_workflow"]));
     let neighbors = explained["neighbors"].as_array().expect("neighbors");
-    assert!(neighbors
-        .iter()
-        .any(|edge| edge["relation"] == "references_artifact"));
-    assert!(neighbors
-        .iter()
-        .any(|edge| edge["relation"] == "has_workflow_step"));
-    assert!(neighbors
-        .iter()
-        .any(|edge| edge["relation"] == "recorded_run"));
+    assert!(
+        neighbors
+            .iter()
+            .any(|edge| edge["relation"] == "references_artifact")
+    );
+    assert!(
+        neighbors
+            .iter()
+            .any(|edge| edge["relation"] == "has_workflow_step")
+    );
+    assert!(
+        neighbors
+            .iter()
+            .any(|edge| edge["relation"] == "recorded_run")
+    );
 
     let artifact_path = json(&repo.run(&[
         "graph",
@@ -170,11 +186,13 @@ fn graph_rebuild_extracts_workflow_artifacts_steps_and_runs() {
         "explain",
         "workflow_step:ci_triage_workflow:collect",
     ]));
-    assert!(step_explain["neighbors"]
-        .as_array()
-        .expect("step neighbors")
-        .iter()
-        .any(|edge| edge["relation"] == "requires_confirmation"));
+    assert!(
+        step_explain["neighbors"]
+            .as_array()
+            .expect("step neighbors")
+            .iter()
+            .any(|edge| edge["relation"] == "requires_confirmation")
+    );
 
     let shown = json(&repo.run(&[
         "workflow",
@@ -182,11 +200,13 @@ fn graph_rebuild_extracts_workflow_artifacts_steps_and_runs() {
         "ci_triage_workflow",
         "--with-graph-context",
     ]));
-    assert!(shown["graph_context"]["neighbors"]
-        .as_array()
-        .expect("workflow graph context")
-        .iter()
-        .any(|edge| edge["relation"] == "references_artifact"));
+    assert!(
+        shown["graph_context"]["neighbors"]
+            .as_array()
+            .expect("workflow graph context")
+            .iter()
+            .any(|edge| edge["relation"] == "references_artifact")
+    );
 }
 
 #[test]
@@ -202,11 +222,13 @@ fn graph_candidates_emit_skill_extraction_payload() {
 
     let candidates = json(&repo.run(&["graph", "candidates", "--scope", "all", "--limit", "10"]));
     assert_eq!(candidates["status"], "ok");
-    assert!(candidates["allowed_relations"]
-        .as_array()
-        .expect("relations")
-        .iter()
-        .any(|relation| relation == "mentions_concept"));
+    assert!(
+        candidates["allowed_relations"]
+            .as_array()
+            .expect("relations")
+            .iter()
+            .any(|relation| relation == "mentions_concept")
+    );
     assert_eq!(candidates["memories"][0]["id"], "assistant_style");
 }
 
@@ -400,11 +422,13 @@ fn graph_query_expands_lexical_start_nodes() {
         "graph", "query", "release", "--scope", "all", "--depth", "1",
     ]));
     assert_eq!(output["status"], "ok");
-    assert!(output["nodes"]
-        .as_array()
-        .expect("query nodes")
-        .iter()
-        .any(|node| node["node"]["id"] == "memory:release_policy"));
+    assert!(
+        output["nodes"]
+            .as_array()
+            .expect("query nodes")
+            .iter()
+            .any(|node| node["node"]["id"] == "memory:release_policy")
+    );
 }
 
 #[test]
@@ -444,11 +468,13 @@ fn prime_focus_includes_budgeted_graph_context() {
         "3",
     ]));
     assert_eq!(output["status"], "ok");
-    assert!(output["graph_context"]["nodes"]
-        .as_array()
-        .expect("graph context nodes")
-        .iter()
-        .any(|node| node["node"]["id"] == "memory:release_policy"));
+    assert!(
+        output["graph_context"]["nodes"]
+            .as_array()
+            .expect("graph context nodes")
+            .iter()
+            .any(|node| node["node"]["id"] == "memory:release_policy")
+    );
 
     let text = repo.run(&[
         "--home",

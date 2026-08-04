@@ -3,7 +3,9 @@ use mem_core::config::user_config_path;
 
 pub(crate) fn cmd_context(args: ContextArgs) -> Result<()> {
     if !args.detect {
-        bail!("missing required action. Try `mem context --detect` to show the detected project scope, or `mem context --help` for options.");
+        bail!(
+            "missing required action. Try `mem context --detect` to show the detected project scope, or `mem context --help` for options."
+        );
     }
     print_json(&json!({"scope": scope::detect_scope()?}))?;
     Ok(())

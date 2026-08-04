@@ -1,9 +1,9 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
+use super::super::GRAPH_SCHEMA_VERSION;
 use super::super::model::{GraphEdge, GraphExport, GraphExportEdge, GraphExportNode, GraphNode};
 use super::super::store::row_to_node;
-use super::super::GRAPH_SCHEMA_VERSION;
 use super::row_to_edge;
 
 pub fn export_json(conn: &Connection) -> Result<GraphExport> {

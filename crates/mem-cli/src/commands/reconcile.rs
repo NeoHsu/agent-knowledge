@@ -94,11 +94,7 @@ fn verify_claim(claim: &Claim, repo_root: &Path) -> &'static str {
         ClaimKind::Command => command_on_path(&claim.text),
         ClaimKind::Path => path_claim_exists(&claim.text, repo_root),
     };
-    if exists {
-        "ok"
-    } else {
-        "missing"
-    }
+    if exists { "ok" } else { "missing" }
 }
 
 fn path_claim_exists(text: &str, repo_root: &Path) -> bool {

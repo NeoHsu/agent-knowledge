@@ -2,7 +2,7 @@ use std::fs;
 
 mod support;
 
-use support::{temp_path, TestRepo};
+use support::{TestRepo, temp_path};
 
 #[test]
 fn setup_agent_policy_subcommand_is_removed() {
@@ -60,17 +60,21 @@ fn setup_claude_code_wires_policy_skill_and_hook() {
     assert!(policy.contains("mem config show"));
     assert!(policy.contains("mem sync --dry-run"));
     assert!(base.join(".agents/skills/mnemark/SKILL.md").exists());
-    assert!(fs::symlink_metadata(base.join(".claude/skills/mnemark"))
-        .expect("skill link")
-        .file_type()
-        .is_symlink());
+    assert!(
+        fs::symlink_metadata(base.join(".claude/skills/mnemark"))
+            .expect("skill link")
+            .file_type()
+            .is_symlink()
+    );
     assert!(base.join(".claude/skills/mnemark/SKILL.md").exists());
-    assert!(base
-        .join(".claude/skills/mnemark/references/cli-guide.md")
-        .exists());
-    assert!(base
-        .join(".claude/skills/mnemark/references/memory-quality.md")
-        .exists());
+    assert!(
+        base.join(".claude/skills/mnemark/references/cli-guide.md")
+            .exists()
+    );
+    assert!(
+        base.join(".claude/skills/mnemark/references/memory-quality.md")
+            .exists()
+    );
 
     let settings: serde_json::Value = serde_json::from_str(
         &fs::read_to_string(base.join(".claude/settings.json")).expect("settings"),
@@ -119,10 +123,12 @@ fn setup_claude_code_preserves_existing_settings() {
     .expect("settings json");
     assert_eq!(settings["model"], "opus");
     assert!(settings["hooks"]["Stop"].is_array());
-    assert!(settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
-        .as_str()
-        .expect("command")
-        .contains("mem prime"));
+    assert!(
+        settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+            .as_str()
+            .expect("command")
+            .contains("mem prime")
+    );
 
     fs::remove_dir_all(base).ok();
 }
@@ -193,10 +199,12 @@ fn setup_migrates_managed_platform_skill_copy_to_shared_link() {
     ]);
     let result: serde_json::Value = serde_json::from_str(&output).expect("setup json");
     assert_eq!(result["skill"]["platform"]["status"], "migrated");
-    assert!(fs::symlink_metadata(&legacy)
-        .expect("migrated link")
-        .file_type()
-        .is_symlink());
+    assert!(
+        fs::symlink_metadata(&legacy)
+            .expect("migrated link")
+            .file_type()
+            .is_symlink()
+    );
     assert!(base.join(".agents/skills/mnemark/SKILL.md").exists());
 
     fs::remove_dir_all(base).ok();
@@ -220,10 +228,12 @@ fn setup_refuses_to_replace_platform_skill_copy_with_unmanaged_files() {
     let result: serde_json::Value = serde_json::from_str(&output).expect("setup json");
     assert_eq!(result["skill"]["status"], "conflict");
     assert!(legacy.join("notes.txt").exists());
-    assert!(!fs::symlink_metadata(&legacy)
-        .expect("legacy directory")
-        .file_type()
-        .is_symlink());
+    assert!(
+        !fs::symlink_metadata(&legacy)
+            .expect("legacy directory")
+            .file_type()
+            .is_symlink()
+    );
 
     fs::remove_dir_all(base).ok();
 }
@@ -249,10 +259,12 @@ fn setup_pi_uses_shared_skill_directly() {
     assert_eq!(compatibility["skillVersion"], env!("CARGO_PKG_VERSION"));
     assert_eq!(compatibility["cliVersion"], env!("CARGO_PKG_VERSION"));
     assert_all_skill_references_exist(&shared);
-    assert!(!fs::symlink_metadata(shared)
-        .expect("shared skill")
-        .file_type()
-        .is_symlink());
+    assert!(
+        !fs::symlink_metadata(shared)
+            .expect("shared skill")
+            .file_type()
+            .is_symlink()
+    );
 
     fs::remove_dir_all(base).ok();
 }
@@ -438,10 +450,12 @@ fn setup_reports_drifted_v5_policy_without_overwriting_it() {
     let output = repo.run(&["setup", "codex", "--base-dir", base_str, "--no-skill"]);
     let result: serde_json::Value = serde_json::from_str(&output).expect("setup json");
     assert_eq!(result["policy"]["status"], "drifted");
-    assert!(result["policy"]["policy"]
-        .as_str()
-        .expect("replacement policy")
-        .contains("Reject secrets by default"));
+    assert!(
+        result["policy"]["policy"]
+            .as_str()
+            .expect("replacement policy")
+            .contains("Reject secrets by default")
+    );
     assert_eq!(fs::read_to_string(&target).expect("policy after"), drifted);
 
     fs::remove_dir_all(base).ok();

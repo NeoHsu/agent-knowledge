@@ -71,7 +71,7 @@ impl ArtifactManifest {
                 return Err(error::safety_violation(format!(
                     "refusing unsafe artifact manifest path: {}",
                     path.display()
-                )))
+                )));
             }
             Ok(metadata) => metadata,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),

@@ -9,7 +9,7 @@ use fs2::FileExt;
 use rusqlite::{Connection, OpenFlags};
 use uuid::Uuid;
 
-use crate::config::{expand_home, Config};
+use crate::config::{Config, expand_home};
 use crate::db::{
     ensure_store_id, migrate_schema, schema_compatibility_required, supported_schema_version,
     validate_store_schema_objects,

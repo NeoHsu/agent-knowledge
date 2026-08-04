@@ -4,10 +4,10 @@ use serde_json::json;
 
 use crate::artifact::ArtifactManifest;
 
+use super::super::DETERMINISTIC;
 use super::super::ids::{artifact_node_id, scope_node_id, tag_node_id};
 use super::super::model::GraphNode;
 use super::super::store::{insert_node, insert_simple_node};
-use super::super::DETERMINISTIC;
 use super::support::insert_edge_simple;
 
 pub(super) fn add_artifact_manifest(conn: &Connection, manifest: &ArtifactManifest) -> Result<()> {

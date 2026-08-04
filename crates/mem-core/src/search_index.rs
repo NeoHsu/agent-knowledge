@@ -10,10 +10,10 @@ use tantivy::query::{
     TermQuery,
 };
 use tantivy::schema::{
-    Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, Value as TantivyValue, FAST,
-    INDEXED, STORED, STRING,
+    FAST, Field, INDEXED, IndexRecordOption, STORED, STRING, Schema, TextFieldIndexing,
+    TextOptions, Value as TantivyValue,
 };
-use tantivy::{doc, Index, IndexWriter, TantivyDocument, Term};
+use tantivy::{Index, IndexWriter, TantivyDocument, Term, doc};
 
 use crate::error;
 use crate::index::{SearchFilters, SearchLifecycle};

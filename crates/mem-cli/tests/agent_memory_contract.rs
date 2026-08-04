@@ -52,9 +52,11 @@ fn read_commands_never_initialize_migrate_or_repair_implicitly() {
         before,
         "read-only query changed memory.db while the index was missing"
     );
-    assert!(missing_index
-        .run(&["query", "recreate", "--repair-index"])
-        .contains("missing_index_probe"));
+    assert!(
+        missing_index
+            .run(&["query", "recreate", "--repair-index"])
+            .contains("missing_index_probe")
+    );
 
     let stale = TestRepo::new("read-contract-stale-index");
     stale.run(&["init"]);
@@ -99,19 +101,24 @@ fn expired_memories_are_excluded_consistently_and_timestamps_are_strict() {
         "--force",
     ]);
 
-    assert!(!repo
-        .run(&["query", "expired contract"])
-        .contains("expired_contract"));
-    assert!(repo
-        .run(&["query", "expired contract", "--expired"])
-        .contains("expired_contract"));
+    assert!(
+        !repo
+            .run(&["query", "expired contract"])
+            .contains("expired_contract")
+    );
+    assert!(
+        repo.run(&["query", "expired contract", "--expired"])
+            .contains("expired_contract")
+    );
     assert!(!repo.run(&["prime"]).contains("expired_contract"));
     let retro = json(&repo.run(&["retro", "daily"]));
-    assert!(!retro["active_memories"]
-        .as_array()
-        .expect("active memories")
-        .iter()
-        .any(|memory| memory["name"] == "expired_contract"));
+    assert!(
+        !retro["active_memories"]
+            .as_array()
+            .expect("active memories")
+            .iter()
+            .any(|memory| memory["name"] == "expired_contract")
+    );
 
     repo.run(&[
         "update",
@@ -122,9 +129,10 @@ fn expired_memories_are_excluded_consistently_and_timestamps_are_strict() {
         "--expected-version",
         "1",
     ]);
-    assert!(repo
-        .run(&["query", "expired contract"])
-        .contains("expired_contract"));
+    assert!(
+        repo.run(&["query", "expired contract"])
+            .contains("expired_contract")
+    );
 
     let invalid = repo.run_fail(&[
         "save",
@@ -249,9 +257,10 @@ fn memory_names_are_scoped_and_mutations_resolve_explicitly() {
         .collect::<rusqlite::Result<Vec<_>>>()
         .expect("collect scoped rows");
     assert_eq!(rows.len(), 2);
-    assert!(rows
-        .iter()
-        .any(|(scope, content)| scope == "global" && content.contains("global")));
+    assert!(
+        rows.iter()
+            .any(|(scope, content)| scope == "global" && content.contains("global"))
+    );
     assert!(rows.iter().any(|(scope, content)| {
         scope == "project:example/app" && content.contains("updated project")
     }));
@@ -349,7 +358,9 @@ fn durable_side_state_applies_secret_and_manual_source_gates() {
         "--note",
         &format!("leaked {secret}"),
     ]);
-    assert!(rejected_resolution.contains("secret-like value detected in ambiguity resolution note"));
+    assert!(
+        rejected_resolution.contains("secret-like value detected in ambiguity resolution note")
+    );
     repo.run(&[
         "ambiguity",
         "resolve",

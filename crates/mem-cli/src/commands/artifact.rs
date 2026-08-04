@@ -1,11 +1,11 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use crate::args::{ArtifactCommand, ArtifactKindArg};
 use crate::commands::print_json_pretty;
 use mem_core::app::App;
 use mem_core::artifact::{
-    add_artifact, check_artifacts, remove_artifact, update_artifact_checksum,
-    validate_artifact_file, validate_artifact_path, AddArtifact, ArtifactKind, ArtifactManifest,
+    AddArtifact, ArtifactKind, ArtifactManifest, add_artifact, check_artifacts, remove_artifact,
+    update_artifact_checksum, validate_artifact_file, validate_artifact_path,
 };
 use mem_core::scope;
 use mem_core::util::{parse_string_array, sanitize_secret_field, sanitize_secret_file};

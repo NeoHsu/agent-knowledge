@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result};
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 use crate::error;
 use crate::util::sanitize_secret_field;
@@ -223,7 +223,7 @@ pub fn validate_store_schema_objects(conn: &Connection) -> Result<()> {
             _ => {
                 return Err(error::integrity(format!(
                     "store contains unexpected {kind}: {name}"
-                )))
+                )));
             }
         }
     }

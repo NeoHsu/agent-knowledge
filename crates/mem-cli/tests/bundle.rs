@@ -2,9 +2,9 @@ use std::fs;
 use std::fs::File;
 use std::path::Path;
 
+use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
 use tar::{Archive, Builder, EntryType, Header};
 
 use mem_core::artifact::artifact_file_checksum;
@@ -62,13 +62,17 @@ fn bundle_export_inspect_and_import_clean_store() {
     assert!(entries.iter().any(|entry| entry == "config.toml"));
     assert!(entries.iter().any(|entry| entry == "bundle.json"));
     assert_eq!(inspected["bundle"]["version"], 2);
-    assert!(inspected["bundle"]["hashes"]["memory.db"]
-        .as_str()
-        .is_some_and(|hash| hash.starts_with("sha256:")));
-    assert!(!entries
-        .iter()
-        .filter_map(serde_json::Value::as_str)
-        .any(|entry| entry.starts_with("index/")));
+    assert!(
+        inspected["bundle"]["hashes"]["memory.db"]
+            .as_str()
+            .is_some_and(|hash| hash.starts_with("sha256:"))
+    );
+    assert!(
+        !entries
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .any(|entry| entry.starts_with("index/"))
+    );
 
     let target = TestRepo::new("bundle-target");
     let imported = target.run(&["bundle", "import", bundle.to_str().expect("bundle path")]);
@@ -103,11 +107,13 @@ fn bundle_export_can_omit_config() {
         bundle.to_str().expect("bundle path"),
     ]))
     .expect("inspect json");
-    assert!(!inspected["entries"]
-        .as_array()
-        .expect("entries")
-        .iter()
-        .any(|entry| entry == "config.toml"));
+    assert!(
+        !inspected["entries"]
+            .as_array()
+            .expect("entries")
+            .iter()
+            .any(|entry| entry == "config.toml")
+    );
 }
 
 #[test]
@@ -258,12 +264,16 @@ fn bundle_import_merge_keeps_local_store_and_adds_bundle_contents() {
     ]);
     assert!(merged.contains(r#""mode": "merge""#));
     assert!(merged.contains(r#""imported": 1"#));
-    assert!(target
-        .run(&["query", "local merge", "--no-touch"])
-        .contains("local_merge_memory"));
-    assert!(target
-        .run(&["query", "incoming merge", "--no-touch"])
-        .contains("incoming_merge_memory"));
+    assert!(
+        target
+            .run(&["query", "local merge", "--no-touch"])
+            .contains("local_merge_memory")
+    );
+    assert!(
+        target
+            .run(&["query", "incoming merge", "--no-touch"])
+            .contains("incoming_merge_memory")
+    );
     let checked: serde_json::Value =
         serde_json::from_str(&target.run(&["artifact", "check"])).expect("check json");
     assert_eq!(checked["status"], "ok");
@@ -407,9 +417,11 @@ fn bundle_validation_rejects_checksum_mismatch_before_replace() {
         fs::read_to_string(target.join("config.toml")).expect("read target config"),
         "[query]\ndefault_limit = 7\n"
     );
-    assert!(target
-        .run(&["query", "validation must finish", "--no-touch"])
-        .contains("preserved_before_validation"));
+    assert!(
+        target
+            .run(&["query", "validation must finish", "--no-touch"])
+            .contains("preserved_before_validation")
+    );
 }
 
 #[test]
@@ -439,10 +451,9 @@ fn bundle_import_rejects_unexpected_sqlite_triggers() {
     let mut metadata: serde_json::Value =
         serde_json::from_slice(&fs::read(unpacked.join("bundle.json")).expect("read metadata"))
             .expect("parse metadata");
-    metadata["hashes"]["memory.db"] = serde_json::json!(artifact_file_checksum(
-        &unpacked.join("memory.db")
-    )
-    .expect("database checksum"));
+    metadata["hashes"]["memory.db"] = serde_json::json!(
+        artifact_file_checksum(&unpacked.join("memory.db")).expect("database checksum")
+    );
     fs::write(
         unpacked.join("bundle.json"),
         serde_json::to_vec_pretty(&metadata).expect("serialize metadata"),
@@ -506,12 +517,16 @@ fn bundle_replace_restores_previous_store_after_post_clear_failure() {
         error.contains("previous store was restored"),
         "error: {error}"
     );
-    assert!(target
-        .run(&["query", "preserve this local row", "--no-touch"])
-        .contains("local_rollback_memory"));
-    assert!(!target
-        .run(&["query", "incoming row", "--no-touch"])
-        .contains("incoming_rollback_memory"));
+    assert!(
+        target
+            .run(&["query", "preserve this local row", "--no-touch"])
+            .contains("local_rollback_memory")
+    );
+    assert!(
+        !target
+            .run(&["query", "incoming row", "--no-touch"])
+            .contains("incoming_rollback_memory")
+    );
 }
 
 #[test]
@@ -597,9 +612,11 @@ fn legacy_v1_bundle_requires_explicit_unverified_import() {
         legacy.to_str().expect("legacy bundle"),
         "--allow-unverified",
     ]);
-    assert!(target
-        .run(&["query", "version one", "--no-touch"])
-        .contains("legacy_bundle_memory"));
+    assert!(
+        target
+            .run(&["query", "version one", "--no-touch"])
+            .contains("legacy_bundle_memory")
+    );
 }
 
 #[test]
@@ -643,9 +660,11 @@ fn bundle_export_is_consistent_during_concurrent_sqlite_write() {
 
     let target = TestRepo::new("bundle-concurrent-target");
     target.run(&["bundle", "import", bundle.to_str().expect("bundle")]);
-    assert!(target
-        .run(&["query", "committed row survives", "--no-touch"])
-        .contains("committed_before_snapshot"));
+    assert!(
+        target
+            .run(&["query", "committed row survives", "--no-touch"])
+            .contains("committed_before_snapshot")
+    );
 }
 
 fn pack_directory(root: &Path, destination: &Path) {

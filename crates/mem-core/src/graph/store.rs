@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use anyhow::Result;
-use rusqlite::{params, Connection, OptionalExtension};
-use serde_json::{json, Value};
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Value, json};
 
 use crate::util::now;
 

@@ -7,7 +7,7 @@ use std::process::{Command, Output};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 pub struct TestRepo {
     path: PathBuf,

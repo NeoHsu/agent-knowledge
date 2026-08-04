@@ -4,11 +4,11 @@ use std::process::{Command, Stdio};
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 mod support;
 
-use support::{mem_bin, temp_path, TestRepo, TestRuntimeStore};
+use support::{TestRepo, TestRuntimeStore, mem_bin, temp_path};
 
 const INDEX_VERSION_MARKER: &str = "index/.mnemark-index-version";
 
@@ -215,12 +215,14 @@ fn write_rebuilds_a_missing_index_instead_of_creating_a_partial_one() {
         "--force",
     ]);
 
-    assert!(repo
-        .run(&["query", "retain this memory", "--no-touch"])
-        .contains("retained_index_memory"));
-    assert!(repo
-        .run(&["query", "complete index rebuild", "--no-touch"])
-        .contains("new_index_memory"));
+    assert!(
+        repo.run(&["query", "retain this memory", "--no-touch"])
+            .contains("retained_index_memory")
+    );
+    assert!(
+        repo.run(&["query", "complete index rebuild", "--no-touch"])
+            .contains("new_index_memory")
+    );
 }
 
 #[cfg(unix)]

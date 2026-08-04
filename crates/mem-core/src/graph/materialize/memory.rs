@@ -5,15 +5,15 @@ use rusqlite::Connection;
 use serde_json::json;
 
 use crate::db::Memory;
-use crate::util::{extract_claims, parse_string_array, ClaimKind};
+use crate::util::{ClaimKind, extract_claims, parse_string_array};
 
+use super::super::DETERMINISTIC;
 use super::super::ids::{
     memory_node_id, safe_node_part, scope_node_id, source_node_id, stable_hash_hex, tag_node_id,
     type_node_id,
 };
 use super::super::model::GraphNode;
 use super::super::store::{insert_node, insert_simple_node, node_by_id};
-use super::super::DETERMINISTIC;
 use super::support::{insert_edge_simple, memory_is_active};
 
 pub(super) fn add_memory_metadata(

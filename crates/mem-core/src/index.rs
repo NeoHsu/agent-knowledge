@@ -3,7 +3,7 @@ use chrono::DateTime;
 use rusqlite::Connection;
 
 use crate::app::App;
-use crate::db::{self, all_memories, memories_by_ids, memory_by_id, Memory};
+use crate::db::{self, Memory, all_memories, memories_by_ids, memory_by_id};
 use crate::error;
 use crate::search_index::{self, IndexedMemory};
 use crate::util::parse_string_array;

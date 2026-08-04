@@ -1,7 +1,7 @@
 use std::process::ExitCode;
 
 use anyhow::Result;
-use clap::{error::ErrorKind, Parser};
+use clap::{Parser, error::ErrorKind};
 use serde_json::json;
 
 mod args;
@@ -13,7 +13,7 @@ use args::*;
 use cli_error::StructuredCommandError;
 use command_effect::{CommandEffect, StoreAccess};
 use commands::*;
-use mem_core::app::{with_lock, with_shared_lock, App};
+use mem_core::app::{App, with_lock, with_shared_lock};
 use mem_core::error::MnemarkError;
 use mem_core::index as memory_index;
 use mem_core::util::strip_secrets;

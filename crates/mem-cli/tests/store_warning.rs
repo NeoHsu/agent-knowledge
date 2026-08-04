@@ -3,7 +3,7 @@ use std::process::Command;
 
 mod support;
 
-use support::{mem_bin, temp_path, TestRepo, TestRuntimeStore};
+use support::{TestRepo, TestRuntimeStore, mem_bin, temp_path};
 
 #[test]
 fn source_checkout_is_never_selected_implicitly() {

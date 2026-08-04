@@ -11,6 +11,9 @@ readme = "../../README.md"
 keywords = ["ai", "memory", "cli", "sqlite", "agents"]
 categories = ["command-line-utilities", "development-tools"]
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "mem"
 path = "src/main.rs"

@@ -9,10 +9,10 @@ use policy::install_policy;
 use skill::install_shared_skill;
 
 pub(crate) use hook::{HOOK_COMMAND, LEGACY_HOOK_COMMAND};
-pub(crate) use platform::{base_dir, platform_by_name, PlatformSpec, PLATFORMS, SHARED_SKILLS_DIR};
+pub(crate) use platform::{PLATFORMS, PlatformSpec, SHARED_SKILLS_DIR, base_dir, platform_by_name};
 pub(crate) use policy::{
-    has_current_policy, has_v4_policy, POLICY_MARKER_V2, POLICY_MARKER_V3, POLICY_MARKER_V4,
-    POLICY_MARKER_V5,
+    POLICY_MARKER_V2, POLICY_MARKER_V3, POLICY_MARKER_V4, POLICY_MARKER_V5, has_current_policy,
+    has_v4_policy,
 };
 pub(crate) use skill::{skill_files_current, skill_link_points_to};
 

@@ -1,13 +1,13 @@
 use std::fs;
 
 #[cfg(unix)]
-use std::os::unix::fs::{symlink, PermissionsExt};
+use std::os::unix::fs::{PermissionsExt, symlink};
 
 mod support;
 
+use support::TestRepo;
 #[cfg(unix)]
 use support::temp_path;
-use support::TestRepo;
 
 const HELLO_SHA256: &str =
     "sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03";

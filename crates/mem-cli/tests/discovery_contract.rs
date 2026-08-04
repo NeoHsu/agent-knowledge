@@ -3,7 +3,7 @@ use std::process::Command;
 
 mod support;
 
-use support::{mem_bin, temp_path, TestRepo};
+use support::{TestRepo, mem_bin, temp_path};
 
 fn schema_root() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/schemas")
@@ -170,9 +170,11 @@ fn schema_and_operation_discovery_are_store_independent() {
     );
     let operations = operation_list["operations"].as_array().expect("operations");
     assert!(operations.len() > 40);
-    assert!(operations
-        .iter()
-        .any(|operation| operation["id"] == "graph.query"));
+    assert!(
+        operations
+            .iter()
+            .any(|operation| operation["id"] == "graph.query")
+    );
 
     let inspected: serde_json::Value = serde_json::from_str(&repo.run(&[
         "operation",
@@ -278,9 +280,11 @@ fn skill_version_gate_fails_before_store_discovery() {
     assert_eq!(stdout["skill_compatibility"]["compatible"], false);
     assert_eq!(stderr["code"], "version_mismatch");
     assert_eq!(stderr["retryable"], false);
-    assert!(stderr["details"]["update_command"]
-        .as_str()
-        .expect("update command")
-        .contains("tree/v0.9.0"));
+    assert!(
+        stderr["details"]["update_command"]
+            .as_str()
+            .expect("update command")
+            .contains("tree/v0.9.0")
+    );
     fs::remove_dir_all(config_root).ok();
 }

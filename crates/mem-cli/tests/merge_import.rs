@@ -414,9 +414,10 @@ fn import_summary_only_omits_per_item_results() {
     assert_eq!(summary["total"], 2);
     assert_eq!(summary["counts"]["saved"], 2);
     assert!(summary.get("results").is_none());
-    assert!(repo
-        .run(&["query", "summary payload", "--no-touch"])
-        .contains("summary_one"));
+    assert!(
+        repo.run(&["query", "summary payload", "--no-touch"])
+            .contains("summary_one")
+    );
 }
 
 #[test]

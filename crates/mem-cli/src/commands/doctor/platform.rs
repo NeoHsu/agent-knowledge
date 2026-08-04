@@ -1,9 +1,9 @@
 use super::super::*;
 use super::report::check;
 use crate::commands::setup::{
-    has_current_policy, has_v4_policy, skill_files_current, skill_link_points_to, PlatformSpec,
     HOOK_COMMAND, LEGACY_HOOK_COMMAND, POLICY_MARKER_V2, POLICY_MARKER_V3, POLICY_MARKER_V4,
-    POLICY_MARKER_V5,
+    POLICY_MARKER_V5, PlatformSpec, has_current_policy, has_v4_policy, skill_files_current,
+    skill_link_points_to,
 };
 
 pub(super) fn check_shared_skill(checks: &mut Vec<Value>, shared_root: &Path) {

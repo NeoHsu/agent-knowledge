@@ -39,10 +39,12 @@ fn json_errors_classify_missing_stores() {
     assert_eq!(error["code"], "not_found");
     assert_eq!(error["exit_code"], 4);
     assert_eq!(error["retryable"], false);
-    assert!(error["message"]
-        .as_str()
-        .expect("message")
-        .contains("memory store not found"));
+    assert!(
+        error["message"]
+            .as_str()
+            .expect("message")
+            .contains("memory store not found")
+    );
 }
 
 #[test]
@@ -153,10 +155,12 @@ fn json_errors_distinguish_committed_writes_from_index_failures() {
         "committed_before_index_failure"
     );
     assert_eq!(error["details"]["version"], 1);
-    assert!(error["message"]
-        .as_str()
-        .expect("message")
-        .contains("durable memory save committed"));
+    assert!(
+        error["message"]
+            .as_str()
+            .expect("message")
+            .contains("durable memory save committed")
+    );
 
     let connection = Connection::open(repo.join("memory.db")).expect("open store");
     let version: i64 = connection
@@ -310,10 +314,12 @@ fn json_errors_wrap_clap_parse_failures() {
     assert_eq!(error["code"], "cli_parse_error");
     assert_eq!(error["exit_code"], 2);
     assert_eq!(error["retryable"], false);
-    assert!(error["message"]
-        .as_str()
-        .expect("message")
-        .contains("unrecognized subcommand"));
+    assert!(
+        error["message"]
+            .as_str()
+            .expect("message")
+            .contains("unrecognized subcommand")
+    );
 }
 
 #[test]
@@ -326,10 +332,12 @@ fn json_errors_redact_secret_like_parse_input() {
 
     assert_eq!(error["code"], "cli_parse_error");
     assert!(!output.contains(&secret));
-    assert!(error["message"]
-        .as_str()
-        .expect("message")
-        .contains("[REDACTED]"));
+    assert!(
+        error["message"]
+            .as_str()
+            .expect("message")
+            .contains("[REDACTED]")
+    );
 }
 
 #[test]

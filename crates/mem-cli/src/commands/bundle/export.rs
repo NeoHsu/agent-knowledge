@@ -5,14 +5,14 @@ use std::time::Instant;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use tar::Builder;
 
 use super::archive::{append_file_if_exists, append_json};
 use super::install::{
-    copy_dir_if_exists, copy_if_exists, harden_bundle_permissions, install_bundle_file,
-    temp_bundle_dir, RemoveDirOnDrop,
+    RemoveDirOnDrop, copy_dir_if_exists, copy_if_exists, harden_bundle_permissions,
+    install_bundle_file, temp_bundle_dir,
 };
 use super::profile::elapsed_ms;
 use super::validation::{bundle_hashes, prepare_bundle_import, validate_snapshot_bundle_limits};

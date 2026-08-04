@@ -4,7 +4,7 @@ mod store;
 
 use super::*;
 use crate::commands::setup::{
-    base_dir, platform_by_name, PlatformSpec, PLATFORMS, SHARED_SKILLS_DIR,
+    PLATFORMS, PlatformSpec, SHARED_SKILLS_DIR, base_dir, platform_by_name,
 };
 use platform::{check_platform, check_shared_skill};
 use report::check;

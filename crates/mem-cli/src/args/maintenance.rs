@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Subcommand, ValueEnum};
 
-use super::memory::{parse_memory_type, OutputFormat};
+use super::memory::{OutputFormat, parse_memory_type};
 
 #[derive(Subcommand)]
 pub(crate) enum ConfigCommand {

@@ -10,7 +10,7 @@ pub(crate) fn cmd_workflow(app: &App, command: WorkflowCommand) -> Result<()> {
     let command = match command {
         WorkflowCommand::New(args) => return scaffold::scaffold(args),
         WorkflowCommand::Validate(args) if args.file.is_some() => {
-            return validate::validate_file(app, args)
+            return validate::validate_file(app, args);
         }
         command => command,
     };

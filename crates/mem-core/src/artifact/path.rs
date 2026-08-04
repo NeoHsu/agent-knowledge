@@ -73,11 +73,11 @@ pub fn validate_artifact_file(root: &Path, relative: &str) -> Result<std::path::
                 return Err(error::not_found(format!(
                     "artifact path not found: {}",
                     current.display()
-                )))
+                )));
             }
             Err(source) => {
                 return Err(source)
-                    .with_context(|| format!("inspect artifact path {}", current.display()))
+                    .with_context(|| format!("inspect artifact path {}", current.display()));
             }
         };
         if metadata.file_type().is_symlink() {

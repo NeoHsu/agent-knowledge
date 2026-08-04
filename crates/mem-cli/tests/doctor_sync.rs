@@ -8,7 +8,7 @@ use std::os::unix::fs::PermissionsExt;
 
 mod support;
 
-use support::{temp_path, TestRuntimeStore};
+use support::{TestRuntimeStore, temp_path};
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
@@ -123,9 +123,11 @@ fn doctor_reports_missing_index_without_recreating_it() {
         serde_json::from_str(&store.run(&["doctor"])).expect("doctor json");
     let index = find_check(&report["checks"], "index");
     assert_eq!(index["status"], "warn");
-    assert!(index["detail"]
-        .as_str()
-        .is_some_and(|detail| detail.contains("missing marker")));
+    assert!(
+        index["detail"]
+            .as_str()
+            .is_some_and(|detail| detail.contains("missing marker"))
+    );
     assert!(!store.home().join("index").exists());
 }
 
@@ -145,12 +147,16 @@ fn doctor_reports_insecure_store_permissions() {
         serde_json::from_str(&store.run(&["doctor"])).expect("doctor json");
     let permissions = find_check(&report["checks"], "store_permissions");
     assert_eq!(permissions["status"], "warn");
-    assert!(permissions["detail"]
-        .as_str()
-        .is_some_and(|detail| detail.contains("755") && detail.contains("644")));
-    assert!(permissions["fix"]
-        .as_str()
-        .is_some_and(|fix| fix.contains("0700") && fix.contains("0600")));
+    assert!(
+        permissions["detail"]
+            .as_str()
+            .is_some_and(|detail| detail.contains("755") && detail.contains("644"))
+    );
+    assert!(
+        permissions["fix"]
+            .as_str()
+            .is_some_and(|fix| fix.contains("0700") && fix.contains("0600"))
+    );
 }
 
 #[test]
@@ -198,10 +204,12 @@ fn doctor_warns_when_v5_policy_content_has_drifted() {
     let report: serde_json::Value = serde_json::from_str(&output).expect("doctor json");
     let policy = find_check(&report["checks"], "claude-code.policy");
     assert_eq!(policy["status"], "warn");
-    assert!(policy["detail"]
-        .as_str()
-        .expect("detail")
-        .contains("drifted v5 policy"));
+    assert!(
+        policy["detail"]
+            .as_str()
+            .expect("detail")
+            .contains("drifted v5 policy")
+    );
 
     fs::remove_dir_all(base).ok();
 }
@@ -242,10 +250,12 @@ fn doctor_warns_when_prime_hook_hides_failures() {
     let report: serde_json::Value = serde_json::from_str(&output).expect("doctor json");
     let hook = find_check(&report["checks"], "claude-code.session_hook");
     assert_eq!(hook["status"], "warn");
-    assert!(hook["detail"]
-        .as_str()
-        .expect("detail")
-        .contains("hides `mem prime` failures"));
+    assert!(
+        hook["detail"]
+            .as_str()
+            .expect("detail")
+            .contains("hides `mem prime` failures")
+    );
 
     fs::remove_dir_all(base).ok();
 }
@@ -264,10 +274,12 @@ fn doctor_errors_when_store_schema_is_newer_than_the_binary() {
     assert_eq!(report["status"], "error");
     let schema = find_check(&report["checks"], "store_schema");
     assert_eq!(schema["status"], "error");
-    assert!(schema["detail"]
-        .as_str()
-        .expect("detail")
-        .contains("newer than this binary supports"));
+    assert!(
+        schema["detail"]
+            .as_str()
+            .expect("detail")
+            .contains("newer than this binary supports")
+    );
 
     assert_eq!(find_check(&report["checks"], "store")["status"], "warn");
 }
@@ -320,10 +332,12 @@ fn sync_dry_run_rejects_secret_leakage_without_committing() {
 
     let error = store.run_fail(&["sync", "--dry-run"]);
     assert!(error.contains("secret-like value detected in memories.description"));
-    assert!(git(root, &["rev-list", "--all", "--count"])
-        .trim()
-        .parse::<u64>()
-        .is_ok_and(|count| count == 0));
+    assert!(
+        git(root, &["rev-list", "--all", "--count"])
+            .trim()
+            .parse::<u64>()
+            .is_ok_and(|count| count == 0)
+    );
 }
 
 #[cfg(unix)]
@@ -459,9 +473,11 @@ fn sync_rejects_and_rolls_back_secret_bearing_remote_state() {
     );
     assert!(!store.home().join("leaked.txt").exists());
     assert_eq!(git(store.home(), &["rev-parse", "HEAD"]), before);
-    assert!(store
-        .run(&["query", "safe local state", "--no-touch"])
-        .contains("safe_local_memory"));
+    assert!(
+        store
+            .run(&["query", "safe local state", "--no-touch"])
+            .contains("safe_local_memory")
+    );
 
     fs::remove_dir_all(attacker).ok();
     fs::remove_dir_all(bare).ok();
@@ -545,9 +561,11 @@ fn sync_aborts_git_merge_when_semantic_database_merge_is_rejected() {
     assert!(!local_store.home().join(".git/MERGE_HEAD").exists());
     assert!(!local_store.home().join(".mem-sync-theirs.db").exists());
     assert_eq!(git(local_store.home(), &["rev-parse", "HEAD"]), before);
-    assert!(local_store
-        .run(&["query", "safe local divergence", "--no-touch"])
-        .contains("safe_local_divergence"));
+    assert!(
+        local_store
+            .run(&["query", "safe local divergence", "--no-touch"])
+            .contains("safe_local_divergence")
+    );
 
     fs::remove_dir_all(bare).ok();
 }

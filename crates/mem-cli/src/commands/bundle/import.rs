@@ -1,12 +1,12 @@
 use std::fs;
 use std::path::Path;
 
-use mem_core::artifact::{validate_artifact_path, ArtifactManifest};
+use mem_core::artifact::{ArtifactManifest, validate_artifact_path};
 use serde_json::Value;
 
 use super::archive::{read_bundle_metadata, unpack_bundle};
 use super::install::{
-    copy_dir_if_exists, copy_if_exists, copy_regular_file_new, temp_bundle_dir, RemoveDirOnDrop,
+    RemoveDirOnDrop, copy_dir_if_exists, copy_if_exists, copy_regular_file_new, temp_bundle_dir,
 };
 use super::rollback::{
     clear_store_for_replace, restore_store_after_failed_replace, snapshot_store_for_replace,

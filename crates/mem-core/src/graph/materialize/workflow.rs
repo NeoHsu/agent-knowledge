@@ -7,10 +7,10 @@ use serde_yaml::Value as YamlValue;
 
 use crate::db::Memory;
 
+use super::super::DETERMINISTIC;
 use super::super::ids::{artifact_node_id, memory_node_id, safe_node_part, workflow_step_node_id};
 use super::super::model::GraphNode;
 use super::super::store::{insert_node, insert_simple_node};
-use super::super::DETERMINISTIC;
 use super::support::{insert_artifact_node, insert_edge_simple, memory_is_active};
 
 pub(super) fn add_workflow_edges(conn: &Connection, memory: &Memory) -> Result<()> {

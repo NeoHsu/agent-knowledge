@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 use crate::db::{memory_by_id, memory_by_name, memory_by_name_in_scope};
 use crate::error;
@@ -120,7 +120,7 @@ pub(super) fn resolve_node_id(
                 _ => {
                     return Err(error::conflict(format!(
                         "graph memory reference is ambiguous across scopes: {reference}"
-                    )))
+                    )));
                 }
             }
         }

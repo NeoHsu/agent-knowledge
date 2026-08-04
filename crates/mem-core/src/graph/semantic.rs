@@ -3,9 +3,9 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::db::{
     add_ambiguity_record, column_exists, memory_by_id, memory_by_name, new_event_uid,
