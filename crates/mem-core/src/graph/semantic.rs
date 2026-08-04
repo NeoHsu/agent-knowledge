@@ -26,6 +26,8 @@ mod ingest;
 mod merge;
 mod projection;
 mod review;
+#[cfg(test)]
+mod tests;
 
 pub use ingest::ingest_semantic_edges;
 use ingest::validate_concept_node_id;
