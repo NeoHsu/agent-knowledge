@@ -1,8 +1,8 @@
 # Compatibility Policy
 
-This policy describes source version `0.10.0`. It is an unreleased source
-contract until a `v0.10.0` tag and its artifacts exist; published-release
-evidence applies only to the exact tagged commit.
+This policy describes source and release version `0.10.0`. Version alignment
+alone does not qualify a release; published-release evidence applies only to
+the exact `v0.10.0` commit after its artifact workflow succeeds.
 
 | Surface | Version 0.10 contract |
 | --- | --- |

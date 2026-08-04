@@ -2,9 +2,9 @@
 
 All notable changes to mnemark are documented here.
 
-## [Unreleased — 0.10.0]
+## [0.10.0] - 2026-08-04
 
-### 0.10.0 target — Added
+### 0.10.0 — Added
 
 - Added compatibility-first, process-read-only session priming to installed
   policy version 6 and the managed Claude Code hook, including upgrades from
@@ -19,10 +19,10 @@ All notable changes to mnemark are documented here.
 - Added bounded-memory stdout spooling plus injected atomic replacement,
   rollback, semantic ingest, and semantic merge regression coverage.
 
-### 0.10.0 target — Changed
+### 0.10.0 — Changed
 
-- Bumped the unreleased source contract to 0.10.0 so it no longer reuses the
-  published `v0.9.0` identity, and consolidated documentation around canonical
+- Bumped the source contract to 0.10.0 so it no longer reuses the published
+  `v0.9.0` identity, and consolidated documentation around canonical
   validation, freshness, evidence, and operational ownership.
 - Hardened CLI output against broken pipes and terminal control-sequence
   injection while retaining secret redaction, and added an optional
@@ -44,6 +44,11 @@ All notable changes to mnemark are documented here.
 - Tightened the bundled mnemark skill around compatibility-first session
   priming, process-level read-only guards, parsed command-effect inspection,
   codebase-graph routing, and progressively disclosed CLI guidance.
+
+### 0.10.0 — Fixed
+
+- Ensured direct-main CI exposes the compiled `actionlint` binary on `PATH`
+  before validating workflow contracts.
 
 ## [0.9.0] - 2026-07-30
 

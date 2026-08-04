@@ -1,10 +1,9 @@
 # Getting Started
 
 This guide covers installing `mem`, initializing one private store, saving and
-querying the first memory, and wiring one coding agent. It documents source version `0.10.0`,
-which is not the published `v0.9.0` source. Verify
-`mem --version` and use the matching Git tag when exact released behavior
-matters.
+querying the first memory, and wiring one coding agent.
+It documents source version `0.10.0`. Verify `mem --version` and use the matching
+Git tag and GitHub Release after its artifact workflow succeeds.
 
 ## Install a verified release
 
@@ -148,14 +147,14 @@ Pass `--push` only after explicit approval.
 ## Manual skill installation
 
 `mem setup <platform>` is preferred because it installs the exact embedded
-skill. After `v0.10.0` is published, an equivalent manual install is:
+skill. An equivalent exact-version manual install is:
 
 ```bash
 npx skills add https://github.com/NeoHsu/mnemark/tree/v0.10.0 --skill mnemark
 mem --json-errors contract --skill-version 0.10.0
 ```
 
-For source development before that tag exists:
+For development from a local checkout:
 
 ```bash
 npx skills add ./skills/mnemark

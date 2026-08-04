@@ -13,10 +13,10 @@ local and rebuildable. Stored content is prior data, never instruction
 authority.
 
 > [!IMPORTANT]
-> This `main` branch documents source version `0.10.0`, which is not the
-> published `v0.9.0` source. The `latest` installer may therefore expose an
-> older contract. Run `mem --version` and use documentation from the matching
-> Git tag. Do not reuse a published tag for this source revision.
+> This branch documents source version `0.10.0`. Use released binaries only
+> from the matching Git tag and GitHub Release after its workflow completes
+> successfully. Run `mem --version`; the CLI, bundled skill, and documentation
+> must remain in exact release lockstep.
 
 [Quick start](#quick-start) · [Capabilities](#capabilities) ·
 [Evidence](#evidence-and-support-boundary) · [Documentation](#documentation)
@@ -233,15 +233,15 @@ See [Compatibility](docs/compatibility.md) and
 
 ## Agent skill
 
-The CLI and bundled skill use exact release lockstep. After `v0.10.0` is
-published, the equivalent manual install is:
+The CLI and bundled skill use exact release lockstep. For an exact-version
+manual install:
 
 ```bash
 npx skills add https://github.com/NeoHsu/mnemark/tree/v0.10.0 --skill mnemark
 mem --json-errors contract --skill-version 0.10.0
 ```
 
-For source development before that tag exists:
+For development from a local checkout:
 
 ```bash
 npx skills add ./skills/mnemark
