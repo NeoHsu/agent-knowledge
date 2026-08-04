@@ -28,6 +28,7 @@ fi
 
 CI_WORKFLOW=.github/workflows/ci.yml
 RELEASE_WORKFLOW=.github/workflows/release.yml
+DIST_CONFIG=dist-workspace.toml
 for workflow in "$CI_WORKFLOW" "$RELEASE_WORKFLOW"; do
 	for required in "concurrency:" "timeout-minutes:"; do
 		if ! grep -Fq "$required" "$workflow"; then
@@ -63,6 +64,11 @@ for required in \
 		exit 1
 	fi
 done
+
+if ! grep -Fq 'pr-run-mode = "upload"' "$DIST_CONFIG"; then
+	echo "$DIST_CONFIG must build and upload cargo-dist artifacts on pull requests" >&2
+	exit 1
+fi
 
 if grep -Eq 'cargo install cargo-(audit|deny|llvm-cov|machete|nextest)' "$CI_WORKFLOW" "$RELEASE_WORKFLOW"; then
 	echo "CI must install pinned prebuilt Cargo quality tools instead of compiling them" >&2

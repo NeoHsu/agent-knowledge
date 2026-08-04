@@ -24,9 +24,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Pull requests already run Rust 1.97 on Linux, macOS, and Windows in
+        # Pull requests already run Rust 1.97.1 on Linux, macOS, and Windows in
         # release.yml. Keep direct main pushes independently covered here.
-        rust: ${{ fromJSON(github.event_name == 'pull_request' && '["stable"]' || '["stable","1.97.0"]') }}
+        rust: ${{ fromJSON(github.event_name == 'pull_request' && '["stable"]' || '["stable","1.97.1"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -193,14 +193,14 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
         with:
-          toolchain: 1.97.0
+          toolchain: 1.97.1
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2
         with:
           tool: cargo-llvm-cov@0.8.7
       - run: cargo llvm-cov --workspace --lcov --output-path lcov.info
-      - run: cargo llvm-cov report --summary-only --fail-under-lines 84
+      - run: cargo llvm-cov report --summary-only --fail-under-lines 86
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-lcov

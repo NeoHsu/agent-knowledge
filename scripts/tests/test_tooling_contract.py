@@ -9,6 +9,8 @@ MISE_CONFIG = ROOT / "mise.toml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 DEPENDABOT_CONFIG = ROOT / ".github" / "dependabot.yml"
+DIST_CONFIG = ROOT / "dist-workspace.toml"
+WORKSPACE_MANIFEST = ROOT / "Cargo.toml"
 CLI_MANIFEST = ROOT / "crates" / "mem-cli" / "Cargo.toml"
 
 EXPECTED_TASKS = {
@@ -47,6 +49,10 @@ class ToolingContractTests(unittest.TestCase):
         cls.ci = CI_WORKFLOW.read_text(encoding="utf-8")
         cls.release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
         cls.dependabot = DEPENDABOT_CONFIG.read_text(encoding="utf-8")
+        cls.dist = tomllib.loads(DIST_CONFIG.read_text(encoding="utf-8"))
+        cls.workspace_manifest = tomllib.loads(
+            WORKSPACE_MANIFEST.read_text(encoding="utf-8")
+        )
         cls.cli_manifest = tomllib.loads(CLI_MANIFEST.read_text(encoding="utf-8"))
 
     def test_expected_development_tasks_are_registered(self) -> None:
@@ -71,7 +77,17 @@ class ToolingContractTests(unittest.TestCase):
             self.assertIn(fragment, self.ci)
         self.assertIn('CARGO_INCREMENTAL: "0"', self.ci)
         self.assertIn("RUSTC_WRAPPER: sccache", self.ci)
+        self.assertIn("--fail-under-lines 86", self.ci)
         self.assertIn(f'python-version: "{tools["python"]}"', self.release)
+
+        rust_version = tools["rust"]["version"]
+        self.assertEqual(
+            self.workspace_manifest["workspace"]["package"]["rust-version"],
+            rust_version,
+        )
+        self.assertIn(f'["stable","{rust_version}"]', self.ci)
+        self.assertIn(f"toolchain: {rust_version}", self.ci)
+        self.assertGreaterEqual(self.release.count(f"toolchain: {rust_version}"), 2)
 
     def test_ci_cancels_obsolete_runs_and_bounds_jobs(self) -> None:
         self.assertIn("concurrency:", self.ci)
@@ -88,7 +104,7 @@ class ToolingContractTests(unittest.TestCase):
             "ruff format --check scripts",
             "cargo nextest run --workspace --locked --status-level all",
             "cargo test --doc --workspace --locked",
-            "cargo +1.97.0 check --workspace --all-targets --locked",
+            "cargo +1.97.1 check --workspace --all-targets --locked",
             "cargo deny check",
             "cargo audit --deny warnings",
             "scripts/check-workflows.sh",
@@ -114,6 +130,10 @@ class ToolingContractTests(unittest.TestCase):
         self.assertIn("needs.verify-platform-artifacts.result", self.release)
         self.assertIn("python3 scripts/check-binary-size.py", self.ci)
         self.assertIn("python3 scripts/check-binary-size.py", self.release)
+        self.assertEqual(self.dist["dist"]["pr-run-mode"], "upload")
+        self.assertGreaterEqual(
+            self.release.count("if: needs.plan.outputs.publishing == 'true'"), 2
+        )
 
     def test_integration_tests_share_one_harness(self) -> None:
         self.assertFalse(self.cli_manifest["package"]["autotests"])

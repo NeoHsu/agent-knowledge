@@ -100,10 +100,10 @@ jobs:
         with:
           python-version: "3.12.13"
 
-      - name: Install Rust 1.97
+      - name: Install Rust 1.97.1
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
         with:
-          toolchain: 1.97.0
+          toolchain: 1.97.1
           components: rustfmt, clippy
 
       - name: Verify release metadata, tag, and clean checkout
@@ -287,10 +287,10 @@ jobs:
           persist-credentials: false
           submodules: recursive
 
-      - name: Install Rust 1.97
+      - name: Install Rust 1.97.1
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
         with:
-          toolchain: 1.97.0
+          toolchain: 1.97.1
 
       - name: Install dist
         uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2
@@ -321,6 +321,7 @@ jobs:
         run: python3 scripts/check-cjk-dictionary.py --target-dir target
 
       - name: Attest build provenance
+        if: needs.plan.outputs.publishing == 'true'
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-path: "target/distrib/*${{ join(matrix.targets, ', ') }}*"
@@ -473,6 +474,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Attest global artifacts
+        if: needs.plan.outputs.publishing == 'true'
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-path: "target/distrib/*"

@@ -58,7 +58,7 @@ run = "python3 scripts/check-binary-size.py"
 
 [tasks.msrv]
 description = "Check all targets with the minimum supported Rust toolchain"
-run = "cargo +1.97.0 check --workspace --all-targets --locked"
+run = "cargo +1.97.1 check --workspace --all-targets --locked"
 
 [tasks."security:secrets"]
 description = "Scan Git history and current non-ignored sources for secrets"
@@ -133,10 +133,10 @@ env = { UPDATE_CLI_SURFACE = "1" }
 run = "env -u CC -u CXX cargo test -p mnemark --locked --test doc_drift cli_surface_snapshot_matches_clap"
 
 [tasks.coverage]
-description = "Generate LCOV and enforce the measured 84 percent line-coverage floor"
+description = "Generate LCOV and enforce the measured 86 percent line-coverage floor"
 run = [
   "env -u CC -u CXX cargo llvm-cov --workspace --lcov --output-path target/lcov.info",
-  "env -u CC -u CXX cargo llvm-cov report --summary-only --fail-under-lines 84",
+  "env -u CC -u CXX cargo llvm-cov report --summary-only --fail-under-lines 86",
 ]
 
 [tasks."check:pr"]
@@ -154,7 +154,7 @@ run = [
   "cargo nextest run --workspace --locked --status-level all",
   "cargo test --doc --workspace --locked",
   "python3 -m unittest discover -s scripts/tests -p 'test_*.py'",
-  "cargo +1.97.0 check --workspace --all-targets --locked",
+  "cargo +1.97.1 check --workspace --all-targets --locked",
   "cargo deny check",
   "cargo audit --deny warnings",
   "python3 scripts/check-dependency-policy.py",

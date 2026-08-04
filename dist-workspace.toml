@@ -14,7 +14,7 @@ targets = [
 ]
 packages = ["mnemark"]
 hosting = "github"
-pr-run-mode = "plan"
+pr-run-mode = "upload"
 install-path = "CARGO_HOME"
 github-attestations = true
 cargo-cyclonedx = true
