@@ -79,7 +79,7 @@ class ToolingContractTests(unittest.TestCase):
         self.assertIn('CARGO_INCREMENTAL: "0"', self.ci)
         self.assertIn("RUSTC_WRAPPER: sccache", self.ci)
         self.assertIn("--fail-under-lines 86", self.ci)
-        self.assertIn(f'python-version: "{tools["python"]}"', self.release)
+        self.assertEqual(self.release.count(f'python-version: "{tools["python"]}"'), 4)
 
         rust_version = tools["rust"]["version"]
         self.assertEqual(

@@ -11,6 +11,8 @@ All notable changes to mnemark are documented here.
   at `remove_file` on the directory link.
 - Made release hosting fail closed unless cross-platform verification, all local
   and global artifact builds, and native platform-archive verification succeed.
+- Pinned release tooling to Python 3.12.10, the latest exact 3.12 patch available
+  for Linux x64, macOS arm64, and Windows x64 in `actions/setup-python`.
 
 ## [0.10.0] - 2026-08-04
 
