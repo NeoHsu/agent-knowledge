@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.10.0/docs/schemas/memory-list-v1.schema.json",
+  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.10.1/docs/schemas/memory-list-v1.schema.json",
   "title": "mnemark memory query list v1",
   "type": "array",
   "items": {

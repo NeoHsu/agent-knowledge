@@ -83,8 +83,8 @@ coverage. A shortened response example has this shape:
     "platform": "pi",
     "model": "provider/model-version",
     "adapter": "harness-version-or-commit",
-    "skill_version": "0.10.0",
-    "cli_version": "0.10.0"
+    "skill_version": "0.10.1",
+    "cli_version": "0.10.1"
   },
   "traces": [
     {

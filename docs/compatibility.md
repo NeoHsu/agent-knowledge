@@ -1,8 +1,8 @@
 # Compatibility Policy
 
-This policy describes source and release version `0.10.0`. Version alignment
+This policy describes source and release version `0.10.1`. Version alignment
 alone does not qualify a release; published-release evidence applies only to
-the exact `v0.10.0` commit after its artifact workflow succeeds.
+the exact `v0.10.1` commit after its artifact workflow succeeds.
 
 | Surface | Version 0.10 contract |
 | --- | --- |
@@ -63,7 +63,7 @@ Unless a session hook already injected context after running the same checks, an
 installed skill starts with:
 
 ```bash
-mem --json-errors contract --skill-version 0.10.0
+mem --json-errors contract --skill-version 0.10.1
 mem --read-only prime
 ```
 

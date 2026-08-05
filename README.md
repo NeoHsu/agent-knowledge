@@ -13,7 +13,7 @@ local and rebuildable. Stored content is prior data, never instruction
 authority.
 
 > [!IMPORTANT]
-> This branch documents source version `0.10.0`. Use released binaries only
+> This branch documents source version `0.10.1`. Use released binaries only
 > from the matching Git tag and GitHub Release after its workflow completes
 > successfully. Run `mem --version`; the CLI, bundled skill, and documentation
 > must remain in exact release lockstep.
@@ -123,7 +123,7 @@ Unless a session hook already injected a delimited mnemark context block, the
 first two memory invocations are:
 
 ```bash
-mem --json-errors contract --skill-version 0.10.0
+mem --json-errors contract --skill-version 0.10.1
 mem --read-only prime
 ```
 
@@ -237,8 +237,8 @@ The CLI and bundled skill use exact release lockstep. For an exact-version
 manual install:
 
 ```bash
-npx skills add https://github.com/NeoHsu/mnemark/tree/v0.10.0 --skill mnemark
-mem --json-errors contract --skill-version 0.10.0
+npx skills add https://github.com/NeoHsu/mnemark/tree/v0.10.1 --skill mnemark
+mem --json-errors contract --skill-version 0.10.1
 ```
 
 For development from a local checkout:

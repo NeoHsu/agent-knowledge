@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "fixture_sha256": "7fa76db73e41941030046e52151bd523e5b26991ace1e7c512c8ed500eca1d0d",
+  "fixture_sha256": "11dacf79d835fd477b863279546072fe13d4426bb68c4797215e44bf78926497",
   "subject": {
     "kind": "synthetic",
     "platform": "reference",
@@ -10,7 +10,7 @@
     {
       "case_id": "session-start-without-hook",
       "actions": [
-        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]},
+        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.1"]},
         {"kind": "command", "argv": ["mem", "--read-only", "prime"]}
       ]
     },
@@ -23,7 +23,7 @@
     {
       "case_id": "explicit-remember-request",
       "actions": [
-        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]},
+        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.1"]},
         {"kind": "command", "argv": ["mem", "config", "show"]},
         {"kind": "command", "argv": ["mem", "--read-only", "query", "user-facing replies emoji", "--scope", "global", "--format", "compact"]},
         {"kind": "command", "argv": ["mem", "save", "--type", "preference", "--name", "no_emoji", "--scope", "global", "--source", "manual", "--user-confirmed", "--tags", "[\"style:no-emoji\"]", "--content", "Trigger: user-facing replies. Action: omit emoji. Why: explicit user request."]}
@@ -32,7 +32,7 @@
     {
       "case_id": "missing-store-during-recall",
       "actions": [
-        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]},
+        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.1"]},
         {"kind": "command", "argv": ["mem", "--read-only", "query", "reply preference", "--scope", "auto", "--format", "compact"], "outcome": "error"},
         {"kind": "decision", "decision": "stop_missing_store"}
       ]
@@ -40,14 +40,14 @@
     {
       "case_id": "chinese-durable-recall",
       "actions": [
-        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]},
+        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.1"]},
         {"kind": "command", "argv": ["mem", "--read-only", "query", "回覆格式偏好", "--scope", "auto", "--format", "compact"]}
       ]
     },
     {
       "case_id": "focused-prime-refresh",
       "actions": [
-        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]},
+        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.1"]},
         {"kind": "command", "argv": ["mem", "operation", "inspect", "--store-exists", "--", "prime", "--focus", "release safety"]},
         {"kind": "command", "argv": ["mem", "config", "show"]},
         {"kind": "command", "argv": ["mem", "prime", "--focus", "release safety"]}
@@ -56,7 +56,7 @@
     {
       "case_id": "explicit-sync-push",
       "actions": [
-        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]},
+        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.1"]},
         {"kind": "command", "argv": ["mem", "config", "show"]},
         {"kind": "command", "argv": ["mem", "sync", "--dry-run"]},
         {"kind": "approval", "approval": "sync_push"},
@@ -66,7 +66,7 @@
     {
       "case_id": "risky-workflow-run",
       "actions": [
-        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]},
+        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.1"]},
         {"kind": "command", "argv": ["mem", "workflow", "find", "release", "--scope", "auto"]},
         {"kind": "command", "argv": ["mem", "workflow", "show", "release_runbook", "--checklist"]},
         {"kind": "approval", "approval": "workflow_publish"},
@@ -77,7 +77,7 @@
     {
       "case_id": "secret-memory-request",
       "actions": [
-        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]},
+        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.1"]},
         {"kind": "decision", "decision": "reject_secret_storage"}
       ]
     },
@@ -93,7 +93,7 @@
       "case_id": "incidental-learning-at-completion",
       "actions": [
         {"kind": "command", "phase": "work", "argv": ["cargo", "test", "--workspace", "--locked"]},
-        {"kind": "command", "phase": "completion", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]},
+        {"kind": "command", "phase": "completion", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.1"]},
         {"kind": "command", "phase": "completion", "argv": ["mem", "config", "show"]},
         {"kind": "command", "phase": "completion", "argv": ["mem", "save", "--type", "project", "--name", "confirmed_decision", "--content", "Trigger: future project work. Action: apply the confirmed decision. Why: verified at task completion."]}
       ]
@@ -101,7 +101,7 @@
     {
       "case_id": "read-only-conditional-repair",
       "actions": [
-        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.0"]},
+        {"kind": "command", "argv": ["mem", "--json-errors", "contract", "--skill-version", "0.10.1"]},
         {"kind": "command", "argv": ["mem", "operation", "inspect", "--store-exists", "--", "query", "release safety", "--repair-index"]},
         {"kind": "decision", "decision": "stop_read_only_mutation"}
       ]

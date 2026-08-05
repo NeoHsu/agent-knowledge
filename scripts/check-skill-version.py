@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
         default=Path(__file__).resolve().parents[1],
         help="repository root",
     )
-    parser.add_argument("--tag", help="release tag to verify, for example v0.10.0")
+    parser.add_argument("--tag", help="release tag to verify, for example v0.10.1")
     return parser.parse_args()
 
 

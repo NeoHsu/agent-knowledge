@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.10.0/docs/schemas/contract-v1.schema.json",
+  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.10.1/docs/schemas/contract-v1.schema.json",
   "title": "mnemark machine contract v1",
   "type": "object",
   "required": ["status", "contract_version", "cli_version", "compatibility", "json_errors", "schemas", "published_schemas"],

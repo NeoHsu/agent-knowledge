@@ -2,7 +2,21 @@
 
 All notable changes to mnemark are documented here.
 
+## [0.10.1] - 2026-08-04
+
+### 0.10.1 — Fixed
+
+- Fixed Windows setup rollback for newly created directory symlinks so a later
+  hook failure restores earlier policy and skill mutations instead of stopping
+  at `remove_file` on the directory link.
+- Made release hosting fail closed unless cross-platform verification, all local
+  and global artifact builds, and native platform-archive verification succeed.
+
 ## [0.10.0] - 2026-08-04
+
+> Withdrawn after Windows qualification exposed the rollback failure fixed in
+> 0.10.1. The tag remains as an audit marker; no 0.10.0 release artifacts are
+> supported.
 
 ### 0.10.0 — Added
 

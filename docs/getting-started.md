@@ -2,7 +2,7 @@
 
 This guide covers installing `mem`, initializing one private store, saving and
 querying the first memory, and wiring one coding agent.
-It documents source version `0.10.0`. Verify `mem --version` and use the matching
+It documents source version `0.10.1`. Verify `mem --version` and use the matching
 Git tag and GitHub Release after its artifact workflow succeeds.
 
 ## Install a verified release
@@ -120,7 +120,7 @@ The installed policy and Claude Code hook enforce this session sequence unless
 a delimited context block was already injected:
 
 ```bash
-mem --json-errors contract --skill-version 0.10.0
+mem --json-errors contract --skill-version 0.10.1
 mem --read-only prime
 ```
 
@@ -150,8 +150,8 @@ Pass `--push` only after explicit approval.
 skill. An equivalent exact-version manual install is:
 
 ```bash
-npx skills add https://github.com/NeoHsu/mnemark/tree/v0.10.0 --skill mnemark
-mem --json-errors contract --skill-version 0.10.0
+npx skills add https://github.com/NeoHsu/mnemark/tree/v0.10.1 --skill mnemark
+mem --json-errors contract --skill-version 0.10.1
 ```
 
 For development from a local checkout:

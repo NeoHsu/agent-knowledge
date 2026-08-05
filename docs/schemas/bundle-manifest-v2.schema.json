@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.10.0/docs/schemas/bundle-manifest-v2.schema.json",
+  "$id": "https://github.com/NeoHsu/mnemark/blob/v0.10.1/docs/schemas/bundle-manifest-v2.schema.json",
   "title": "mnemark bundle manifest v2",
   "type": "object",
   "required": ["version", "created_at", "schema_version", "contains", "hashes"],

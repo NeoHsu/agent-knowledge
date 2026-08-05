@@ -283,7 +283,7 @@ fn skill_version_gate_fails_before_store_discovery() {
         stderr["details"]["update_command"]
             .as_str()
             .expect("update command")
-            .contains("tree/v0.10.0")
+            .contains("tree/v0.10.1")
     );
     fs::remove_dir_all(config_root).ok();
 }

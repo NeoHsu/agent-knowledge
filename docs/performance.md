@@ -1,7 +1,7 @@
 # Performance and Capacity Evidence
 
 This page documents the benchmark protocol, the published release baseline, and
-the retained capacity canary for source version `0.10.0`. Benchmark evidence is
+the retained capacity canary for source version `0.10.1`. Benchmark evidence is
 bound to the exact binary, commit, protocol hash, platform, and report; it is not
 a cross-machine service-level objective.
 
