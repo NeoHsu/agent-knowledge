@@ -152,6 +152,18 @@ class ToolingContractTests(unittest.TestCase):
             self.release.count("if: needs.plan.outputs.publishing == 'true'"), 2
         )
 
+    def test_release_host_fails_closed_on_every_required_job(self) -> None:
+        host = self.release.split("\n  host:\n", 1)[1].split("\n  announce:\n", 1)[0]
+        self.assertIn("      - verify\n", host)
+        for dependency in (
+            "verify",
+            "build-global-artifacts",
+            "build-local-artifacts",
+            "verify-platform-artifacts",
+        ):
+            self.assertIn(f"needs.{dependency}.result == 'success'", host)
+        self.assertNotIn("result == 'skipped'", host)
+
     def test_integration_tests_share_one_harness(self) -> None:
         self.assertFalse(self.cli_manifest["package"]["autotests"])
         targets = {target["name"] for target in self.cli_manifest["test"]}

@@ -491,10 +491,11 @@ jobs:
   host:
     needs:
       - plan
+      - verify
       - build-local-artifacts
       - build-global-artifacts
       - verify-platform-artifacts
-    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') && (needs.verify-platform-artifacts.result == 'skipped' || needs.verify-platform-artifacts.result == 'success') }}
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && needs.verify.result == 'success' && needs.build-global-artifacts.result == 'success' && needs.build-local-artifacts.result == 'success' && needs.verify-platform-artifacts.result == 'success' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     outputs:
