@@ -2,6 +2,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[cfg(windows)]
+use std::os::windows::fs::FileTypeExt;
+
 use anyhow::{Context, Result, bail};
 use tempfile::TempDir;
 
@@ -101,7 +104,15 @@ fn remove_node_if_present(path: &Path) -> Result<()> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(error.into()),
     };
-    if metadata.is_dir() && !metadata.file_type().is_symlink() {
+    let file_type = metadata.file_type();
+    if file_type.is_symlink() {
+        #[cfg(windows)]
+        if file_type.is_symlink_dir() {
+            fs::remove_dir(path)?;
+            return Ok(());
+        }
+        fs::remove_file(path)?;
+    } else if metadata.is_dir() {
         fs::remove_dir_all(path)?;
     } else {
         fs::remove_file(path)?;
@@ -159,6 +170,32 @@ mod tests {
             "before skill"
         );
         assert!(!new_target.exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn rollback_removes_new_directory_link_before_restoring_earlier_snapshot() {
+        use std::os::windows::fs::symlink_dir;
+
+        let root = tempfile::tempdir().expect("test root");
+        let policy = root.path().join("a-policy.md");
+        let target = root.path().join("shared-skill");
+        let link = root.path().join("z-platform-skill");
+        fs::write(&policy, "before").expect("seed policy");
+        fs::create_dir(&target).expect("create shared skill");
+
+        let transaction =
+            SetupTransaction::begin([policy.clone(), link.clone()]).expect("begin transaction");
+        fs::write(&policy, "after").expect("change policy");
+        symlink_dir(&target, &link).expect("create directory link");
+
+        transaction.rollback().expect("rollback transaction");
+
+        assert_eq!(fs::read_to_string(&policy).expect("read policy"), "before");
+        assert!(matches!(
+            fs::symlink_metadata(&link),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+        ));
     }
 
     #[cfg(unix)]

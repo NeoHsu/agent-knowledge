@@ -126,7 +126,8 @@ fn setup_rolls_back_policy_and_skill_when_hook_wiring_fails() {
         base.to_str().expect("base"),
     ]);
 
-    assert!(error.contains("parse"));
+    assert!(error.contains("parse"), "{error}");
+    assert!(!error.contains("rollback also failed"), "{error}");
     assert_eq!(
         fs::read_to_string(&policy_path).expect("restored policy"),
         "# Existing policy\n"
